@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
-import { getTeamMembers, createTeamMember, deleteTeamMember } from "@/lib/db";
+import { getTeamMembers, createTeamMember, deleteTeamMember, getPicturesDirPath } from "@/lib/db";
 import type { TeamMember } from "@/lib/types";
 
 export function TeamMembers() {
   const location = useLocation();
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [picturesDir, setPicturesDir] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(() => {
     const memberId = location.state?.memberId;
     if (typeof memberId === "number") {
@@ -17,6 +18,10 @@ export function TeamMembers() {
     }
     return null;
   });
+
+  useEffect(() => {
+    getPicturesDirPath().then(setPicturesDir);
+  }, []);
 
   const loadMembers = useCallback(async () => {
     const data = await getTeamMembers();
@@ -59,6 +64,7 @@ export function TeamMembers() {
         onSelect={setSelectedId}
         onCreate={handleCreate}
         onDelete={handleDelete}
+        picturesDir={picturesDir}
       />
       <div className="flex-1 overflow-auto">
         {selectedMember ? (
@@ -66,6 +72,7 @@ export function TeamMembers() {
             key={selectedMember.id}
             member={selectedMember}
             onMemberChange={handleMemberChange}
+            picturesDir={picturesDir}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
