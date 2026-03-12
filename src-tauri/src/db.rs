@@ -30,6 +30,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 1)?;
     }
 
+    if version < 2 {
+        let migration_sql = include_str!("../migrations/002_salary_data_points.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 2)?;
+    }
+
     Ok(())
 }
 
@@ -65,7 +71,7 @@ mod tests {
         let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
         run_migrations(&conn).unwrap();
         let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 
     #[test]
@@ -81,5 +87,96 @@ mod tests {
         run_migrations(&conn).unwrap();
         let fk: bool = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0)).unwrap();
         assert!(fk);
+    }
+
+    #[test]
+    fn test_migration_v2_salary_data_points() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        // Verify new tables exist
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_data_points'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_data_point_members'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_parts'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_ranges'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        // Verify salary column removed from team_members
+        let has_salary: bool = conn.prepare("SELECT salary FROM team_members")
+            .is_ok();
+        assert!(!has_salary);
+
+        // Verify user_version is 2
+        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn test_migration_v2_seeds_existing_salary_data() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        // Run v1 only first
+        let migration_sql = include_str!("../migrations/001_initial.sql");
+        conn.execute_batch(migration_sql).unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+
+        // Insert a team member with salary
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name, salary) VALUES ('Alice', 'Smith', 7500000)",
+            []
+        ).unwrap();
+        // Insert one without salary
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Bob', 'Jones')",
+            []
+        ).unwrap();
+
+        // Now run full migrations (will run v2)
+        run_migrations(&conn).unwrap();
+
+        // Should have one data point named "Imported"
+        let dp_count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM salary_data_points WHERE name = 'Imported'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(dp_count, 1);
+
+        // Both members should be in the data point
+        let member_count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM salary_data_point_members",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(member_count, 2);
+
+        // Only Alice should have a salary part
+        let part_count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM salary_parts",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(part_count, 1);
+
+        // The salary part should be 7500000 cents
+        let amount: i64 = conn.query_row(
+            "SELECT amount FROM salary_parts",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(amount, 7500000);
     }
 }
