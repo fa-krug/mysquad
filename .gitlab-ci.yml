@@ -9,7 +9,10 @@ variables:
 build:
   stage: build
   tags:
-    - macos
+    - saas-macos-medium-m1
+  image: macos-15-xcode-16
+  before_script:
+    - brew install node rust
   cache:
     - key: npm-cache
       paths:
@@ -36,7 +39,8 @@ build:
 release:
   stage: release
   tags:
-    - macos
+    - saas-macos-medium-m1
+  image: macos-15-xcode-16
   needs:
     - job: build
       artifacts: true
