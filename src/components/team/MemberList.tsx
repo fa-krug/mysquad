@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
+import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -21,9 +22,17 @@ interface MemberListProps {
   onSelect: (id: number) => void;
   onCreate: () => void;
   onDelete: (id: number) => void;
+  picturesDir: string | null;
 }
 
-export function MemberList({ members, selectedId, onSelect, onCreate, onDelete }: MemberListProps) {
+export function MemberList({
+  members,
+  selectedId,
+  onSelect,
+  onCreate,
+  onDelete,
+  picturesDir,
+}: MemberListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
@@ -48,13 +57,20 @@ export function MemberList({ members, selectedId, onSelect, onCreate, onDelete }
             {members.map((member) => (
               <li
                 key={member.id}
-                className={`group relative flex items-start px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                className={`group relative flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
                   selectedId === member.id ? "bg-muted" : ""
                 }`}
                 onClick={() => onSelect(member.id)}
                 onMouseEnter={() => setHoveredId(member.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
+                <MemberAvatar
+                  firstName={member.first_name}
+                  lastName={member.last_name}
+                  picturePath={member.picture_path}
+                  picturesDir={picturesDir}
+                  size="sm"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {member.last_name}, {member.first_name}
