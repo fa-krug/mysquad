@@ -14,21 +14,30 @@ Add profile pictures to team members. Users can upload a photo per member by cli
 
 ## Data Model
 
-- New migration (v3): add `picture_path TEXT` column to `team_members`
+- New migration (v3, file `003_member_pictures.sql`): add `picture_path TEXT` column to `team_members`
+- `db.rs` needs a `if version < 3` block to run this migration
 - Stores just the filename (e.g. `{member_id}.jpg`), not the full path
-- Images saved to `~/.local/share/com.mysquad.app/pictures/`
+- Images saved to `{app_data_dir}/pictures/` where `app_data_dir` is resolved via `dirs::data_local_dir()` (on macOS: `~/Library/Application Support/com.mysquad.app/pictures/`)
+
+### Struct/type updates
+
+- **Rust:** Add `picture_path: Option<String>` to the `TeamMember` struct in `commands.rs`
+- **Rust:** Update the `get_team_members` SELECT query to include `picture_path`
+- **Rust:** Update `create_team_member` to include `picture_path: None` in the returned struct
+- **TypeScript:** Add `picture_path: string | null` to the `TeamMember` interface in `types.ts`
 
 ## Rust Backend
 
 ### New commands
 
-- **`upload_member_picture(id, file_path)`** — receives source file path from the file picker, uses the `image` crate to resize/crop to a 256x256 square JPEG, saves to `pictures/{id}.jpg`, updates `picture_path` in DB, returns the filename
+- **`upload_member_picture(id, file_path)`** — receives source file path from the file picker, creates `pictures/` directory via `create_dir_all` if needed, uses the `image` crate to resize/crop to a 256x256 square JPEG, saves to `pictures/{id}.jpg`, updates `picture_path` in DB, returns the full resolved path
 - **`delete_member_picture(id)`** — deletes the file from disk, clears `picture_path` in DB
-- **`get_picture_path(id)`** — returns the full resolved file path for the frontend to display
+
+No separate `get_picture_path` command needed — the `picture_path` field is included in the `TeamMember` struct, and the frontend constructs the full path using a pictures directory base path returned alongside member data.
 
 ### Modified commands
 
-- **`delete_team_member`** — also removes the picture file from disk if one exists
+- **`delete_team_member`** — also removes the picture file from disk if one exists (DB update first, then file deletion for consistency)
 
 ### Dependencies
 
@@ -50,6 +59,10 @@ Renders a circular element (`rounded-full`). Shows the uploaded photo if `pictur
 
 Deterministic color from name: hash the full name string to pick from a predefined palette of ~12 distinct, accessible background colors. White text for initials.
 
+### Cache busting
+
+When a photo is re-uploaded, append a timestamp query parameter to the `convertFileSrc()` URL (e.g. `?t=1710000000`) to bypass webview caching.
+
 ### MemberList changes
 
 - Add small (32px) `Avatar` to the left of each member's name/title in the sidebar list
@@ -64,17 +77,24 @@ Deterministic color from name: hash the full name string to pick from a predefin
 
 - `uploadMemberPicture(id: number, filePath: string): Promise<string>` — invokes `upload_member_picture`
 - `deleteMemberPicture(id: number): Promise<void>` — invokes `delete_member_picture`
-- `getPicturePath(id: number): Promise<string | null>` — invokes `get_picture_path`
 
-### Tauri plugin
+### Tauri plugin: `@tauri-apps/plugin-dialog`
 
-- Add `@tauri-apps/plugin-dialog` for native file open dialog
+All four steps required:
+1. `npm install @tauri-apps/plugin-dialog`
+2. Add `tauri-plugin-dialog` to `src-tauri/Cargo.toml`
+3. Register plugin in `lib.rs` via `.plugin(tauri_plugin_dialog::init())`
+4. Add dialog permission in `src-tauri/capabilities/default.json`
+
+### Tauri asset protocol scope
+
+Add the pictures directory to the asset protocol scope in `tauri.conf.json` under `app.security.assetProtocol.scope` so that `convertFileSrc()` can load images from the pictures directory.
 
 ## Image handling details
 
 - Accepted formats: PNG, JPEG, WebP (input)
 - Output: always JPEG, 256x256, square crop (center crop if not square)
-- Storage: `~/.local/share/com.mysquad.app/pictures/{member_id}.jpg`
+- Storage: `{app_data_dir}/pictures/{member_id}.jpg`
 - Frontend loads images via `convertFileSrc()` from `@tauri-apps/api/core` to convert the file path to an asset protocol URL
 
 ## Edge cases
@@ -82,4 +102,7 @@ Deterministic color from name: hash the full name string to pick from a predefin
 - Member with no first or last name: show a generic user icon instead of empty initials
 - Upload failure: show error toast, keep existing state
 - File picker cancelled: no-op
-- Deleting a member: cascade removes picture file from disk
+- Deleting a member: DB delete first, then remove picture file from disk
+- Re-upload: cache-busted via timestamp query parameter
+- EXIF orientation: consider handling rotation metadata from phone photos
+- Pictures directory: created on first upload via `create_dir_all`
