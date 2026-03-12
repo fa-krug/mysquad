@@ -104,9 +104,7 @@ export function Titles() {
     }
     try {
       await updateTitle(editingId, name);
-      setTitles((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, name } : t))
-      );
+      setTitles((prev) => prev.map((t) => (t.id === editingId ? { ...t, name } : t)));
       setEditingId(null);
       setEditValue("");
       setEditError(null);
@@ -148,9 +146,7 @@ export function Titles() {
         )}
       </div>
 
-      {error && (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       <div className="space-y-1">
         {/* Add row */}
@@ -175,9 +171,7 @@ export function Titles() {
             </Button>
           </div>
         )}
-        {adding && addError && (
-          <p className="ml-3 text-sm text-destructive">{addError}</p>
-        )}
+        {adding && addError && <p className="ml-3 text-sm text-destructive">{addError}</p>}
 
         {/* Title list */}
         {titles.map((title) => (

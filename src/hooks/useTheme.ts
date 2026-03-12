@@ -42,7 +42,7 @@ export function useTheme(dbReady: boolean) {
       applyTheme(t);
       if (dbReady) setSetting("theme", t);
     },
-    [dbReady]
+    [dbReady],
   );
 
   return { theme, setTheme };

@@ -16,7 +16,7 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
     const prevParts = previousData[m.member_id];
     const previous = prevParts ? annualTotal(prevParts) / 100 : null;
     const delta = previous !== null ? current - previous : null;
-    const deltaPct = previous !== null && previous > 0 ? ((delta! / previous) * 100) : null;
+    const deltaPct = previous !== null && previous > 0 ? (delta! / previous) * 100 : null;
     return {
       name: `${m.last_name}, ${m.first_name}`,
       current,
@@ -34,7 +34,11 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
     <div>
       <h4 className="text-sm font-semibold mb-2">Comparison vs Previous</h4>
       <ResponsiveContainer width="100%" height={active.length * 50 + 40}>
-        <BarChart data={data} layout="vertical" margin={{ left: 120, right: 80, top: 5, bottom: 5 }}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ left: 120, right: 80, top: 5, bottom: 5 }}
+        >
           <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(value) => formatCents((value as number) * 100)} />
@@ -46,9 +50,20 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
         {data.map((d) => (
           <span
             key={d.name}
-            className={d.isNew ? "text-muted-foreground" : d.delta! > 0 ? "text-green-600" : d.delta! < 0 ? "text-red-600" : "text-muted-foreground"}
+            className={
+              d.isNew
+                ? "text-muted-foreground"
+                : d.delta! > 0
+                  ? "text-green-600"
+                  : d.delta! < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground"
+            }
           >
-            {d.name}: {d.isNew ? "New" : `${d.delta! > 0 ? "+" : ""}${formatCents(d.delta! * 100)} (${formatDeltaPercent(d.deltaPct!)})`}
+            {d.name}:{" "}
+            {d.isNew
+              ? "New"
+              : `${d.delta! > 0 ? "+" : ""}${formatCents(d.delta! * 100)} (${formatDeltaPercent(d.deltaPct!)})`}
           </span>
         ))}
       </div>

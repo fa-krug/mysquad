@@ -95,12 +95,8 @@ export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
               </option>
             ))}
           </select>
-          {autoLockError && (
-            <p className="text-sm text-destructive">{autoLockError}</p>
-          )}
-          {autoLockSaved && (
-            <p className="text-sm text-green-600">Saved</p>
-          )}
+          {autoLockError && <p className="text-sm text-destructive">{autoLockError}</p>}
+          {autoLockSaved && <p className="text-sm text-green-600">Saved</p>}
         </div>
       </div>
     </div>

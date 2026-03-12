@@ -7,7 +7,8 @@ fn main() {
                 "swift-helper/authenticate.swift",
                 "-o",
                 "target/authenticate-helper",
-                "-framework", "LocalAuthentication",
+                "-framework",
+                "LocalAuthentication",
             ])
             .status()
             .expect("Failed to compile Swift helper");

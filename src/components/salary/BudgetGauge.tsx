@@ -20,7 +20,10 @@ export function BudgetGauge({ totalSalary, budget }: BudgetGaugeProps) {
       <div className="rounded-lg border border-border p-4">
         <div className="mb-3 h-3 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className={cn("h-full rounded-full transition-all", isOver ? "bg-red-500" : "bg-green-500")}
+            className={cn(
+              "h-full rounded-full transition-all",
+              isOver ? "bg-red-500" : "bg-green-500",
+            )}
             style={{ width: `${Math.min(usage, 100)}%` }}
           />
         </div>
@@ -36,7 +39,8 @@ export function BudgetGauge({ totalSalary, budget }: BudgetGaugeProps) {
           <div>
             <span className="text-muted-foreground">Diff: </span>
             <span className={cn("font-medium", isOver ? "text-red-600" : "text-green-600")}>
-              {diff > 0 ? "+" : ""}{formatCents(diff)} ({formatDeltaPercent(diffPct)})
+              {diff > 0 ? "+" : ""}
+              {formatCents(diff)} ({formatDeltaPercent(diffPct)})
             </span>
           </div>
         </div>

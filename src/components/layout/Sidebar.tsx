@@ -39,7 +39,7 @@ function NavItem({
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 "hover:bg-accent hover:text-accent-foreground",
                 isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-                extraClass
+                extraClass,
               )
             }
           >
@@ -59,7 +59,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <aside
         className={cn(
           "flex h-screen flex-col border-r bg-muted/40 transition-all duration-200",
-          collapsed ? "w-[60px]" : "w-[240px]"
+          collapsed ? "w-[60px]" : "w-[240px]",
         )}
       >
         <div className="flex h-14 items-center px-3">

@@ -28,7 +28,11 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
         <h1 className="text-4xl font-bold tracking-tight">MySquad</h1>
         <p className="text-muted-foreground">Unlock to continue</p>
         <Button size="lg" onClick={handleUnlock} disabled={loading} className="gap-2">
-          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Fingerprint className="h-5 w-5" />}
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Fingerprint className="h-5 w-5" />
+          )}
           {loading ? "Authenticating..." : "Unlock"}
         </Button>
         {error && <p className="text-sm text-destructive">{error}</p>}

@@ -13,7 +13,15 @@ export function TeamMembers() {
     setMembers(data);
   }, []);
 
-  useEffect(() => { loadMembers(); }, [loadMembers]);
+  useEffect(() => {
+    let cancelled = false;
+    getTeamMembers().then((data) => {
+      if (!cancelled) setMembers(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCreate = async () => {
     const member = await createTeamMember();
@@ -28,7 +36,7 @@ export function TeamMembers() {
   };
 
   const handleMemberChange = (field: string, value: string | null) => {
-    setMembers((prev) => prev.map((m) => m.id === selectedId ? { ...m, [field]: value } : m));
+    setMembers((prev) => prev.map((m) => (m.id === selectedId ? { ...m, [field]: value } : m)));
   };
 
   const selectedMember = members.find((m) => m.id === selectedId) ?? null;
@@ -44,7 +52,11 @@ export function TeamMembers() {
       />
       <div className="flex-1">
         {selectedMember ? (
-          <MemberDetail key={selectedMember.id} member={selectedMember} onMemberChange={handleMemberChange} />
+          <MemberDetail
+            key={selectedMember.id}
+            member={selectedMember}
+            onMemberChange={handleMemberChange}
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
             Select a team member to view details

@@ -1,0 +1,17 @@
+npx lint-staged
+
+# Rust: format and lint changed .rs files
+RS_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')
+if [ -n "$RS_FILES" ]; then
+  echo "Running rustfmt on staged Rust files..."
+  echo "$RS_FILES" | xargs rustfmt --check || {
+    echo "rustfmt check failed. Run 'cargo fmt' to fix."
+    exit 1
+  }
+
+  echo "Running clippy..."
+  (cd src-tauri && cargo clippy -- -D warnings) || {
+    echo "Clippy found warnings. Please fix them before committing."
+    exit 1
+  }
+fi

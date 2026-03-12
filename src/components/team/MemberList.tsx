@@ -23,13 +23,7 @@ interface MemberListProps {
   onDelete: (id: number) => void;
 }
 
-export function MemberList({
-  members,
-  selectedId,
-  onSelect,
-  onCreate,
-  onDelete,
-}: MemberListProps) {
+export function MemberList({ members, selectedId, onSelect, onCreate, onDelete }: MemberListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
@@ -38,12 +32,7 @@ export function MemberList({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b">
         <span className="text-sm font-medium">Team Members</span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onCreate}
-          title="Add member"
-        >
+        <Button variant="ghost" size="icon-sm" onClick={onCreate} title="Add member">
           <PlusIcon />
         </Button>
       </div>

@@ -1,5 +1,5 @@
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 pub fn authenticate(reason: &str) -> Result<(), String> {
     let helper_path = get_helper_path()?;
@@ -30,8 +30,7 @@ fn get_helper_path() -> Result<PathBuf, String> {
     }
 
     // Fallback: check target directory (development)
-    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target/authenticate-helper");
+    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/authenticate-helper");
     if dev_helper.exists() {
         return Ok(dev_helper);
     }

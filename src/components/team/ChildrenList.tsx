@@ -32,11 +32,6 @@ function ChildRow({ child, onDelete, onUpdate }: ChildRowProps) {
     },
   });
 
-  useEffect(() => {
-    setName(child.name);
-    setDob(child.date_of_birth ?? "");
-  }, [child.name, child.date_of_birth]);
-
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
     saveName(e.target.value || null);
@@ -115,15 +110,9 @@ export function ChildrenList({ teamMemberId }: ChildrenListProps) {
     }
   };
 
-  const handleUpdate = async (
-    id: number,
-    name: string,
-    dob: string | null
-  ) => {
+  const handleUpdate = async (id: number, name: string, dob: string | null) => {
     await updateChild(id, name, dob);
-    setChildren((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, name, date_of_birth: dob } : c))
-    );
+    setChildren((prev) => prev.map((c) => (c.id === id ? { ...c, name, date_of_birth: dob } : c)));
   };
 
   if (loading) {
@@ -139,9 +128,7 @@ export function ChildrenList({ teamMemberId }: ChildrenListProps) {
         </Button>
       </div>
 
-      {error && (
-        <div className="text-xs text-destructive mb-1">{error}</div>
-      )}
+      {error && <div className="text-xs text-destructive mb-1">{error}</div>}
 
       {children.length === 0 ? (
         <div className="text-sm text-muted-foreground py-2">No children added</div>
@@ -149,7 +136,7 @@ export function ChildrenList({ teamMemberId }: ChildrenListProps) {
         <div className="flex flex-col">
           {children.map((child) => (
             <ChildRow
-              key={child.id}
+              key={`${child.id}-${child.name}-${child.date_of_birth}`}
               child={child}
               onDelete={handleDelete}
               onUpdate={handleUpdate}

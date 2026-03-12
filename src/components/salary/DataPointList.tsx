@@ -14,7 +14,14 @@ interface DataPointListProps {
   onDelete: (id: number) => void;
 }
 
-export function DataPointList({ dataPoints, selectedId, onSelect, onCreate, onEdit, onDelete }: DataPointListProps) {
+export function DataPointList({
+  dataPoints,
+  selectedId,
+  onSelect,
+  onCreate,
+  onEdit,
+  onDelete,
+}: DataPointListProps) {
   return (
     <div className="flex h-full flex-col border-r">
       <div className="flex items-center justify-between border-b px-4 py-3">
@@ -36,7 +43,7 @@ export function DataPointList({ dataPoints, selectedId, onSelect, onCreate, onEd
               onClick={() => onSelect(dp.id)}
               className={cn(
                 "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
-                selectedId === dp.id && "bg-accent text-accent-foreground"
+                selectedId === dp.id && "bg-accent text-accent-foreground",
               )}
             >
               <div className="min-w-0 flex-1">
@@ -52,7 +59,10 @@ export function DataPointList({ dataPoints, selectedId, onSelect, onCreate, onEd
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); onEdit(dp); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(dp);
+                  }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -60,7 +70,10 @@ export function DataPointList({ dataPoints, selectedId, onSelect, onCreate, onEd
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
-                  onClick={(e) => { e.stopPropagation(); onDelete(dp.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(dp.id);
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

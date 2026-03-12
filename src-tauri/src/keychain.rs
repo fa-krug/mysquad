@@ -1,4 +1,6 @@
-use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
+use security_framework::passwords::{
+    delete_generic_password, get_generic_password, set_generic_password,
+};
 
 const SERVICE_NAME: &str = "com.mysquad.app";
 const ACCOUNT_NAME: &str = "db-encryption-key";
@@ -11,8 +13,7 @@ pub fn store_key(key: &str) -> Result<(), String> {
 pub fn retrieve_key() -> Result<String, String> {
     let bytes = get_generic_password(SERVICE_NAME, ACCOUNT_NAME)
         .map_err(|e| format!("Failed to retrieve key from Keychain: {}", e))?;
-    String::from_utf8(bytes)
-        .map_err(|e| format!("Key is not valid UTF-8: {}", e))
+    String::from_utf8(bytes).map_err(|e| format!("Key is not valid UTF-8: {}", e))
 }
 
 pub fn delete_key() -> Result<(), String> {

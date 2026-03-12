@@ -44,23 +44,49 @@ export function SalaryPlanner() {
         .filter((m) => m.is_active)
         .map(async (m) => {
           prev[m.member_id] = await getPreviousMemberData(id, m.member_id);
-        })
+        }),
     );
     setPreviousData(prev);
   }, []);
 
   useEffect(() => {
-    loadDataPoints().then((dps) => {
+    let cancelled = false;
+    Promise.all([getSalaryDataPoints(), getTitles()]).then(([dps, t]) => {
+      if (cancelled) return;
+      setDataPoints(dps);
+      setTitles(t);
       if (dps.length > 0) {
         setSelectedId(dps[0].id);
       }
       setLoading(false);
     });
-  }, [loadDataPoints]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    if (selectedId) loadDetail(selectedId);
-  }, [selectedId, loadDetail]);
+    if (!selectedId) return;
+    let cancelled = false;
+    getSalaryDataPoint(selectedId).then((d) => {
+      if (cancelled) return;
+      setDetail(d);
+      Promise.all(
+        d.members
+          .filter((m) => m.is_active)
+          .map(
+            async (m) =>
+              [m.member_id, await getPreviousMemberData(selectedId, m.member_id)] as const,
+          ),
+      ).then((entries) => {
+        if (cancelled) return;
+        setPreviousData(Object.fromEntries(entries));
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   async function handleCreate() {
     const dp = await createSalaryDataPoint();
@@ -111,7 +137,11 @@ export function SalaryPlanner() {
   }
 
   if (loading) {
-    return <div className="p-6"><p className="text-muted-foreground">Loading…</p></div>;
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Loading…</p>
+      </div>
+    );
   }
 
   const activeMembers = detail?.members.filter((m) => m.is_active) ?? [];
@@ -141,7 +171,9 @@ export function SalaryPlanner() {
 
               {/* Member salary cards */}
               {activeMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No active members in this data point.</p>
+                <p className="text-sm text-muted-foreground">
+                  No active members in this data point.
+                </p>
               ) : (
                 activeMembers.map((member) => (
                   <MemberSalaryCard

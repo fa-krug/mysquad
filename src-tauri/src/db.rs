@@ -1,6 +1,7 @@
 use rusqlite::{Connection, Result};
 use std::sync::Mutex;
 
+#[derive(Default)]
 pub struct AppDb {
     pub conn: Mutex<Option<Connection>>,
 }
@@ -59,10 +60,16 @@ mod tests {
     fn test_run_migrations() {
         let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
         run_migrations(&conn).unwrap();
-        conn.execute("INSERT INTO settings (key, value) VALUES ('test', 'val')", []).unwrap();
-        let val: String = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'test'", [], |row| row.get(0)
-        ).unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('test', 'val')",
+            [],
+        )
+        .unwrap();
+        let val: String = conn
+            .query_row("SELECT value FROM settings WHERE key = 'test'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
         assert_eq!(val, "val");
     }
 
@@ -70,7 +77,9 @@ mod tests {
     fn test_schema_version_tracking() {
         let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
         run_migrations(&conn).unwrap();
-        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
         assert_eq!(version, 2);
     }
 
@@ -85,7 +94,9 @@ mod tests {
     fn test_foreign_keys_enabled() {
         let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
         run_migrations(&conn).unwrap();
-        let fk: bool = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0)).unwrap();
+        let fk: bool = conn
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
         assert!(fk);
     }
 
@@ -107,25 +118,32 @@ mod tests {
         ).unwrap();
         assert_eq!(count, 1);
 
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_parts'",
-            [], |row| row.get(0)
-        ).unwrap();
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_parts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
 
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_ranges'",
-            [], |row| row.get(0)
-        ).unwrap();
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='salary_ranges'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
 
         // Verify salary column removed from team_members
-        let has_salary: bool = conn.prepare("SELECT salary FROM team_members")
-            .is_ok();
+        let has_salary: bool = conn.prepare("SELECT salary FROM team_members").is_ok();
         assert!(!has_salary);
 
         // Verify user_version is 2
-        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
         assert_eq!(version, 2);
     }
 
@@ -145,38 +163,43 @@ mod tests {
         // Insert one without salary
         conn.execute(
             "INSERT INTO team_members (first_name, last_name) VALUES ('Bob', 'Jones')",
-            []
-        ).unwrap();
+            [],
+        )
+        .unwrap();
 
         // Now run full migrations (will run v2)
         run_migrations(&conn).unwrap();
 
         // Should have one data point named "Imported"
-        let dp_count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM salary_data_points WHERE name = 'Imported'",
-            [], |row| row.get(0)
-        ).unwrap();
+        let dp_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE name = 'Imported'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(dp_count, 1);
 
         // Both members should be in the data point
-        let member_count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM salary_data_point_members",
-            [], |row| row.get(0)
-        ).unwrap();
+        let member_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_point_members",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(member_count, 2);
 
         // Only Alice should have a salary part
-        let part_count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM salary_parts",
-            [], |row| row.get(0)
-        ).unwrap();
+        let part_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM salary_parts", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(part_count, 1);
 
         // The salary part should be 7500000 cents
-        let amount: i64 = conn.query_row(
-            "SELECT amount FROM salary_parts",
-            [], |row| row.get(0)
-        ).unwrap();
+        let amount: i64 = conn
+            .query_row("SELECT amount FROM salary_parts", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(amount, 7500000);
     }
 }

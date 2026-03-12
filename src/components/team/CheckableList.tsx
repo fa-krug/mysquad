@@ -29,9 +29,7 @@ function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
     onSave: async (val) => {
       if (val != null && val !== item.text) {
         await onUpdate(item.id, val, undefined);
-        onItemsChange((prev) =>
-          prev.map((i) => (i.id === item.id ? { ...i, text: val } : i))
-        );
+        onItemsChange((prev) => prev.map((i) => (i.id === item.id ? { ...i, text: val } : i)));
       }
     },
   });
@@ -43,9 +41,7 @@ function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
 
   const handleCheckedChange = async (checked: boolean) => {
     await onUpdate(item.id, undefined, checked);
-    onItemsChange((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, checked } : i))
-    );
+    onItemsChange((prev) => prev.map((i) => (i.id === item.id ? { ...i, checked } : i)));
   };
 
   const handleDelete = async () => {
@@ -54,11 +50,7 @@ function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
   };
 
   return (
-    <div
-      className={`flex items-center gap-2 py-1 group ${
-        item.checked ? "opacity-50" : ""
-      }`}
-    >
+    <div className={`flex items-center gap-2 py-1 group ${item.checked ? "opacity-50" : ""}`}>
       <Checkbox
         checked={item.checked}
         onCheckedChange={(checked) => {
@@ -139,10 +131,9 @@ export function CheckableList({
     }
   };
 
-  const handleItemsUpdater =
-    (updater: (prev: CheckableItem[]) => CheckableItem[]) => {
-      onItemsChange(updater(items));
-    };
+  const handleItemsUpdater = (updater: (prev: CheckableItem[]) => CheckableItem[]) => {
+    onItemsChange(updater(items));
+  };
 
   const unchecked = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
@@ -152,12 +143,7 @@ export function CheckableList({
       {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{title}</span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleStartAdd}
-          title={`Add ${title}`}
-        >
+        <Button variant="ghost" size="icon-sm" onClick={handleStartAdd} title={`Add ${title}`}>
           <PlusIcon />
         </Button>
       </div>
@@ -182,15 +168,11 @@ export function CheckableList({
         </div>
       )}
 
-      {addError && (
-        <div className="text-xs text-destructive">{addError}</div>
-      )}
+      {addError && <div className="text-xs text-destructive">{addError}</div>}
 
       {/* Unchecked items */}
       {unchecked.length === 0 && checked.length === 0 && !adding && (
-        <div className="text-sm text-muted-foreground py-1">
-          No items yet
-        </div>
+        <div className="text-sm text-muted-foreground py-1">No items yet</div>
       )}
 
       {unchecked.map((item) => (

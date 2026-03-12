@@ -10,7 +10,9 @@ interface UseAutoLockOptions {
 export function useAutoLock({ onLock, enabled }: UseAutoLockOptions) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onLockRef = useRef(onLock);
-  onLockRef.current = onLock;
+  useEffect(() => {
+    onLockRef.current = onLock;
+  }, [onLock]);
 
   const clearIdleTimer = useCallback(() => {
     if (timeoutRef.current) {

@@ -20,7 +20,13 @@ interface MemberSalaryCardProps {
   onChanged: () => void;
 }
 
-export function MemberSalaryCard({ member, ranges, onAddPart, onDeletePart, onChanged }: MemberSalaryCardProps) {
+export function MemberSalaryCard({
+  member,
+  ranges,
+  onAddPart,
+  onDeletePart,
+  onChanged,
+}: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
   const range = getRangeForMember(member, ranges);
   const fit = rangeFitColor(total, range);
@@ -64,7 +70,12 @@ export function MemberSalaryCard({ member, ranges, onAddPart, onDeletePart, onCh
           </thead>
           <tbody>
             {member.parts.map((part) => (
-              <SalaryPartRow key={part.id} part={part} onDelete={onDeletePart} onChanged={onChanged} />
+              <SalaryPartRow
+                key={part.id}
+                part={part}
+                onDelete={onDeletePart}
+                onChanged={onChanged}
+              />
             ))}
           </tbody>
         </table>

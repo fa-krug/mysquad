@@ -19,7 +19,12 @@ export function variablePercent(parts: SalaryPart[]): number {
 
 /** Format cents as dollar string */
 export function formatCents(cents: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 }
 
 /** Format percentage with sign */
@@ -44,7 +49,10 @@ export function rangeFitColor(total: number, range: SalaryRange | undefined): Ra
 }
 
 /** Get the salary range for a member based on their title */
-export function getRangeForMember(member: SalaryDataPointMember, ranges: SalaryRange[]): SalaryRange | undefined {
+export function getRangeForMember(
+  member: SalaryDataPointMember,
+  ranges: SalaryRange[],
+): SalaryRange | undefined {
   if (!member.title_id) return undefined;
   return ranges.find((r) => r.title_id === member.title_id);
 }

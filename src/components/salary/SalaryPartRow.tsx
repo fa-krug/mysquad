@@ -28,7 +28,8 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
 
   const amountSave = useAutoSave({
     onSave: async (value) => {
-      const cents = value === null || value === "" ? "0" : String(Math.round(parseFloat(value) * 100));
+      const cents =
+        value === null || value === "" ? "0" : String(Math.round(parseFloat(value) * 100));
       await updateSalaryPart(part.id, "amount", cents);
       onChanged();
     },
@@ -46,7 +47,10 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
       <td className="px-2 py-1">
         <Input
           value={name}
-          onChange={(e) => { setName(e.target.value); nameSave.save(e.target.value || null); }}
+          onChange={(e) => {
+            setName(e.target.value);
+            nameSave.save(e.target.value || null);
+          }}
           placeholder="Label"
           className="h-8 text-sm"
         />
@@ -58,7 +62,10 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
             type="number"
             min="0"
             value={amount}
-            onChange={(e) => { setAmount(e.target.value); amountSave.save(e.target.value || null); }}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              amountSave.save(e.target.value || null);
+            }}
             className="h-8 pl-5 text-sm w-28"
           />
         </div>
@@ -68,7 +75,10 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
           type="number"
           min="1"
           value={frequency}
-          onChange={(e) => { setFrequency(e.target.value); freqSave.save(e.target.value || null); }}
+          onChange={(e) => {
+            setFrequency(e.target.value);
+            freqSave.save(e.target.value || null);
+          }}
           className="h-8 text-sm w-16"
         />
       </td>
@@ -84,7 +94,12 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
         />
       </td>
       <td className="px-2 py-1">
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(part.id)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-destructive"
+          onClick={() => onDelete(part.id)}
+        >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </td>

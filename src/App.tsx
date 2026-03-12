@@ -40,7 +40,10 @@ function App() {
           <Route path="/" element={<TeamMembers />} />
           <Route path="/titles" element={<Titles />} />
           <Route path="/salary" element={<SalaryPlanner />} />
-          <Route path="/settings" element={<SettingsPage theme={theme} onThemeChange={setTheme} />} />
+          <Route
+            path="/settings"
+            element={<SettingsPage theme={theme} onThemeChange={setTheme} />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>

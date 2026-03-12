@@ -4,8 +4,15 @@ import { InfoSection } from "./InfoSection";
 import { ChildrenList } from "./ChildrenList";
 import { CheckableList } from "./CheckableList";
 import {
-  getStatusItems, getTalkTopics, addStatusItem, addTalkTopic,
-  updateStatusItem, updateTalkTopic, deleteStatusItem, deleteTalkTopic, getTitles,
+  getStatusItems,
+  getTalkTopics,
+  addStatusItem,
+  addTalkTopic,
+  updateStatusItem,
+  updateTalkTopic,
+  deleteStatusItem,
+  deleteTalkTopic,
+  getTitles,
 } from "@/lib/db";
 import type { TeamMember, CheckableItem, Title } from "@/lib/types";
 
@@ -45,8 +52,7 @@ export function MemberDetail({ member, onMemberChange }: MemberDetailProps) {
           items={talkTopics}
           onAdd={(text) => addTalkTopic(member.id, text)}
           onUpdate={(id, text, checked) => updateTalkTopic(id, text, checked)}
-          onDelete={deleteTalkTopic
-          }
+          onDelete={deleteTalkTopic}
           onItemsChange={setTalkTopics}
         />
       </div>

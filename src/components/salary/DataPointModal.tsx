@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,12 +28,20 @@ interface DataPointModalProps {
   onSaved: () => void;
 }
 
-export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: DataPointModalProps) {
+export function DataPointModal({
+  dataPointId,
+  titles,
+  open,
+  onClose,
+  onSaved,
+}: DataPointModalProps) {
   const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
   const [ranges, setRanges] = useState<Record<number, { min: string; max: string }>>({});
-  const [memberStates, setMemberStates] = useState<Record<number, { active: boolean; promoted: boolean }>>({});
+  const [memberStates, setMemberStates] = useState<
+    Record<number, { active: boolean; promoted: boolean }>
+  >({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -106,7 +120,13 @@ export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: 
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Budget ($)</Label>
-              <Input type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Annual budget" />
+              <Input
+                type="number"
+                min="0"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                placeholder="Annual budget"
+              />
             </div>
 
             <Separator />
@@ -120,7 +140,16 @@ export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: 
                   className="w-28"
                   placeholder="Min $"
                   value={ranges[title.id]?.min ?? ""}
-                  onChange={(e) => setRanges((prev) => ({ ...prev, [title.id]: { ...prev[title.id], min: e.target.value, max: prev[title.id]?.max ?? "" } }))}
+                  onChange={(e) =>
+                    setRanges((prev) => ({
+                      ...prev,
+                      [title.id]: {
+                        ...prev[title.id],
+                        min: e.target.value,
+                        max: prev[title.id]?.max ?? "",
+                      },
+                    }))
+                  }
                 />
                 <span className="text-xs text-muted-foreground">–</span>
                 <Input
@@ -129,7 +158,12 @@ export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: 
                   className="w-28"
                   placeholder="Max $"
                   value={ranges[title.id]?.max ?? ""}
-                  onChange={(e) => setRanges((prev) => ({ ...prev, [title.id]: { min: prev[title.id]?.min ?? "", max: e.target.value } }))}
+                  onChange={(e) =>
+                    setRanges((prev) => ({
+                      ...prev,
+                      [title.id]: { min: prev[title.id]?.min ?? "", max: e.target.value },
+                    }))
+                  }
                 />
               </div>
             ))}
@@ -137,10 +171,15 @@ export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: 
             <Separator />
             <h3 className="text-sm font-semibold">Team Members</h3>
             {detail.members.map((member) => {
-              const state = memberStates[member.id] ?? { active: member.is_active, promoted: member.is_promoted };
+              const state = memberStates[member.id] ?? {
+                active: member.is_active,
+                promoted: member.is_promoted,
+              };
               return (
                 <div key={member.id} className="flex items-center gap-4 text-sm">
-                  <span className="w-40 truncate">{member.last_name}, {member.first_name}</span>
+                  <span className="w-40 truncate">
+                    {member.last_name}, {member.first_name}
+                  </span>
                   <label className="flex items-center gap-1.5">
                     <Checkbox
                       checked={state.active}
@@ -171,7 +210,9 @@ export function DataPointModal({ dataPointId, titles, open, onClose, onSaved }: 
           </div>
         </ScrollArea>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>

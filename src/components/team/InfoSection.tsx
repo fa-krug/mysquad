@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -31,14 +31,7 @@ function AutoSaveInput({
   const [value, setValue] = useState(initialValue ?? "");
   const { save, saving, saved, error } = useAutoSave({ onSave });
 
-  // Sync value when member changes
-  useEffect(() => {
-    setValue(initialValue ?? "");
-  }, [initialValue]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     setValue(newVal);
     save(newVal === "" ? null : newVal);
@@ -67,14 +60,10 @@ function AutoSaveInput({
 
 export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps) {
   const [titleId, setTitleId] = useState<string>(
-    member.title_id != null ? String(member.title_id) : ""
+    member.title_id != null ? String(member.title_id) : "",
   );
   const [titleSaving, setTitleSaving] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTitleId(member.title_id != null ? String(member.title_id) : "");
-  }, [member.title_id]);
 
   const handleTitleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -90,11 +79,9 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
     }
   };
 
-  const makeOnSave =
-    (field: string) =>
-    async (value: string | null) => {
-      await onMemberChange(field, value);
-    };
+  const makeOnSave = (field: string) => async (value: string | null) => {
+    await onMemberChange(field, value);
+  };
 
   return (
     <div className="grid grid-cols-2 gap-4 p-4">
@@ -140,9 +127,7 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
         </select>
         <div className="h-3 text-xs">
           {titleSaving && <span className="text-muted-foreground">Saving…</span>}
-          {titleError && (
-            <span className="text-destructive truncate">{titleError}</span>
-          )}
+          {titleError && <span className="text-destructive truncate">{titleError}</span>}
         </div>
       </div>
 

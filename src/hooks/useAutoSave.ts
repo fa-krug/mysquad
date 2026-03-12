@@ -40,7 +40,7 @@ export function useAutoSave({ delay = 500, onSave }: UseAutoSaveOptions) {
         }
       }, delay);
     },
-    [delay]
+    [delay],
   );
 
   // Flush pending saves (used before auto-lock)
@@ -62,7 +62,9 @@ export function useAutoSave({ delay = 500, onSave }: UseAutoSaveOptions) {
   // Register/unregister flush with global registry
   useEffect(() => {
     flushRegistry.add(flush);
-    return () => { flushRegistry.delete(flush); };
+    return () => {
+      flushRegistry.delete(flush);
+    };
   }, [flush]);
 
   useEffect(() => {
