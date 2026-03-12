@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TeamMember, Child, CheckableItem, Title } from "./types";
+import type { TeamMember, Child, CheckableItem, Title, SalaryDataPointSummary, SalaryDataPointDetail, SalaryPart } from "./types";
 
 // Auth
 export const authenticate = (reason: string) =>
@@ -55,6 +55,38 @@ export const updateTitle = (id: number, name: string) =>
   invoke<void>("update_title", { id, name });
 export const deleteTitle = (id: number) =>
   invoke<void>("delete_title", { id });
+
+// Salary Data Points
+export const getSalaryDataPoints = () =>
+  invoke<SalaryDataPointSummary[]>("get_salary_data_points");
+export const getSalaryDataPoint = (id: number) =>
+  invoke<SalaryDataPointDetail>("get_salary_data_point", { id });
+export const createSalaryDataPoint = () =>
+  invoke<SalaryDataPointSummary>("create_salary_data_point");
+export const updateSalaryDataPoint = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_salary_data_point", { id, field, value });
+export const deleteSalaryDataPoint = (id: number) =>
+  invoke<void>("delete_salary_data_point", { id });
+
+// Salary Data Point Members
+export const updateSalaryDataPointMember = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_salary_data_point_member", { id, field, value });
+
+// Salary Parts
+export const createSalaryPart = (dataPointMemberId: number) =>
+  invoke<SalaryPart>("create_salary_part", { data_point_member_id: dataPointMemberId });
+export const updateSalaryPart = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_salary_part", { id, field, value });
+export const deleteSalaryPart = (id: number) =>
+  invoke<void>("delete_salary_part", { id });
+
+// Salary Ranges
+export const updateSalaryRange = (dataPointId: number, titleId: number, minSalary: number, maxSalary: number) =>
+  invoke<void>("update_salary_range", { data_point_id: dataPointId, title_id: titleId, min_salary: minSalary, max_salary: maxSalary });
+
+// Salary Comparison
+export const getPreviousMemberData = (dataPointId: number, memberId: number) =>
+  invoke<SalaryPart[] | null>("get_previous_member_data", { data_point_id: dataPointId, member_id: memberId });
 
 // Settings
 export const getSetting = (key: string) =>
