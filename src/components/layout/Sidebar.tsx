@@ -1,5 +1,13 @@
 import { NavLink } from "react-router-dom";
-import { Users, BadgeCheck, DollarSign, Settings, PanelLeftClose, PanelLeft } from "lucide-react";
+import {
+  Users,
+  FolderKanban,
+  BadgeCheck,
+  DollarSign,
+  Settings,
+  PanelLeftClose,
+  PanelLeft,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,6 +19,7 @@ interface SidebarProps {
 
 const navItems = [
   { to: "/", icon: Users, label: "Team Members" },
+  { to: "/projects", icon: FolderKanban, label: "Projects" },
   { to: "/titles", icon: BadgeCheck, label: "Titles" },
   { to: "/salary", icon: DollarSign, label: "Salary Planner" },
 ];

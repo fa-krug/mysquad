@@ -101,7 +101,7 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
           onAdd={(text) => addStatusItem(member.id, text)}
           onUpdate={(id, text, checked) => updateStatusItem(id, text, checked)}
           onDelete={deleteStatusItem}
-          onItemsChange={setStatusItems}
+          onItemsChange={(items) => setStatusItems(items as CheckableItem[])}
         />
         <Separator />
         <CheckableList
@@ -110,7 +110,7 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
           onAdd={(text) => addTalkTopic(member.id, text)}
           onUpdate={(id, text, checked) => updateTalkTopic(id, text, checked)}
           onDelete={deleteTalkTopic}
-          onItemsChange={setTalkTopics}
+          onItemsChange={(items) => setTalkTopics(items as CheckableItem[])}
         />
       </div>
     </div>

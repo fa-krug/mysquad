@@ -586,6 +586,291 @@ pub fn delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+// ── Project commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Project {
+    pub id: i64,
+    pub name: String,
+    pub start_date: String,
+    pub end_date: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[tauri::command]
+pub fn get_projects(db: State<AppDb>) -> Result<Vec<Project>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, start_date, end_date, notes, created_at, updated_at
+             FROM projects
+             ORDER BY end_date IS NOT NULL ASC, name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let projects = stmt
+        .query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                start_date: row.get(2)?,
+                end_date: row.get(3)?,
+                notes: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(projects)
+}
+
+#[tauri::command]
+pub fn create_project(db: State<AppDb>) -> Result<Project, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("INSERT INTO projects (name) VALUES ('')", [])
+        .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let row = conn
+        .query_row(
+            "SELECT id, name, start_date, end_date, notes, created_at, updated_at FROM projects WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(Project {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    start_date: row.get(2)?,
+                    end_date: row.get(3)?,
+                    notes: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            },
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(row)
+}
+
+#[tauri::command]
+pub fn update_project(
+    db: State<AppDb>,
+    id: i64,
+    field: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let allowed = ["name", "end_date", "notes"];
+    if !allowed.contains(&field.as_str()) {
+        return Err(format!("Invalid field: {}", field));
+    }
+    let sql = format!("UPDATE projects SET {} = ?1 WHERE id = ?2", field);
+    conn.execute(&sql, params![value, id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_project(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM projects WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProjectMember {
+    pub id: i64,
+    pub project_id: i64,
+    pub team_member_id: i64,
+    pub first_name: String,
+    pub last_name: String,
+}
+
+#[tauri::command]
+pub fn get_project_members(
+    db: State<AppDb>,
+    project_id: i64,
+) -> Result<Vec<ProjectMember>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT pm.id, pm.project_id, pm.team_member_id, m.first_name, m.last_name
+             FROM project_members pm
+             JOIN team_members m ON m.id = pm.team_member_id
+             WHERE pm.project_id = ?1
+             ORDER BY m.last_name ASC, m.first_name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let members = stmt
+        .query_map(params![project_id], |row| {
+            Ok(ProjectMember {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                team_member_id: row.get(2)?,
+                first_name: row.get(3)?,
+                last_name: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(members)
+}
+
+#[tauri::command]
+pub fn add_project_member(
+    db: State<AppDb>,
+    project_id: i64,
+    team_member_id: i64,
+) -> Result<ProjectMember, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "INSERT INTO project_members (project_id, team_member_id) VALUES (?1, ?2)",
+        params![project_id, team_member_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let (first_name, last_name): (String, String) = conn
+        .query_row(
+            "SELECT first_name, last_name FROM team_members WHERE id = ?1",
+            params![team_member_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(ProjectMember {
+        id,
+        project_id,
+        team_member_id,
+        first_name,
+        last_name,
+    })
+}
+
+#[tauri::command]
+pub fn remove_project_member(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM project_members WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProjectStatusItem {
+    pub id: i64,
+    pub project_id: i64,
+    pub text: String,
+    pub checked: bool,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub fn get_project_status_items(
+    db: State<AppDb>,
+    project_id: i64,
+) -> Result<Vec<ProjectStatusItem>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_id, text, checked, created_at
+             FROM project_status_items
+             WHERE project_id = ?1
+             ORDER BY checked ASC, CASE WHEN checked = 0 THEN created_at END ASC, CASE WHEN checked = 1 THEN created_at END DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let items = stmt
+        .query_map(params![project_id], |row| {
+            Ok(ProjectStatusItem {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(items)
+}
+
+#[tauri::command]
+pub fn add_project_status_item(
+    db: State<AppDb>,
+    project_id: i64,
+    text: String,
+) -> Result<ProjectStatusItem, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "INSERT INTO project_status_items (project_id, text) VALUES (?1, ?2)",
+        params![project_id, text],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let created_at: String = conn
+        .query_row(
+            "SELECT created_at FROM project_status_items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(ProjectStatusItem {
+        id,
+        project_id,
+        text,
+        checked: false,
+        created_at,
+    })
+}
+
+#[tauri::command]
+pub fn update_project_status_item(
+    db: State<AppDb>,
+    id: i64,
+    text: Option<String>,
+    checked: Option<bool>,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    if let Some(t) = text {
+        conn.execute(
+            "UPDATE project_status_items SET text = ?1 WHERE id = ?2",
+            params![t, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    if let Some(c) = checked {
+        conn.execute(
+            "UPDATE project_status_items SET checked = ?1 WHERE id = ?2",
+            params![c, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "DELETE FROM project_status_items WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Settings commands ──
 
 #[tauri::command]

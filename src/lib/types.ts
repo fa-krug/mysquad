@@ -22,12 +22,38 @@ export interface Child {
   date_of_birth: string | null;
 }
 
-export interface CheckableItem {
+// Base interface for checkable items (used by CheckableList component)
+export interface BaseCheckableItem {
   id: number;
-  team_member_id: number;
   text: string;
   checked: boolean;
   created_at: string;
+}
+
+export interface CheckableItem extends BaseCheckableItem {
+  team_member_id: number;
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectMember {
+  id: number;
+  project_id: number;
+  team_member_id: number;
+  first_name: string;
+  last_name: string;
+}
+
+export interface ProjectStatusItem extends BaseCheckableItem {
+  project_id: number;
 }
 
 export interface Title {

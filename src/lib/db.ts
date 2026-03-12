@@ -7,6 +7,9 @@ import type {
   SalaryDataPointSummary,
   SalaryDataPointDetail,
   SalaryPart,
+  Project,
+  ProjectMember,
+  ProjectStatusItem,
 } from "./types";
 
 // Auth
@@ -100,6 +103,33 @@ export const getPreviousMemberData = (dataPointId: number, memberId: number) =>
     data_point_id: dataPointId,
     member_id: memberId,
   });
+
+// Projects
+export const getProjects = () => invoke<Project[]>("get_projects");
+export const createProject = () => invoke<Project>("create_project");
+export const updateProject = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_project", { id, field, value });
+export const deleteProject = (id: number) => invoke<void>("delete_project", { id });
+
+// Project Members
+export const getProjectMembers = (projectId: number) =>
+  invoke<ProjectMember[]>("get_project_members", { project_id: projectId });
+export const addProjectMember = (projectId: number, teamMemberId: number) =>
+  invoke<ProjectMember>("add_project_member", {
+    project_id: projectId,
+    team_member_id: teamMemberId,
+  });
+export const removeProjectMember = (id: number) => invoke<void>("remove_project_member", { id });
+
+// Project Status Items
+export const getProjectStatusItems = (projectId: number) =>
+  invoke<ProjectStatusItem[]>("get_project_status_items", { project_id: projectId });
+export const addProjectStatusItem = (projectId: number, text: string) =>
+  invoke<ProjectStatusItem>("add_project_status_item", { project_id: projectId, text });
+export const updateProjectStatusItem = (id: number, text?: string, checked?: boolean) =>
+  invoke<void>("update_project_status_item", { id, text: text ?? null, checked: checked ?? null });
+export const deleteProjectStatusItem = (id: number) =>
+  invoke<void>("delete_project_status_item", { id });
 
 // Settings
 export const getSetting = (key: string) => invoke<string | null>("get_setting", { key });

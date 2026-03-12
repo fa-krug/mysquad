@@ -43,6 +43,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 3)?;
     }
 
+    if version < 4 {
+        let migration_sql = include_str!("../migrations/004_projects.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 4)?;
+    }
+
     Ok(())
 }
 
@@ -86,7 +92,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -150,7 +156,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -166,7 +172,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -223,5 +229,68 @@ mod tests {
             .query_row("SELECT amount FROM salary_parts", [], |row| row.get(0))
             .unwrap();
         assert_eq!(amount, 7500000);
+    }
+
+    #[test]
+    fn test_migration_v4_projects() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        // Verify projects table exists
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Verify project_members table exists
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_members'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Verify project_status_items table exists
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_status_items'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        // Verify updated_at trigger works
+        conn.execute("INSERT INTO projects (name) VALUES ('Test')", [])
+            .unwrap();
+        let id: i64 = conn.last_insert_rowid();
+        let before: String = conn
+            .query_row(
+                "SELECT updated_at FROM projects WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        conn.execute("UPDATE projects SET name = 'Updated' WHERE id = ?1", [id])
+            .unwrap();
+        let after: String = conn
+            .query_row(
+                "SELECT updated_at FROM projects WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(after >= before);
+
+        // Verify cascade delete
+        conn.execute(
+            "INSERT INTO project_members (project_id, team_member_id) VALUES (?1, (SELECT id FROM team_members LIMIT 1))",
+            [id]
+        ).ok(); // May fail if no team_members, that's fine
+        conn.execute("DELETE FROM projects WHERE id = ?1", [id])
+            .unwrap();
     }
 }

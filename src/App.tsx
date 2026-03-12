@@ -5,6 +5,7 @@ import { LockScreen } from "./components/layout/LockScreen";
 import { TeamMembers } from "./pages/TeamMembers";
 import { Titles } from "./pages/Titles";
 import { SalaryPlanner } from "./pages/SalaryPlanner";
+import { Projects } from "./pages/Projects";
 import { SettingsPage } from "./pages/Settings";
 import { useTheme } from "./hooks/useTheme";
 import { useAutoLock } from "./hooks/useAutoLock";
@@ -38,6 +39,7 @@ function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<TeamMembers />} />
+          <Route path="/projects" element={<Projects />} />
           <Route path="/titles" element={<Titles />} />
           <Route path="/salary" element={<SalaryPlanner />} />
           <Route

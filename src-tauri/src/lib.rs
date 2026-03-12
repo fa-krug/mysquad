@@ -50,6 +50,17 @@ pub fn run() {
             commands::delete_salary_part,
             commands::update_salary_range,
             commands::get_previous_member_data,
+            commands::get_projects,
+            commands::create_project,
+            commands::update_project,
+            commands::delete_project,
+            commands::get_project_members,
+            commands::add_project_member,
+            commands::remove_project_member,
+            commands::get_project_status_items,
+            commands::add_project_status_item,
+            commands::update_project_status_item,
+            commands::delete_project_status_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

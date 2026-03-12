@@ -3,22 +3,22 @@ import { PlusIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAutoSave } from "@/hooks/useAutoSave";
-import type { CheckableItem } from "@/lib/types";
+import type { BaseCheckableItem } from "@/lib/types";
 
 interface CheckableListProps {
   title: string;
-  items: CheckableItem[];
-  onAdd: (text: string) => Promise<CheckableItem>;
+  items: BaseCheckableItem[];
+  onAdd: (text: string) => Promise<BaseCheckableItem>;
   onUpdate: (id: number, text?: string, checked?: boolean) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
-  onItemsChange: (items: CheckableItem[]) => void;
+  onItemsChange: (items: BaseCheckableItem[]) => void;
 }
 
 interface ItemRowProps {
-  item: CheckableItem;
+  item: BaseCheckableItem;
   onUpdate: (id: number, text?: string, checked?: boolean) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
-  onItemsChange: (updater: (prev: CheckableItem[]) => CheckableItem[]) => void;
+  onItemsChange: (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => void;
 }
 
 function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
@@ -131,7 +131,7 @@ export function CheckableList({
     }
   };
 
-  const handleItemsUpdater = (updater: (prev: CheckableItem[]) => CheckableItem[]) => {
+  const handleItemsUpdater = (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => {
     onItemsChange(updater(items));
   };
 
