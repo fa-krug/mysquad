@@ -49,3 +49,10 @@ MySquad is a **Tauri v2 desktop app** for team management — tracking team memb
 - **Path alias**: `@/` maps to `src/` (configured in both `tsconfig.json` and `vite.config.ts`)
 - **Tauri invoke params**: When calling Rust commands, parameter names must be snake_case to match Rust struct fields (see `db.ts` for examples)
 - **Tailwind CSS v4**: Using `@tailwindcss/vite` plugin (no `tailwind.config.js` — configuration is in `src/index.css`)
+- **Split view pattern**: Team Members, Titles, and Salary Planner all use the same split layout:
+  - List panel: `w-64 shrink-0 border-r`, header `h-12` with title + add button, `ScrollArea` body
+  - Selection: `bg-muted` selected, `hover:bg-muted/50` hover
+  - Detail panel: `flex-1 overflow-auto` wrapper, `max-w-2xl p-6 space-y-6` content
+  - Empty state: centered `text-muted-foreground` message
+  - Top-level delete: `AlertDialog` confirmation; sub-item delete: immediate
+  - Settings is the only single-page view (`max-w-lg p-6`)
