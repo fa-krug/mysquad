@@ -1,0 +1,54 @@
+stages:
+  - build
+  - release
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+build:
+  stage: build
+  tags:
+    - macos
+  cache:
+    - key: npm-cache
+      paths:
+        - .npm/
+        - node_modules/
+    - key: cargo-cache
+      paths:
+        - .cargo/registry/
+        - .cargo/git/
+        - src-tauri/target/
+  script:
+    - npm install
+    - npm run tauri build
+    - DMG_PATH=$(ls src-tauri/target/release/bundle/dmg/*.dmg)
+    - echo "DMG_PATH=$DMG_PATH" >> build.env
+    - cp "$DMG_PATH" ./MySquad.dmg
+  artifacts:
+    paths:
+      - MySquad.dmg
+    reports:
+      dotenv: build.env
+    expire_in: 30 days
+
+release:
+  stage: release
+  tags:
+    - macos
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - echo "Creating release for $CI_COMMIT_SHORT_SHA"
+  release:
+    tag_name: "v0.1.0-${CI_COMMIT_SHORT_SHA}"
+    name: "MySquad ${CI_COMMIT_SHORT_SHA}"
+    description: "Automated build from commit ${CI_COMMIT_SHA}"
+    assets:
+      links:
+        - name: "MySquad.dmg"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/MySquad.dmg"
