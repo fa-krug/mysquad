@@ -6,7 +6,7 @@ Add a "Projects" view to MySquad using the standard split-view pattern. Projects
 
 ## Data Model
 
-### New Tables (Migration 003)
+### New Tables (Migration 004)
 
 **`projects`**
 | Column | Type | Constraints |
@@ -59,13 +59,21 @@ interface ProjectMember {
   last_name: string;
 }
 
-// Reuse existing CheckableItem with project_id instead of team_member_id
-interface ProjectStatusItem {
+// New base interface (see CheckableList Reuse section)
+interface BaseCheckableItem {
   id: number;
-  project_id: number;
   text: string;
   checked: boolean;
   created_at: string;
+}
+
+// Existing type, now extends BaseCheckableItem
+interface CheckableItem extends BaseCheckableItem {
+  team_member_id: number;
+}
+
+interface ProjectStatusItem extends BaseCheckableItem {
+  project_id: number;
 }
 ```
 
@@ -77,7 +85,7 @@ interface ProjectStatusItem {
 |---|---|---|---|
 | `get_projects` | — | `Vec<Project>` | All projects ordered by end_date IS NULL DESC, name |
 | `create_project` | — | `Project` | Insert with defaults, return new row |
-| `update_project` | id, field, value | — | Field-level update (name, start_date, end_date, notes) |
+| `update_project` | id, field, value | — | Field-level update. Allowed fields: `name`, `end_date`, `notes` |
 | `delete_project` | id | — | CASCADE deletes members + status items |
 | `get_project_members` | project_id | `Vec<ProjectMember>` | Members with first/last name joined from team_members |
 | `add_project_member` | project_id, team_member_id | `ProjectMember` | Insert, return with name |
@@ -107,7 +115,7 @@ Standard split-view container following `TeamMembers.tsx` pattern:
 - `w-64 shrink-0 border-r` layout
 - Header: `h-12 border-b` with "Projects" title + add button
 - **Active projects** listed first (no end_date), sorted by name
-- **Finished projects** (end_date set) collapsed in a collapsible section at the bottom, using a simple disclosure toggle
+- **Finished projects** (end_date set) in a collapsible section at the bottom, collapsed by default, using a simple disclosure toggle
 - Selection: `bg-muted` selected, `hover:bg-muted/50` hover
 - Delete: hover-triggered AlertDialog confirmation
 
@@ -116,20 +124,33 @@ Standard split-view container following `TeamMembers.tsx` pattern:
 `h-full overflow-auto` → inner `max-w-2xl p-6 space-y-6`. Sections separated by `<Separator>`:
 
 1. **Name** — text input, auto-saved via `useAutoSave`
-2. **Dates** — start date (displayed, read-only) + end date (date picker input, nullable; setting it marks project as finished)
+2. **Dates** — start date (displayed as text, read-only, not editable) + end date (date picker input, nullable; setting it marks project as finished)
 3. **Team Members** — displays assigned members as badges; a dropdown/combobox to add from existing team members (filtered to exclude already-assigned); remove button on each badge
 4. **Status Items** — reuses `CheckableList` component with project-specific callbacks. The `CheckableItem` interface is compatible since it only needs id, text, checked, created_at. The `team_member_id` field will be mapped to `project_id` in the project-specific type.
 5. **Notes** — `<textarea>` for editing with `useAutoSave`; below it, a live markdown preview rendered with `react-markdown`. Always visible, no toggle.
 
 ### CheckableList Reuse
 
-The existing `CheckableList` accepts `items: CheckableItem[]` and callback props. For projects, we pass `ProjectStatusItem` objects — they share the same shape needed by CheckableList (id, text, checked, created_at). The `onAdd`/`onUpdate`/`onDelete` callbacks will call the project-specific db functions.
+The existing `CheckableList` component only uses `id`, `text`, `checked`, and `created_at` from items — it never reads `team_member_id`.
 
-Since `CheckableItem` has `team_member_id` and `ProjectStatusItem` has `project_id`, we'll either:
-- Cast/map at the boundary (simplest, no component changes), or
-- Generalize `CheckableItem` to drop the owner field (the component doesn't use it anyway)
+**Approach:** Extract a `BaseCheckableItem` interface with just those four fields. `CheckableItem` extends it (adding `team_member_id`), and `ProjectStatusItem` extends it (adding `project_id`). Update `CheckableList` props to use `BaseCheckableItem` instead of `CheckableItem`. This is a minimal, clean refactor — no behavioral changes to the component.
 
-Recommendation: cast at the boundary to avoid touching existing code.
+```typescript
+interface BaseCheckableItem {
+  id: number;
+  text: string;
+  checked: boolean;
+  created_at: string;
+}
+
+interface CheckableItem extends BaseCheckableItem {
+  team_member_id: number;
+}
+
+interface ProjectStatusItem extends BaseCheckableItem {
+  project_id: number;
+}
+```
 
 ## Dependencies
 
@@ -137,4 +158,4 @@ Recommendation: cast at the boundary to avoid touching existing code.
 
 ## Migration File
 
-`src-tauri/migrations/003_projects.sql` — creates tables, trigger, sets `PRAGMA user_version = 3`.
+`src-tauri/migrations/004_projects.sql` — creates tables, trigger, sets `PRAGMA user_version = 4`.
