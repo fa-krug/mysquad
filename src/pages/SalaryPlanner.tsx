@@ -3,7 +3,6 @@ import { DataPointList } from "@/components/salary/DataPointList";
 import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
 import { SalaryAnalytics } from "@/components/salary/SalaryAnalytics";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   getSalaryDataPoints,
   getSalaryDataPoint,
@@ -161,43 +160,41 @@ export function SalaryPlanner() {
       </div>
 
       {/* Right panel */}
-      <ScrollArea className="flex-1">
-        <div className="p-6">
-          {!detail ? (
-            <p className="text-muted-foreground">Select or create a data point to get started.</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <h1 className="text-2xl font-bold">{detail.name}</h1>
+      <div className="flex-1 overflow-auto">
+        {!detail ? (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            Select a data point to view details
+          </div>
+        ) : (
+          <div className="max-w-2xl p-6 space-y-6">
+            <h1 className="text-2xl font-bold">{detail.name}</h1>
 
-              {/* Member salary cards */}
-              {activeMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No active members in this data point.
-                </p>
-              ) : (
-                activeMembers.map((member) => (
-                  <MemberSalaryCard
-                    key={member.id}
-                    member={member}
-                    ranges={detail.ranges}
-                    onAddPart={handleAddPart}
-                    onDeletePart={handleDeletePart}
-                    onChanged={handlePartChanged}
-                  />
-                ))
-              )}
+            {/* Member salary cards */}
+            {activeMembers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active members in this data point.</p>
+            ) : (
+              activeMembers.map((member) => (
+                <MemberSalaryCard
+                  key={member.id}
+                  member={member}
+                  ranges={detail.ranges}
+                  onAddPart={handleAddPart}
+                  onDeletePart={handleDeletePart}
+                  onChanged={handlePartChanged}
+                />
+              ))
+            )}
 
-              {/* Analytics */}
-              {activeMembers.length > 0 && (
-                <>
-                  <hr className="border-border" />
-                  <SalaryAnalytics detail={detail} previousData={previousData} />
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+            {/* Analytics */}
+            {activeMembers.length > 0 && (
+              <>
+                <hr className="border-border" />
+                <SalaryAnalytics detail={detail} previousData={previousData} />
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Edit modal */}
       <DataPointModal
