@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Main gradients -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c1222"/>
+      <stop offset="100%" stop-color="#1a2744"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Figure gradients -->
+    <linearGradient id="fig1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="fig2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="fig3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="fig4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+
+    <!-- Glow filter -->
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="bigGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+
+    <!-- Clip for rounded icon -->
+    <clipPath id="iconClip">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <g clip-path="url(#iconClip)">
+    <!-- Ambient glow behind figures -->
+    <ellipse cx="256" cy="280" rx="180" ry="140" fill="url(#glow)"/>
+
+    <!-- Left figure -->
+    <g filter="url(#softGlow)" opacity="0.95">
+      <!-- Glow layer -->
+      <circle cx="138" cy="210" r="30" fill="#3b82f6" opacity="0.15" filter="url(#bigGlow)"/>
+      <!-- Head -->
+      <circle cx="138" cy="210" r="26" fill="url(#fig2)"/>
+      <!-- Body - rounded trapezoid -->
+      <path d="M138 244 c-36 0 -60 26 -60 56 v6 c0 12 10 20 22 20 h76 c12 0 22-8 22-20 v-6 c0-30-24-56-60-56z" fill="url(#fig2)"/>
+    </g>
+
+    <!-- Right figure -->
+    <g filter="url(#softGlow)" opacity="0.95">
+      <circle cx="374" cy="210" r="30" fill="#7c3aed" opacity="0.15" filter="url(#bigGlow)"/>
+      <circle cx="374" cy="210" r="26" fill="url(#fig3)"/>
+      <path d="M374 244 c-36 0 -60 26 -60 56 v6 c0 12 10 20 22 20 h76 c12 0 22-8 22-20 v-6 c0-30-24-56-60-56z" fill="url(#fig3)"/>
+    </g>
+
+    <!-- Center figure (hero — larger, in front) -->
+    <g filter="url(#softGlow)">
+      <!-- Glow layer -->
+      <circle cx="256" cy="152" r="40" fill="#6366f1" opacity="0.2" filter="url(#bigGlow)"/>
+      <!-- Head -->
+      <circle cx="256" cy="152" r="32" fill="url(#fig1)"/>
+      <!-- Body -->
+      <path d="M256 194 c-44 0 -72 30 -72 66 v8 c0 14 12 24 26 24 h92 c14 0 26-10 26-24 v-8 c0-36-28-66-72-66z" fill="url(#fig1)"/>
+    </g>
+
+    <!-- Bottom figure (slightly smaller, completing the squad) -->
+    <g filter="url(#softGlow)" opacity="0.95">
+      <circle cx="256" cy="330" r="24" fill="#2563eb" opacity="0.15" filter="url(#bigGlow)"/>
+      <circle cx="256" cy="330" r="22" fill="url(#fig4)"/>
+      <path d="M256 360 c-32 0 -52 22 -52 48 v4 c0 10 8 18 18 18 h68 c10 0 18-8 18-18 v-4 c0-26-20-48-52-48z" fill="url(#fig4)"/>
+    </g>
+
+    <!-- Highlight sparkle dots -->
+    <circle cx="236" cy="140" r="3" fill="white" opacity="0.6"/>
+    <circle cx="120" cy="198" r="2.5" fill="white" opacity="0.5"/>
+    <circle cx="356" cy="198" r="2.5" fill="white" opacity="0.5"/>
+    <circle cx="240" cy="320" r="2" fill="white" opacity="0.45"/>
+  </g>
+</svg>

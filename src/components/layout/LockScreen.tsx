@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Fingerprint, Loader2 } from "lucide-react";
+import logoSvg from "@/assets/logo.svg";
 
 interface LockScreenProps {
   onUnlock: () => Promise<void>;
@@ -25,6 +26,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-6">
+        <img src={logoSvg} alt="MySquad" className="h-24 w-24" />
         <h1 className="text-4xl font-bold tracking-tight">MySquad</h1>
         <p className="text-muted-foreground">Unlock to continue</p>
         <Button size="lg" onClick={handleUnlock} disabled={loading} className="gap-2">

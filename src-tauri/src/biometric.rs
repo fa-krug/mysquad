@@ -24,13 +24,13 @@ fn get_helper_path() -> Result<PathBuf, String> {
         .ok_or("Cannot find executable directory")?
         .to_path_buf();
 
-    let helper = exe_dir.join("authenticate-helper");
+    let helper = exe_dir.join("MySquad");
     if helper.exists() {
         return Ok(helper);
     }
 
     // Fallback: check target directory (development)
-    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/authenticate-helper");
+    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/MySquad");
     if dev_helper.exists() {
         return Ok(dev_helper);
     }
