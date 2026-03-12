@@ -24,9 +24,9 @@ export function DataPointList({
 }: DataPointListProps) {
   return (
     <div className="flex h-full flex-col border-r">
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="flex items-center justify-between border-b px-3 h-12">
         <h2 className="text-sm font-semibold">Data Points</h2>
-        <Button variant="ghost" size="icon" onClick={onCreate} title="New Data Point">
+        <Button variant="ghost" size="icon-sm" onClick={onCreate} title="New Data Point">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -42,8 +42,8 @@ export function DataPointList({
               key={dp.id}
               onClick={() => onSelect(dp.id)}
               className={cn(
-                "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
-                selectedId === dp.id && "bg-accent text-accent-foreground",
+                "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50",
+                selectedId === dp.id && "bg-muted",
               )}
             >
               <div className="min-w-0 flex-1">
