@@ -541,66 +541,77 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
         )
         .ok();
 
-    if let Some(prev) = prev_id {
-        let prev_budget: Option<i64> = conn
-            .query_row("SELECT budget FROM salary_data_points WHERE id = ?1", params![prev], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
 
-        conn.execute(
-            "INSERT INTO salary_data_points (name, budget) VALUES (?1, ?2)",
-            params![today, prev_budget],
-        ).map_err(|e| e.to_string())?;
-        let new_id = conn.last_insert_rowid();
+    let result: Result<SalaryDataPointSummary, String> = (|| {
+        if let Some(prev) = prev_id {
+            let prev_budget: Option<i64> = conn
+                .query_row("SELECT budget FROM salary_data_points WHERE id = ?1", params![prev], |row| row.get(0))
+                .map_err(|e| e.to_string())?;
 
-        conn.execute(
-            "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-             SELECT ?1, member_id, is_active, is_promoted
-             FROM salary_data_point_members WHERE data_point_id = ?2",
-            params![new_id, prev],
-        ).map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO salary_data_points (name, budget) VALUES (?1, ?2)",
+                params![today, prev_budget],
+            ).map_err(|e| e.to_string())?;
+            let new_id = conn.last_insert_rowid();
 
-        conn.execute(
-            "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order)
-             SELECT new_sdpm.id, sp.name, sp.amount, sp.frequency, sp.is_variable, sp.sort_order
-             FROM salary_parts sp
-             JOIN salary_data_point_members old_sdpm ON old_sdpm.id = sp.data_point_member_id
-             JOIN salary_data_point_members new_sdpm ON new_sdpm.data_point_id = ?1
-                 AND new_sdpm.member_id = old_sdpm.member_id
-             WHERE old_sdpm.data_point_id = ?2",
-            params![new_id, prev],
-        ).map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
+                 SELECT ?1, member_id, is_active, is_promoted
+                 FROM salary_data_point_members WHERE data_point_id = ?2",
+                params![new_id, prev],
+            ).map_err(|e| e.to_string())?;
 
-        conn.execute(
-            "INSERT INTO salary_ranges (data_point_id, title_id, min_salary, max_salary)
-             SELECT ?1, title_id, min_salary, max_salary
-             FROM salary_ranges WHERE data_point_id = ?2",
-            params![new_id, prev],
-        ).map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order)
+                 SELECT new_sdpm.id, sp.name, sp.amount, sp.frequency, sp.is_variable, sp.sort_order
+                 FROM salary_parts sp
+                 JOIN salary_data_point_members old_sdpm ON old_sdpm.id = sp.data_point_member_id
+                 JOIN salary_data_point_members new_sdpm ON new_sdpm.data_point_id = ?1
+                     AND new_sdpm.member_id = old_sdpm.member_id
+                 WHERE old_sdpm.data_point_id = ?2",
+                params![new_id, prev],
+            ).map_err(|e| e.to_string())?;
 
-        let created_at: String = conn
-            .query_row("SELECT created_at FROM salary_data_points WHERE id = ?1", params![new_id], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO salary_ranges (data_point_id, title_id, min_salary, max_salary)
+                 SELECT ?1, title_id, min_salary, max_salary
+                 FROM salary_ranges WHERE data_point_id = ?2",
+                params![new_id, prev],
+            ).map_err(|e| e.to_string())?;
 
-        Ok(SalaryDataPointSummary { id: new_id, name: today, budget: prev_budget, created_at })
-    } else {
-        conn.execute(
-            "INSERT INTO salary_data_points (name) VALUES (?1)",
-            params![today],
-        ).map_err(|e| e.to_string())?;
-        let new_id = conn.last_insert_rowid();
+            let created_at: String = conn
+                .query_row("SELECT created_at FROM salary_data_points WHERE id = ?1", params![new_id], |row| row.get(0))
+                .map_err(|e| e.to_string())?;
 
-        conn.execute(
-            "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-             SELECT ?1, id, 1, 0 FROM team_members",
-            params![new_id],
-        ).map_err(|e| e.to_string())?;
+            Ok(SalaryDataPointSummary { id: new_id, name: today.clone(), budget: prev_budget, created_at })
+        } else {
+            conn.execute(
+                "INSERT INTO salary_data_points (name) VALUES (?1)",
+                params![today],
+            ).map_err(|e| e.to_string())?;
+            let new_id = conn.last_insert_rowid();
 
-        let created_at: String = conn
-            .query_row("SELECT created_at FROM salary_data_points WHERE id = ?1", params![new_id], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
+                 SELECT ?1, id, 1, 0 FROM team_members",
+                params![new_id],
+            ).map_err(|e| e.to_string())?;
 
-        Ok(SalaryDataPointSummary { id: new_id, name: today, budget: None, created_at })
+            let created_at: String = conn
+                .query_row("SELECT created_at FROM salary_data_points WHERE id = ?1", params![new_id], |row| row.get(0))
+                .map_err(|e| e.to_string())?;
+
+            Ok(SalaryDataPointSummary { id: new_id, name: today.clone(), budget: None, created_at })
+        }
+    })();
+
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
+        Err(_) => { let _ = conn.execute_batch("ROLLBACK"); }
     }
+
+    result
 }
 
 #[tauri::command]
