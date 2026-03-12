@@ -1,12 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
 import { getTeamMembers, createTeamMember, deleteTeamMember } from "@/lib/db";
 import type { TeamMember } from "@/lib/types";
 
 export function TeamMembers() {
+  const location = useLocation();
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    const memberId = location.state?.memberId;
+    if (typeof memberId === "number") {
+      // Clear the state so refreshing doesn't re-select
+      window.history.replaceState({}, "");
+      return memberId;
+    }
+    return null;
+  });
 
   const loadMembers = useCallback(async () => {
     const data = await getTeamMembers();
@@ -50,7 +60,7 @@ export function TeamMembers() {
         onCreate={handleCreate}
         onDelete={handleDelete}
       />
-      <div className="flex-1">
+      <div className="flex-1 overflow-auto">
         {selectedMember ? (
           <MemberDetail
             key={selectedMember.id}
