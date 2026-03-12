@@ -1,0 +1,83 @@
+import { Plus, Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SalaryPartRow } from "./SalaryPartRow";
+import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
+import { cn } from "@/lib/utils";
+import type { SalaryDataPointMember, SalaryRange } from "@/lib/types";
+
+const fitColors: Record<string, string> = {
+  green: "text-green-600",
+  yellow: "text-yellow-600",
+  red: "text-red-600",
+  none: "text-muted-foreground",
+};
+
+interface MemberSalaryCardProps {
+  member: SalaryDataPointMember;
+  ranges: SalaryRange[];
+  onAddPart: (dataPointMemberId: number) => void;
+  onDeletePart: (partId: number) => void;
+  onChanged: () => void;
+}
+
+export function MemberSalaryCard({ member, ranges, onAddPart, onDeletePart, onChanged }: MemberSalaryCardProps) {
+  const total = annualTotal(member.parts);
+  const range = getRangeForMember(member, ranges);
+  const fit = rangeFitColor(total, range);
+
+  return (
+    <div className="rounded-lg border border-border p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold">
+            {member.last_name}, {member.first_name}
+          </h3>
+          {member.title_name && (
+            <span className="text-xs text-muted-foreground">({member.title_name})</span>
+          )}
+          {member.is_promoted && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+              <Star className="h-3 w-3" /> Promoted
+            </span>
+          )}
+        </div>
+        <div className={cn("text-sm font-semibold", fitColors[fit])}>
+          {formatCents(total)}/yr
+          {range && (
+            <span className="ml-1 text-xs font-normal text-muted-foreground">
+              ({formatCents(range.min_salary)} – {formatCents(range.max_salary)})
+            </span>
+          )}
+        </div>
+      </div>
+
+      {member.parts.length > 0 && (
+        <table className="w-full">
+          <thead>
+            <tr className="text-xs text-muted-foreground">
+              <th className="px-2 py-1 text-left font-medium">Label</th>
+              <th className="px-2 py-1 text-left font-medium">Amount</th>
+              <th className="px-2 py-1 text-left font-medium">Freq/yr</th>
+              <th className="px-2 py-1 text-center font-medium">Variable</th>
+              <th className="px-2 py-1 w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {member.parts.map((part) => (
+              <SalaryPartRow key={part.id} part={part} onDelete={onDeletePart} onChanged={onChanged} />
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mt-2 text-xs"
+        onClick={() => onAddPart(member.id)}
+      >
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add Part
+      </Button>
+    </div>
+  );
+}
