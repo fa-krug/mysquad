@@ -20,6 +20,10 @@ export const createTeamMember = () => invoke<TeamMember>("create_team_member");
 export const updateTeamMember = (id: number, field: string, value: string | null) =>
   invoke<void>("update_team_member", { id, field, value });
 export const deleteTeamMember = (id: number) => invoke<void>("delete_team_member", { id });
+export const uploadMemberPicture = (id: number, filePath: string) =>
+  invoke<string>("upload_member_picture", { id, file_path: filePath });
+export const deleteMemberPicture = (id: number) => invoke<void>("delete_member_picture", { id });
+export const getPicturesDirPath = () => invoke<string>("get_pictures_dir_path");
 
 // Children (snake_case params to match Rust)
 export const getChildren = (teamMemberId: number) =>

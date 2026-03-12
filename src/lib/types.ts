@@ -12,6 +12,7 @@ export interface TeamMember {
   title_name: string | null;
   start_date: string | null;
   notes: string | null;
+  picture_path: string | null;
 }
 
 export interface Child {
