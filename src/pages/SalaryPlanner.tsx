@@ -4,6 +4,16 @@ import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
 import { SalaryAnalytics } from "@/components/salary/SalaryAnalytics";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import {
   getSalaryDataPoints,
   getSalaryDataPoint,
   createSalaryDataPoint,
@@ -24,6 +34,7 @@ export function SalaryPlanner() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDpId, setEditingDpId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const loadDataPoints = useCallback(async () => {
     const [dps, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
@@ -101,7 +112,13 @@ export function SalaryPlanner() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("Delete this data point? This cannot be undone.")) return;
+    setPendingDeleteId(id);
+  }
+
+  async function confirmDelete() {
+    if (pendingDeleteId === null) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
     await deleteSalaryDataPoint(id);
     const dps = await loadDataPoints();
     if (selectedId === id) {
@@ -195,6 +212,28 @@ export function SalaryPlanner() {
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Data Point</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this data point? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit modal */}
       <DataPointModal
