@@ -56,6 +56,7 @@ pub struct TeamMember {
     pub title_name: Option<String>,
     pub start_date: Option<String>,
     pub notes: Option<String>,
+    pub picture_path: Option<String>,
 }
 
 #[tauri::command]
@@ -66,7 +67,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
         .prepare(
             "SELECT m.id, m.first_name, m.last_name, m.email, m.personal_email,
                     m.personal_phone, m.address_street, m.address_city, m.address_zip,
-                    m.title_id, t.name as title_name, m.start_date, m.notes
+                    m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path
              FROM team_members m
              LEFT JOIN titles t ON m.title_id = t.id
              ORDER BY m.last_name ASC, m.first_name ASC",
@@ -89,6 +90,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                 title_name: row.get(10)?,
                 start_date: row.get(11)?,
                 notes: row.get(12)?,
+                picture_path: row.get(13)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -122,6 +124,7 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
         title_name: None,
         start_date: None,
         notes: None,
+        picture_path: None,
     })
 }
 
