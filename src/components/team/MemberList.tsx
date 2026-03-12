@@ -28,10 +28,10 @@ export function MemberList({ members, selectedId, onSelect, onCreate, onDelete }
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   return (
-    <div className="w-[250px] border-r flex flex-col h-full">
+    <div className="w-64 shrink-0 border-r flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b">
-        <span className="text-sm font-medium">Team Members</span>
+      <div className="flex items-center justify-between px-3 h-12 border-b">
+        <span className="text-sm font-semibold">Team Members</span>
         <Button variant="ghost" size="icon-sm" onClick={onCreate} title="Add member">
           <PlusIcon />
         </Button>
