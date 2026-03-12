@@ -37,6 +37,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 2)?;
     }
 
+    if version < 3 {
+        let migration_sql = include_str!("../migrations/003_member_pictures.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 3)?;
+    }
+
     Ok(())
 }
 
@@ -80,7 +86,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]
@@ -140,11 +146,27 @@ mod tests {
         let has_salary: bool = conn.prepare("SELECT salary FROM team_members").is_ok();
         assert!(!has_salary);
 
-        // Verify user_version is 2
+        // Verify user_version is 3 (all migrations run)
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
+    }
+
+    #[test]
+    fn test_migration_v3_picture_path() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        let has_col: bool = conn
+            .prepare("SELECT picture_path FROM team_members LIMIT 0")
+            .is_ok();
+        assert!(has_col);
+
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
     }
 
     #[test]
