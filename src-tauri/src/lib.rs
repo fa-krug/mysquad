@@ -1,3 +1,4 @@
+pub mod biometric;
 pub mod db;
 pub mod keychain;
 
