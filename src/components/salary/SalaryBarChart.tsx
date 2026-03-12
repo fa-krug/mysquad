@@ -26,7 +26,7 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
     };
   });
 
-  const { total: budgetTotal, headcount } = budgetTotals(members);
+  const { headcount } = budgetTotals(members);
   const avgPerHead = budget && headcount > 0 ? (budget / 100) / headcount : null;
 
   return (
@@ -36,7 +36,7 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
         <BarChart data={data} layout="vertical" margin={{ left: 120, right: 20, top: 5, bottom: 5 }}>
           <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value: number) => formatCents(value * 100)} />
+          <Tooltip formatter={(value) => formatCents((value as number) * 100)} />
           <Bar dataKey="total" radius={[0, 4, 4, 0]}>
             {data.map((entry, i) => (
               <Cell

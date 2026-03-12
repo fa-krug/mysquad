@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { annualTotal, formatCents, formatDeltaPercent } from "@/lib/salary-utils";
 import type { SalaryDataPointMember, SalaryPart } from "@/lib/types";
 
@@ -37,7 +37,7 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
         <BarChart data={data} layout="vertical" margin={{ left: 120, right: 80, top: 5, bottom: 5 }}>
           <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value: number) => formatCents(value * 100)} />
+          <Tooltip formatter={(value) => formatCents((value as number) * 100)} />
           <Bar dataKey="previous" fill="#cbd5e1" radius={[0, 4, 4, 0]} name="Previous" />
           <Bar dataKey="current" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Current" />
         </BarChart>

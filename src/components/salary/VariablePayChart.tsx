@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { annualTotal, variableTotal, formatCents } from "@/lib/salary-utils";
 import type { SalaryDataPointMember } from "@/lib/types";
 
@@ -30,13 +30,9 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
         <BarChart data={data} layout="vertical" margin={{ left: 120, right: 60, top: 5, bottom: 5 }}>
           <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value: number) => formatCents(value * 100)} />
+          <Tooltip formatter={(value) => formatCents((value as number) * 100)} />
           <Bar dataKey="fixed" stackId="salary" fill="#3b82f6" radius={[0, 0, 0, 0]} name="Fixed" />
-          <Bar dataKey="variable" stackId="salary" fill="#93c5fd" radius={[0, 4, 4, 0]} name="Variable">
-            {data.map((entry, i) => (
-              <Cell key={i} />
-            ))}
-          </Bar>
+          <Bar dataKey="variable" stackId="salary" fill="#93c5fd" radius={[0, 4, 4, 0]} name="Variable" />
         </BarChart>
       </ResponsiveContainer>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground px-2">

@@ -1,134 +1,180 @@
-import { useState, useEffect } from "react";
-import { getTeamMembers, updateTeamMember } from "@/lib/db";
-import { useAutoSave } from "@/hooks/useAutoSave";
-import { Input } from "@/components/ui/input";
-import type { TeamMember } from "@/lib/types";
-
-interface SalaryRowProps {
-  member: TeamMember;
-}
-
-function SalaryRow({ member }: SalaryRowProps) {
-  // salary is stored as cents in DB, displayed as dollars
-  const [displayValue, setDisplayValue] = useState<string>(
-    member.salary != null ? String(Math.round(member.salary / 100)) : ""
-  );
-
-  const { save, saving, saved, error } = useAutoSave({
-    onSave: async (value) => {
-      const cents =
-        value === null || value === ""
-          ? null
-          : String(Math.round(parseFloat(value) * 100));
-      await updateTeamMember(member.id, "salary", cents);
-    },
-  });
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setDisplayValue(val);
-    save(val === "" ? null : val);
-  }
-
-  const displayName = `${member.last_name}, ${member.first_name}`;
-
-  return (
-    <tr className="border-b border-border last:border-0 hover:bg-muted/30">
-      <td className="px-4 py-2 text-sm">{displayName}</td>
-      <td className="px-4 py-2 text-sm text-muted-foreground">
-        {member.title_name ?? "—"}
-      </td>
-      <td className="px-4 py-2">
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <span className="absolute left-2.5 text-sm text-muted-foreground">$</span>
-            <Input
-              type="number"
-              min="0"
-              step="1"
-              value={displayValue}
-              onChange={handleChange}
-              className="pl-6 w-32 text-sm"
-              placeholder="0"
-            />
-          </div>
-          {saving && (
-            <span className="text-xs text-muted-foreground">Saving…</span>
-          )}
-          {saved && !saving && (
-            <span className="text-xs text-green-600">Saved</span>
-          )}
-          {error && !saving && (
-            <span className="text-xs text-destructive" title={error}>
-              Error
-            </span>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
-}
+import { useState, useEffect, useCallback } from "react";
+import { DataPointList } from "@/components/salary/DataPointList";
+import { DataPointModal } from "@/components/salary/DataPointModal";
+import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
+import { SalaryAnalytics } from "@/components/salary/SalaryAnalytics";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  getSalaryDataPoints,
+  getSalaryDataPoint,
+  createSalaryDataPoint,
+  deleteSalaryDataPoint,
+  createSalaryPart,
+  deleteSalaryPart as deleteSalaryPartApi,
+  getPreviousMemberData,
+  getTitles,
+} from "@/lib/db";
+import type { SalaryDataPointSummary, SalaryDataPointDetail, SalaryPart, Title } from "@/lib/types";
 
 export function SalaryPlanner() {
-  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [dataPoints, setDataPoints] = useState<SalaryDataPointSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
+  const [previousData, setPreviousData] = useState<Record<number, SalaryPart[] | null>>({});
+  const [titles, setTitles] = useState<Title[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingDpId, setEditingDpId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getTeamMembers()
-      .then((data) => {
-        // Sort by last name, then first name
-        const sorted = [...data].sort((a, b) => {
-          const last = a.last_name.localeCompare(b.last_name);
-          if (last !== 0) return last;
-          return a.first_name.localeCompare(b.first_name);
-        });
-        setMembers(sorted);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
+  const loadDataPoints = useCallback(async () => {
+    const [dps, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
+    setDataPoints(dps);
+    setTitles(t);
+    return dps;
   }, []);
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
+  const loadDetail = useCallback(async (id: number) => {
+    const d = await getSalaryDataPoint(id);
+    setDetail(d);
+
+    // Load comparison data for active members
+    const prev: Record<number, SalaryPart[] | null> = {};
+    await Promise.all(
+      d.members
+        .filter((m) => m.is_active)
+        .map(async (m) => {
+          prev[m.member_id] = await getPreviousMemberData(id, m.member_id);
+        })
     );
+    setPreviousData(prev);
+  }, []);
+
+  useEffect(() => {
+    loadDataPoints().then((dps) => {
+      if (dps.length > 0) {
+        setSelectedId(dps[0].id);
+      }
+      setLoading(false);
+    });
+  }, [loadDataPoints]);
+
+  useEffect(() => {
+    if (selectedId) loadDetail(selectedId);
+  }, [selectedId, loadDetail]);
+
+  async function handleCreate() {
+    const dp = await createSalaryDataPoint();
+    await loadDataPoints();
+    setSelectedId(dp.id);
+    setEditingDpId(dp.id);
+    setModalOpen(true);
   }
 
+  function handleEdit(dp: SalaryDataPointSummary) {
+    setEditingDpId(dp.id);
+    setModalOpen(true);
+  }
+
+  async function handleDelete(id: number) {
+    if (!window.confirm("Delete this data point? This cannot be undone.")) return;
+    await deleteSalaryDataPoint(id);
+    const dps = await loadDataPoints();
+    if (selectedId === id) {
+      setSelectedId(dps.length > 0 ? dps[0].id : null);
+      setDetail(null);
+    }
+  }
+
+  async function handleAddPart(dataPointMemberId: number) {
+    await createSalaryPart(dataPointMemberId);
+    if (selectedId) await loadDetailOnly(selectedId);
+  }
+
+  async function handleDeletePart(partId: number) {
+    await deleteSalaryPartApi(partId);
+    if (selectedId) await loadDetailOnly(selectedId);
+  }
+
+  // Light refetch: only detail, no comparison data (used for part edits)
+  const loadDetailOnly = useCallback(async (id: number) => {
+    const d = await getSalaryDataPoint(id);
+    setDetail(d);
+  }, []);
+
+  function handlePartChanged() {
+    if (selectedId) loadDetailOnly(selectedId);
+  }
+
+  async function handleModalSaved() {
+    await loadDataPoints();
+    if (selectedId) await loadDetail(selectedId);
+  }
+
+  if (loading) {
+    return <div className="p-6"><p className="text-muted-foreground">Loading…</p></div>;
+  }
+
+  const activeMembers = detail?.members.filter((m) => m.is_active) ?? [];
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Salary Planner</h1>
-
-      {error && (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      )}
-
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-4 py-2 text-left text-sm font-semibold">Name</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold">Title</th>
-              <th className="px-4 py-2 text-left text-sm font-semibold">Salary</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No team members found.
-                </td>
-              </tr>
-            ) : (
-              members.map((member) => (
-                <SalaryRow key={member.id} member={member} />
-              ))
-            )}
-          </tbody>
-        </table>
+    <div className="flex h-full">
+      {/* Left panel */}
+      <div className="w-64 shrink-0">
+        <DataPointList
+          dataPoints={dataPoints}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onCreate={handleCreate}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
       </div>
+
+      {/* Right panel */}
+      <ScrollArea className="flex-1">
+        <div className="p-6">
+          {!detail ? (
+            <p className="text-muted-foreground">Select or create a data point to get started.</p>
+          ) : (
+            <div className="flex flex-col gap-6">
+              <h1 className="text-2xl font-bold">{detail.name}</h1>
+
+              {/* Member salary cards */}
+              {activeMembers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No active members in this data point.</p>
+              ) : (
+                activeMembers.map((member) => (
+                  <MemberSalaryCard
+                    key={member.id}
+                    member={member}
+                    ranges={detail.ranges}
+                    onAddPart={handleAddPart}
+                    onDeletePart={handleDeletePart}
+                    onChanged={handlePartChanged}
+                  />
+                ))
+              )}
+
+              {/* Analytics */}
+              {activeMembers.length > 0 && (
+                <>
+                  <hr className="border-border" />
+                  <SalaryAnalytics detail={detail} previousData={previousData} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Edit modal */}
+      <DataPointModal
+        dataPointId={editingDpId}
+        titles={titles}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={handleModalSaved}
+      />
     </div>
   );
 }

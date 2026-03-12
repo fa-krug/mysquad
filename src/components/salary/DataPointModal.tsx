@@ -12,7 +12,7 @@ import {
   updateSalaryRange,
   getSalaryDataPoint,
 } from "@/lib/db";
-import type { SalaryDataPointDetail, SalaryRange, Title } from "@/lib/types";
+import type { SalaryDataPointDetail, Title } from "@/lib/types";
 
 interface DataPointModalProps {
   dataPointId: number | null;
