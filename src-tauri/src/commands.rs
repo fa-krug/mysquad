@@ -165,7 +165,86 @@ pub fn delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM team_members WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
+
+    // Clean up picture file
+    if let Ok(pictures_dir) = get_pictures_dir() {
+        let file_path = pictures_dir.join(format!("{}.jpg", id));
+        let _ = std::fs::remove_file(file_path); // Ignore errors — file may not exist
+    }
+
     Ok(())
+}
+
+#[tauri::command]
+pub fn upload_member_picture(
+    db: State<AppDb>,
+    id: i64,
+    file_path: String,
+) -> Result<String, String> {
+    use image::imageops::FilterType;
+    use image::GenericImageView;
+
+    let pictures_dir = get_pictures_dir()?;
+    let filename = format!("{}.jpg", id);
+    let dest_path = pictures_dir.join(&filename);
+
+    // Load and resize image
+    let img = image::open(&file_path).map_err(|e| format!("Failed to open image: {}", e))?;
+
+    // Center crop to square
+    let (w, h) = img.dimensions();
+    let side = w.min(h);
+    let x = (w - side) / 2;
+    let y = (h - side) / 2;
+    let cropped = img.crop_imm(x, y, side, side);
+
+    // Resize to 256x256
+    let resized = cropped.resize_exact(256, 256, FilterType::Lanczos3);
+
+    // Save as JPEG
+    resized
+        .save(&dest_path)
+        .map_err(|e| format!("Failed to save image: {}", e))?;
+
+    // Update DB
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE team_members SET picture_path = ?1 WHERE id = ?2",
+        params![filename, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(dest_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn delete_member_picture(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let pictures_dir = get_pictures_dir()?;
+    let filename = format!("{}.jpg", id);
+    let file_path = pictures_dir.join(&filename);
+
+    // Remove file if it exists
+    if file_path.exists() {
+        std::fs::remove_file(&file_path).map_err(|e| format!("Failed to delete picture: {}", e))?;
+    }
+
+    // Clear DB
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE team_members SET picture_path = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_pictures_dir_path() -> Result<String, String> {
+    let pictures_dir = get_pictures_dir()?;
+    Ok(pictures_dir.to_string_lossy().into_owned())
 }
 
 // ── Children commands ──
@@ -1010,10 +1089,24 @@ pub fn get_previous_member_data(
 
 // ── Helpers ──
 
-fn get_db_path() -> Result<String, String> {
+fn get_app_data_dir() -> Result<std::path::PathBuf, String> {
     let data_dir = dirs::data_local_dir().ok_or("Could not determine app data directory")?;
     let app_dir = data_dir.join("com.mysquad.app");
     std::fs::create_dir_all(&app_dir)
         .map_err(|e| format!("Failed to create app directory: {}", e))?;
-    Ok(app_dir.join("mysquad.db").to_string_lossy().into_owned())
+    Ok(app_dir)
+}
+
+fn get_db_path() -> Result<String, String> {
+    Ok(get_app_data_dir()?
+        .join("mysquad.db")
+        .to_string_lossy()
+        .into_owned())
+}
+
+fn get_pictures_dir() -> Result<std::path::PathBuf, String> {
+    let pictures_dir = get_app_data_dir()?.join("pictures");
+    std::fs::create_dir_all(&pictures_dir)
+        .map_err(|e| format!("Failed to create pictures directory: {}", e))?;
+    Ok(pictures_dir)
 }

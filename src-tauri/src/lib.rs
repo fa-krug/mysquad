@@ -8,6 +8,7 @@ use db::AppDb;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppDb::new())
         .invoke_handler(tauri::generate_handler![
             commands::authenticate,
@@ -17,6 +18,9 @@ pub fn run() {
             commands::create_team_member,
             commands::update_team_member,
             commands::delete_team_member,
+            commands::upload_member_picture,
+            commands::delete_member_picture,
+            commands::get_pictures_dir_path,
             commands::get_children,
             commands::add_child,
             commands::update_child,
