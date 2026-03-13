@@ -3,24 +3,23 @@ import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
 import { getTeamMembers, createTeamMember, deleteTeamMember, getPicturesDirPath } from "@/lib/db";
+import { showSuccess, showError } from "@/lib/toast";
+import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type { TeamMember } from "@/lib/types";
 
 export function TeamMembers() {
   const location = useLocation();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [picturesDir, setPicturesDir] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(() => {
-    const memberId = location.state?.memberId;
-    if (typeof memberId === "number") {
-      // Clear the state so refreshing doesn't re-select
-      window.history.replaceState({}, "");
-      return memberId;
-    }
-    return null;
-  });
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const { scheduleDelete, pendingIds } = usePendingDelete();
 
   useEffect(() => {
-    getPicturesDirPath().then(setPicturesDir);
+    getPicturesDirPath()
+      .then(setPicturesDir)
+      .catch(() => showError("Failed to load pictures directory"));
   }, []);
 
   const loadMembers = useCallback(async () => {
@@ -30,37 +29,80 @@ export function TeamMembers() {
 
   useEffect(() => {
     let cancelled = false;
-    getTeamMembers().then((data) => {
-      if (!cancelled) setMembers(data);
-    });
+    getTeamMembers()
+      .then((data) => {
+        if (!cancelled) setMembers(data);
+      })
+      .catch(() => {
+        if (!cancelled) showError("Failed to load team members");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  useEffect(() => {
+    const state = location.state;
+    if (!state) return;
+    window.history.replaceState({}, "");
+
+    if (state.action === "create" || state.action === "create-member") {
+      handleCreate();
+    } else if (state.action === "delete" && selectedId !== null) {
+      handleDelete(selectedId);
+    } else if (typeof state.memberId === "number") {
+      setSelectedId(state.memberId);
+    }
+  }, [location.state]);
+
   const handleCreate = async () => {
-    const member = await createTeamMember();
-    await loadMembers();
-    setSelectedId(member.id);
+    setCreating(true);
+    try {
+      const member = await createTeamMember();
+      await loadMembers();
+      setSelectedId(member.id);
+      showSuccess("Team member created");
+    } catch {
+      showError("Failed to create team member");
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    await deleteTeamMember(id);
+  const handleDelete = (id: number) => {
+    const member = members.find((m) => m.id === id);
+    if (!member) return;
     if (selectedId === id) setSelectedId(null);
-    await loadMembers();
+    scheduleDelete({
+      id,
+      label:
+        member.first_name || member.last_name
+          ? `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim()
+          : "Team member",
+      onConfirm: async () => {
+        await deleteTeamMember(id);
+        await loadMembers();
+      },
+    });
   };
 
   const handleMemberChange = (field: string, value: string | null) => {
     setMembers((prev) => prev.map((m) => (m.id === selectedId ? { ...m, [field]: value } : m)));
   };
 
-  const selectedMember = members.find((m) => m.id === selectedId) ?? null;
+  const visibleMembers = members.filter((m) => !pendingIds.has(m.id));
+  const selectedMember = visibleMembers.find((m) => m.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
       <MemberList
-        members={members}
+        members={visibleMembers}
         selectedId={selectedId}
+        loading={loading}
+        creating={creating}
         onSelect={setSelectedId}
         onCreate={handleCreate}
         onDelete={handleDelete}

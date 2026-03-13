@@ -1,24 +1,16 @@
 import { useState } from "react";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, Loader2Icon, Trash2 } from "lucide-react";
 import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import type { TeamMember } from "@/lib/types";
 
 interface MemberListProps {
   members: TeamMember[];
   selectedId: number | null;
+  loading?: boolean;
+  creating?: boolean;
   onSelect: (id: number) => void;
   onCreate: () => void;
   onDelete: (id: number) => void;
@@ -28,32 +20,56 @@ interface MemberListProps {
 export function MemberList({
   members,
   selectedId,
+  loading,
+  creating,
   onSelect,
   onCreate,
   onDelete,
   picturesDir,
 }: MemberListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const ids = members.map((m) => m.id);
+    const currentIndex = ids.indexOf(selectedId ?? -1);
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
+      onSelect(ids[next]);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
+      onSelect(ids[prev]);
+    }
+  };
 
   return (
     <div className="w-64 shrink-0 border-r flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-12 border-b">
         <span className="text-sm font-semibold">Team Members</span>
-        <Button variant="ghost" size="icon-sm" onClick={onCreate} title="Add member">
-          <PlusIcon />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onCreate}
+          disabled={creating}
+          title="Add member"
+        >
+          {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
         </Button>
       </div>
 
       {/* List */}
       <ScrollArea className="flex-1">
-        {members.length === 0 ? (
+        {loading ? (
+          <ListSkeleton showAvatar />
+        ) : members.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             No team members yet
           </div>
         ) : (
-          <ul className="py-1">
+          <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
             {members.map((member) => (
               <li
                 key={member.id}
@@ -84,54 +100,17 @@ export function MemberList({
 
                 {/* Delete button on hover */}
                 {hoveredId === member.id && (
-                  <AlertDialog
-                    open={pendingDeleteId === member.id}
-                    onOpenChange={(open) => {
-                      if (!open) setPendingDeleteId(null);
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(member.id);
                     }}
                   >
-                    <AlertDialogTrigger
-                      render={
-                        <button
-                          className="ml-1 shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPendingDeleteId(member.id);
-                          }}
-                          title="Delete member"
-                        >
-                          <Trash2Icon className="size-3.5" />
-                        </button>
-                      }
-                    />
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Member</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete{" "}
-                          <strong>
-                            {member.first_name} {member.last_name}
-                          </strong>
-                          ? This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          variant="destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(member.id);
-                            setPendingDeleteId(null);
-                          }}
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 )}
               </li>
             ))}
