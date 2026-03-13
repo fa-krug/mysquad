@@ -1,7 +1,7 @@
 import type React from "react";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/salary-utils";
@@ -28,6 +28,11 @@ export function DataPointList({
   onEdit,
   onDelete,
 }: DataPointListProps) {
+  const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
+    count: dataPoints.length,
+    estimateSize: 50,
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const ids = dataPoints.map((dp) => dp.id);
     const currentIndex = ids.indexOf(selectedId ?? -1);
@@ -36,10 +41,12 @@ export function DataPointList({
       e.preventDefault();
       const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
       onSelect(ids[next]);
+      if (shouldVirtualize) virtualizer.scrollToIndex(next);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
       onSelect(ids[prev]);
+      if (shouldVirtualize) virtualizer.scrollToIndex(prev);
     }
   };
 
@@ -57,10 +64,71 @@ export function DataPointList({
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-2">
             <ListSkeleton />
+          </div>
+        ) : shouldVirtualize ? (
+          <div
+            className="relative p-2 outline-none"
+            style={{ height: totalSize }}
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+          >
+            {virtualItems.map((virtualRow) => {
+              const dp = dataPoints[virtualRow.index];
+              return (
+                <div
+                  key={dp.id}
+                  style={{
+                    position: "absolute",
+                    top: virtualRow.start,
+                    height: virtualRow.size,
+                    left: 0,
+                    right: 0,
+                  }}
+                  onClick={() => onSelect(dp.id)}
+                  className={cn(
+                    "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50",
+                    selectedId === dp.id && "bg-muted",
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{dp.name}</div>
+                    {dp.budget != null && (
+                      <div className="text-xs text-muted-foreground">
+                        Budget: {formatCents(dp.budget)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(dp);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(dp.id);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div
@@ -118,7 +186,7 @@ export function DataPointList({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
