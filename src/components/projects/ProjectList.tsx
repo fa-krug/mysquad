@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PlusIcon, Trash2, ChevronRightIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import type { Project } from "@/lib/types";
 
@@ -29,29 +29,48 @@ export function ProjectList({
   const active = projects.filter((p) => !p.end_date);
   const finished = projects.filter((p) => p.end_date);
 
+  const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
+    count: active.length,
+    estimateSize: 40,
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const visibleProjects = finishedOpen ? [...active, ...finished] : active;
     const ids = visibleProjects.map((p) => p.id);
     const currentIndex = ids.indexOf(selectedId ?? -1);
 
+    let nextIndex: number;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
-      onSelect(ids[next]);
+      nextIndex = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
-      onSelect(ids[prev]);
+      nextIndex = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
+    } else {
+      return;
+    }
+
+    onSelect(ids[nextIndex]);
+    if (shouldVirtualize) {
+      if (nextIndex < active.length) {
+        virtualizer.scrollToIndex(nextIndex);
+      } else {
+        // Finished item — outside virtualizer, use native scrollIntoView
+        const el = scrollRef.current?.querySelector(`[data-project-id="${ids[nextIndex]}"]`);
+        el?.scrollIntoView({ block: "nearest" });
+      }
     }
   };
 
-  const renderItem = (project: Project) => (
+  const renderItem = (project: Project, extraProps?: React.HTMLAttributes<HTMLLIElement>) => (
     <li
       key={project.id}
+      data-project-id={project.id}
       className={`group relative flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
         selectedId === project.id ? "bg-muted" : ""
       }`}
       onClick={() => onSelect(project.id)}
+      {...extraProps}
     >
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{project.name || "Untitled Project"}</div>
@@ -87,7 +106,7 @@ export function ProjectList({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {loading ? (
           <ListSkeleton />
         ) : active.length === 0 && finished.length === 0 ? (
@@ -95,7 +114,55 @@ export function ProjectList({
         ) : (
           <>
             <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
-              {active.map(renderItem)}
+              {shouldVirtualize ? (
+                <div style={{ height: totalSize, position: "relative" }}>
+                  {virtualItems.map((virtualRow) => {
+                    const project = active[virtualRow.index];
+                    return (
+                      <li
+                        key={project.id}
+                        data-project-id={project.id}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                        className={`group relative flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                          selectedId === project.id ? "bg-muted" : ""
+                        }`}
+                        onClick={() => onSelect(project.id)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {project.name || "Untitled Project"}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {project.start_date}
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(project.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </div>
+              ) : (
+                active.map((p) => renderItem(p))
+              )}
             </ul>
 
             {finished.length > 0 && (
@@ -109,12 +176,12 @@ export function ProjectList({
                   />
                   Finished ({finished.length})
                 </button>
-                {finishedOpen && <ul className="pb-1">{finished.map(renderItem)}</ul>}
+                {finishedOpen && <ul className="pb-1">{finished.map((p) => renderItem(p))}</ul>}
               </div>
             )}
           </>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
