@@ -13,6 +13,10 @@ import type {
   Report,
   ReportDetail,
   SalaryOverTimePoint,
+  ScenarioGroup,
+  SalaryListItem,
+  ScenarioSummary,
+  ScenarioMemberComparison,
 } from "./types";
 
 // Auth
@@ -77,7 +81,7 @@ export const updateTitle = (id: number, name: string) => invoke<void>("update_ti
 export const deleteTitle = (id: number) => invoke<void>("delete_title", { id });
 
 // Salary Data Points
-export const getSalaryDataPoints = () => invoke<SalaryDataPointSummary[]>("get_salary_data_points");
+export const getSalaryDataPoints = () => invoke<SalaryListItem[]>("get_salary_data_points");
 export const getSalaryDataPoint = (id: number) =>
   invoke<SalaryDataPointDetail>("get_salary_data_point", { id });
 export const createSalaryDataPoint = () =>
@@ -110,6 +114,41 @@ export const updateSalaryRange = (
     title_id: titleId,
     min_salary: minSalary,
     max_salary: maxSalary,
+  });
+
+// Scenario Groups
+export const createScenarioGroup = (previousDataPointId: number | null, count: number) =>
+  invoke<ScenarioGroup>("create_scenario_group", {
+    previous_data_point_id: previousDataPointId,
+    count,
+  });
+export const deleteScenarioGroup = (id: number) => invoke<void>("delete_scenario_group", { id });
+export const updateScenarioGroup = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_scenario_group", { id, field, value });
+export const updateScenarioGroupRange = (
+  scenarioGroupId: number,
+  titleId: number,
+  minSalary: number,
+  maxSalary: number,
+) =>
+  invoke<void>("update_scenario_group_range", {
+    scenario_group_id: scenarioGroupId,
+    title_id: titleId,
+    min_salary: minSalary,
+    max_salary: maxSalary,
+  });
+export const addScenario = (scenarioGroupId: number) =>
+  invoke<SalaryDataPointSummary>("add_scenario", { scenario_group_id: scenarioGroupId });
+export const removeScenario = (dataPointId: number) =>
+  invoke<void>("remove_scenario", { data_point_id: dataPointId });
+export const promoteScenario = (dataPointId: number) =>
+  invoke<void>("promote_scenario", { data_point_id: dataPointId });
+export const getScenarioSummaries = (scenarioGroupId: number) =>
+  invoke<ScenarioSummary[]>("get_scenario_summaries", { scenario_group_id: scenarioGroupId });
+export const getScenarioMemberComparison = (scenarioGroupId: number, memberId: number) =>
+  invoke<ScenarioMemberComparison[]>("get_scenario_member_comparison", {
+    scenario_group_id: scenarioGroupId,
+    member_id: memberId,
   });
 
 // Salary Comparison
