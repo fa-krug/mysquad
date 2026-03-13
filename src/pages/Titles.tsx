@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { TitleList } from "@/components/titles/TitleList";
 import { TitleDetail } from "@/components/titles/TitleDetail";
@@ -102,7 +102,10 @@ export function Titles() {
     }
   };
 
-  const visibleTitles = titles.filter((t) => !pendingIds.has(t.id));
+  const visibleTitles = useMemo(
+    () => titles.filter((t) => !pendingIds.has(t.id)),
+    [titles, pendingIds],
+  );
   const selectedTitle = visibleTitles.find((t) => t.id === selectedId) ?? null;
 
   return (

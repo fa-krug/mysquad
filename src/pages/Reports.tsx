@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { ReportList } from "@/components/reports/ReportList";
 import { ReportDetail } from "@/components/reports/ReportDetail";
@@ -86,7 +86,10 @@ export function Reports() {
     setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   };
 
-  const visibleReports = reports.filter((r) => !pendingIds.has(r.id));
+  const visibleReports = useMemo(
+    () => reports.filter((r) => !pendingIds.has(r.id)),
+    [reports, pendingIds],
+  );
   const selectedReport = visibleReports.find((r) => r.id === selectedId) ?? null;
   const editingReport = reports.find((r) => r.id === editingId) ?? null;
 

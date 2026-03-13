@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
@@ -93,7 +93,10 @@ export function TeamMembers() {
     setMembers((prev) => prev.map((m) => (m.id === selectedId ? { ...m, [field]: value } : m)));
   };
 
-  const visibleMembers = members.filter((m) => !pendingIds.has(m.id));
+  const visibleMembers = useMemo(
+    () => members.filter((m) => !pendingIds.has(m.id)),
+    [members, pendingIds],
+  );
   const selectedMember = visibleMembers.find((m) => m.id === selectedId) ?? null;
 
   return (

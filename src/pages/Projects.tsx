@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { ProjectDetail } from "@/components/projects/ProjectDetail";
@@ -83,7 +83,10 @@ export function Projects() {
     setProjects((prev) => prev.map((p) => (p.id === selectedId ? { ...p, [field]: value } : p)));
   };
 
-  const visibleProjects = projects.filter((p) => !pendingIds.has(p.id));
+  const visibleProjects = useMemo(
+    () => projects.filter((p) => !pendingIds.has(p.id)),
+    [projects, pendingIds],
+  );
   const selectedProject = visibleProjects.find((p) => p.id === selectedId) ?? null;
 
   return (

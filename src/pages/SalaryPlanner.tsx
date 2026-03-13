@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { DataPointList } from "@/components/salary/DataPointList";
 import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
-import { SalaryAnalytics } from "@/components/salary/SalaryAnalytics";
+
+const SalaryAnalytics = lazy(() =>
+  import("@/components/salary/SalaryAnalytics").then((m) => ({ default: m.SalaryAnalytics })),
+);
 import { usePendingDelete } from "@/hooks/usePendingDelete";
 import {
   getSalaryDataPoints,
@@ -186,8 +189,11 @@ export function SalaryPlanner() {
     if (selectedId) await loadDetail(selectedId);
   }
 
-  const activeMembers = detail?.members.filter((m) => m.is_active) ?? [];
-  const visibleDataPoints = dataPoints.filter((d) => !pendingIds.has(d.id));
+  const activeMembers = useMemo(() => detail?.members.filter((m) => m.is_active) ?? [], [detail]);
+  const visibleDataPoints = useMemo(
+    () => dataPoints.filter((d) => !pendingIds.has(d.id)),
+    [dataPoints, pendingIds],
+  );
 
   return (
     <div className="flex h-full">
@@ -235,7 +241,9 @@ export function SalaryPlanner() {
             {activeMembers.length > 0 && (
               <>
                 <hr className="border-border" />
-                <SalaryAnalytics detail={detail} previousData={previousData} />
+                <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
+                  <SalaryAnalytics detail={detail} previousData={previousData} />
+                </Suspense>
               </>
             )}
           </div>
