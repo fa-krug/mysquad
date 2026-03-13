@@ -2,6 +2,7 @@ import { memo, useEffect, useState, useCallback } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { getChildren, addChild, updateChild, deleteChild } from "@/lib/db";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import type { Child } from "@/lib/types";
@@ -37,9 +38,9 @@ const ChildRow = memo(function ChildRow({ child, onDelete, onUpdate }: ChildRowP
     saveName(e.target.value || null);
   };
 
-  const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDob(e.target.value);
-    saveDob(e.target.value === "" ? null : e.target.value);
+  const handleDobChange = (value: string | null) => {
+    setDob(value ?? "");
+    saveDob(value);
   };
 
   return (
@@ -50,12 +51,12 @@ const ChildRow = memo(function ChildRow({ child, onDelete, onUpdate }: ChildRowP
         value={name}
         onChange={handleNameChange}
       />
-      <Input
-        type="date"
-        className="w-36"
-        value={dob}
+      <DatePicker
+        value={dob || null}
         onChange={handleDobChange}
-        title="Date of birth"
+        clearable
+        placeholder="Date of birth"
+        className="w-40"
       />
       <Button
         variant="ghost"

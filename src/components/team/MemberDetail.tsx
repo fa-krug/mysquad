@@ -23,7 +23,7 @@ import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/
 
 interface MemberDetailProps {
   member: TeamMember;
-  onMemberChange: (field: string, value: string | null) => void;
+  onMemberChange: (field: string, value: string | null, titleName?: string | null) => void;
   picturesDir: string | null;
 }
 

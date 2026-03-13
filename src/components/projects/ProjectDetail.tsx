@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { CheckableList } from "@/components/team/CheckableList";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import {
@@ -79,9 +80,9 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
     saveName(e.target.value);
   };
 
-  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEndDate(e.target.value);
-    saveEndDate(e.target.value);
+  const handleEndDateChange = (value: string | null) => {
+    setEndDate(value ?? "");
+    saveEndDate(value ?? "");
   };
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -123,13 +124,8 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
             <div className="text-sm text-muted-foreground py-2">{project.start_date}</div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="project-end-date">End Date</Label>
-            <Input
-              id="project-end-date"
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-            />
+            <Label>End Date</Label>
+            <DatePicker value={endDate || null} onChange={handleEndDateChange} clearable />
           </div>
         </div>
 

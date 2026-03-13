@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
-import { getTeamMembers, createTeamMember, deleteTeamMember, getPicturesDirPath } from "@/lib/db";
+import {
+  getTeamMembers,
+  createTeamMember,
+  deleteTeamMember,
+  updateTeamMember,
+  getPicturesDirPath,
+} from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
 import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type { TeamMember } from "@/lib/types";
@@ -89,8 +95,24 @@ export function TeamMembers() {
     });
   };
 
-  const handleMemberChange = (field: string, value: string | null) => {
-    setMembers((prev) => prev.map((m) => (m.id === selectedId ? { ...m, [field]: value } : m)));
+  const handleMemberChange = async (
+    field: string,
+    value: string | null,
+    titleName?: string | null,
+  ) => {
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const updated = { ...m, [field]: value };
+        if (field === "title_id") {
+          updated.title_name = titleName ?? null;
+        }
+        return updated;
+      }),
+    );
+    if (selectedId !== null) {
+      await updateTeamMember(selectedId, field, value);
+    }
   };
 
   const visibleMembers = useMemo(

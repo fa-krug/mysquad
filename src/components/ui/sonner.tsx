@@ -10,6 +10,7 @@ import {
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
+      closeButton
       theme="system"
       className="toaster group"
       icons={{

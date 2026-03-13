@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import type { TeamMember, Title } from "@/lib/types";
 
 interface InfoSectionProps {
   member: TeamMember;
   titles: Title[];
-  onMemberChange: (field: string, value: string | null) => void;
+  onMemberChange: (field: string, value: string | null, titleName?: string | null) => void;
 }
 
 // AutoSaveInput: renders a labeled text input with auto-save behavior
@@ -59,6 +60,34 @@ function AutoSaveInput({
   );
 }
 
+interface AutoSaveDatePickerProps {
+  label: string;
+  initialValue: string | null;
+  onSave: (value: string | null) => Promise<void>;
+}
+
+function AutoSaveDatePicker({ label, initialValue, onSave }: AutoSaveDatePickerProps) {
+  const [value, setValue] = useState(initialValue);
+  const { save, saving, saved, error } = useAutoSave({ onSave });
+
+  const handleChange = (newVal: string | null) => {
+    setValue(newVal);
+    save(newVal);
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <DatePicker value={value} onChange={handleChange} clearable />
+      <div className="h-3 text-xs">
+        {saving && <span className="text-muted-foreground">Saving…</span>}
+        {saved && !saving && <span className="text-green-600">Saved</span>}
+        {error && <span className="text-destructive truncate">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps) {
   const [titleId, setTitleId] = useState<string>(
     member.title_id != null ? String(member.title_id) : "",
@@ -72,7 +101,8 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
     setTitleSaving(true);
     setTitleError(null);
     try {
-      await onMemberChange("title_id", val === "" ? null : val);
+      const selectedTitle = titles.find((t) => String(t.id) === val);
+      await onMemberChange("title_id", val === "" ? null : val, selectedTitle?.name ?? null);
     } catch (err) {
       setTitleError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -133,12 +163,11 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
       </div>
 
       {/* Start date */}
-      <AutoSaveInput
+      <AutoSaveDatePicker
         key={`start_date-${member.id}`}
         label="Start Date"
         initialValue={member.start_date}
         onSave={makeOnSave("start_date")}
-        type="date"
       />
 
       {/* Personal email */}
