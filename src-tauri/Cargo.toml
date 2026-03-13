@@ -1,6 +1,6 @@
 [package]
 name = "mysquad"
-version = "0.1.0"
+version = "0.2.0"
 description = "MySquad - Team Management App"
 authors = ["you"]
 edition = "2021"
