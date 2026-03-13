@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Separator } from "@/components/ui/separator";
 import { InfoSection } from "./InfoSection";
@@ -18,7 +18,8 @@ import {
   uploadMemberPicture,
   deleteMemberPicture,
 } from "@/lib/db";
-import type { TeamMember, CheckableItem, Title } from "@/lib/types";
+import { showSuccess, showError } from "@/lib/toast";
+import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/types";
 
 interface MemberDetailProps {
   member: TeamMember;
@@ -32,41 +33,93 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
   const [titles, setTitles] = useState<Title[]>([]);
   const [picturePath, setPicturePath] = useState<string | null>(member.picture_path);
   const [cacheKey, setCacheKey] = useState<number>(0);
-  const [pictureError, setPictureError] = useState<string | null>(null);
+  const [pictureLoading, setPictureLoading] = useState(false);
 
   useEffect(() => {
-    getStatusItems(member.id).then(setStatusItems);
-    getTalkTopics(member.id).then(setTalkTopics);
-    getTitles().then(setTitles);
+    getStatusItems(member.id)
+      .then(setStatusItems)
+      .catch(() => showError("Failed to load status items"));
+    getTalkTopics(member.id)
+      .then(setTalkTopics)
+      .catch(() => showError("Failed to load talk topics"));
+    getTitles()
+      .then(setTitles)
+      .catch(() => showError("Failed to load titles"));
   }, [member.id]);
 
-  const handleUploadPicture = async () => {
+  const handleUploadPicture = useCallback(async () => {
     const selected = await open({
       multiple: false,
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
     });
     if (typeof selected !== "string") return;
+    setPictureLoading(true);
     try {
       await uploadMemberPicture(member.id, selected);
       setPicturePath(`${member.id}.jpg`);
       setCacheKey(Date.now());
-      setPictureError(null);
       onMemberChange("picture_path", `${member.id}.jpg`);
+      showSuccess("Picture uploaded");
     } catch (err) {
-      setPictureError(err instanceof Error ? err.message : String(err));
+      showError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPictureLoading(false);
     }
-  };
+  }, [member.id, onMemberChange]);
 
-  const handleDeletePicture = async () => {
+  const handleDeletePicture = useCallback(async () => {
+    setPictureLoading(true);
     try {
       await deleteMemberPicture(member.id);
       setPicturePath(null);
-      setPictureError(null);
       onMemberChange("picture_path", null);
     } catch (err) {
-      setPictureError(err instanceof Error ? err.message : String(err));
+      showError(`Failed to delete picture: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPictureLoading(false);
     }
-  };
+  }, [member.id, onMemberChange]);
+
+  const handleStatusAdd = useCallback(
+    (text: string) => addStatusItem(member.id, text),
+    [member.id],
+  );
+
+  const handleStatusUpdate = useCallback(
+    (id: number, text?: string, checked?: boolean) => updateStatusItem(id, text, checked),
+    [],
+  );
+
+  const handleStatusItemsChange = useCallback(
+    (
+      itemsOrUpdater: BaseCheckableItem[] | ((prev: BaseCheckableItem[]) => BaseCheckableItem[]),
+    ) => {
+      setStatusItems((prev) => {
+        const next = typeof itemsOrUpdater === "function" ? itemsOrUpdater(prev) : itemsOrUpdater;
+        return next as CheckableItem[];
+      });
+    },
+    [],
+  );
+
+  const handleTopicAdd = useCallback((text: string) => addTalkTopic(member.id, text), [member.id]);
+
+  const handleTopicUpdate = useCallback(
+    (id: number, text?: string, checked?: boolean) => updateTalkTopic(id, text, checked),
+    [],
+  );
+
+  const handleTopicItemsChange = useCallback(
+    (
+      itemsOrUpdater: BaseCheckableItem[] | ((prev: BaseCheckableItem[]) => BaseCheckableItem[]),
+    ) => {
+      setTalkTopics((prev) => {
+        const next = typeof itemsOrUpdater === "function" ? itemsOrUpdater(prev) : itemsOrUpdater;
+        return next as CheckableItem[];
+      });
+    },
+    [],
+  );
 
   return (
     <div className="h-full overflow-auto">
@@ -79,6 +132,7 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
             picturesDir={picturesDir}
             size="lg"
             cacheKey={cacheKey}
+            loading={pictureLoading}
             onUpload={handleUploadPicture}
             onDelete={handleDeletePicture}
           />
@@ -89,7 +143,6 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
             {member.title_name && (
               <p className="text-sm text-muted-foreground">{member.title_name}</p>
             )}
-            {pictureError && <p className="text-xs text-destructive">{pictureError}</p>}
           </div>
         </div>
         <InfoSection member={member} titles={titles} onMemberChange={onMemberChange} />
@@ -98,19 +151,19 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
         <CheckableList
           title="Status"
           items={statusItems}
-          onAdd={(text) => addStatusItem(member.id, text)}
-          onUpdate={(id, text, checked) => updateStatusItem(id, text, checked)}
+          onAdd={handleStatusAdd}
+          onUpdate={handleStatusUpdate}
           onDelete={deleteStatusItem}
-          onItemsChange={(items) => setStatusItems(items as CheckableItem[])}
+          onItemsChange={handleStatusItemsChange}
         />
         <Separator />
         <CheckableList
           title="Talk Topics"
           items={talkTopics}
-          onAdd={(text) => addTalkTopic(member.id, text)}
-          onUpdate={(id, text, checked) => updateTalkTopic(id, text, checked)}
+          onAdd={handleTopicAdd}
+          onUpdate={handleTopicUpdate}
           onDelete={deleteTalkTopic}
-          onItemsChange={(items) => setTalkTopics(items as CheckableItem[])}
+          onItemsChange={handleTopicItemsChange}
         />
       </div>
     </div>

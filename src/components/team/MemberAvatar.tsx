@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Trash2Icon, UserIcon } from "lucide-react";
+import { memo, useState } from "react";
+import { Loader2Icon, Trash2Icon, UserIcon } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface MemberAvatarProps {
@@ -9,6 +9,7 @@ interface MemberAvatarProps {
   picturesDir: string | null;
   size: "sm" | "lg";
   cacheKey?: number;
+  loading?: boolean;
   onUpload?: () => void;
   onDelete?: () => void;
 }
@@ -36,13 +37,14 @@ function hashName(name: string): number {
   return Math.abs(hash);
 }
 
-export function MemberAvatar({
+export const MemberAvatar = memo(function MemberAvatar({
   firstName,
   lastName,
   picturePath,
   picturesDir,
   size,
   cacheKey,
+  loading,
   onUpload,
   onDelete,
 }: MemberAvatarProps) {
@@ -93,8 +95,15 @@ export function MemberAvatar({
         </div>
       )}
 
+      {/* Loading spinner overlay */}
+      {size === "lg" && loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+          <Loader2Icon className="size-6 text-white animate-spin" />
+        </div>
+      )}
+
       {/* Hover overlay for delete (large avatar with existing photo only) */}
-      {size === "lg" && hasImage && hovered && onDelete && (
+      {size === "lg" && !loading && hasImage && hovered && onDelete && (
         <div
           className="absolute inset-0 flex items-center justify-center bg-black/50 cursor-pointer rounded-full"
           onClick={(e) => {
@@ -107,7 +116,7 @@ export function MemberAvatar({
       )}
 
       {/* Click-to-upload hint for large avatar without photo */}
-      {size === "lg" && !hasImage && hovered && onUpload && (
+      {size === "lg" && !loading && !hasImage && hovered && onUpload && (
         <div
           className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer rounded-full"
           onClick={(e) => {
@@ -120,4 +129,4 @@ export function MemberAvatar({
       )}
     </div>
   );
-}
+});
