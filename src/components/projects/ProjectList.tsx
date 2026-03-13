@@ -122,14 +122,12 @@ export function ProjectList({
                       <li
                         key={project.id}
                         data-project-id={project.id}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
                         style={{
                           position: "absolute",
-                          top: 0,
+                          top: virtualRow.start,
+                          height: virtualRow.size,
                           left: 0,
                           width: "100%",
-                          transform: `translateY(${virtualRow.start}px)`,
                         }}
                         className={`group relative flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
                           selectedId === project.id ? "bg-muted" : ""
