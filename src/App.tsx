@@ -6,6 +6,7 @@ import { TeamMembers } from "./pages/TeamMembers";
 import { Titles } from "./pages/Titles";
 import { SalaryPlanner } from "./pages/SalaryPlanner";
 import { Projects } from "./pages/Projects";
+import { Reports } from "./pages/Reports";
 import { SettingsPage } from "./pages/Settings";
 import { useTheme } from "./hooks/useTheme";
 import { useAutoLock } from "./hooks/useAutoLock";
@@ -42,6 +43,7 @@ function App() {
           <Route path="/projects" element={<Projects />} />
           <Route path="/titles" element={<Titles />} />
           <Route path="/salary" element={<SalaryPlanner />} />
+          <Route path="/reports" element={<Reports />} />
           <Route
             path="/settings"
             element={<SettingsPage theme={theme} onThemeChange={setTheme} />}

@@ -10,6 +10,8 @@ import type {
   Project,
   ProjectMember,
   ProjectStatusItem,
+  Report,
+  ReportDetail,
 } from "./types";
 
 // Auth
@@ -54,6 +56,14 @@ export const addTalkTopic = (teamMemberId: number, text: string) =>
 export const updateTalkTopic = (id: number, text?: string, checked?: boolean) =>
   invoke<void>("update_talk_topic", { id, text: text ?? null, checked: checked ?? null });
 export const deleteTalkTopic = (id: number) => invoke<void>("delete_talk_topic", { id });
+
+// Reports
+export const getReports = () => invoke<Report[]>("get_reports");
+export const createReport = () => invoke<Report>("create_report");
+export const updateReport = (id: number, field: string, value: string | null) =>
+  invoke<void>("update_report", { id, field, value });
+export const deleteReport = (id: number) => invoke<void>("delete_report", { id });
+export const getReportDetail = (id: number) => invoke<ReportDetail>("get_report_detail", { id });
 
 // Titles
 export const getTitles = () => invoke<Title[]>("get_titles");

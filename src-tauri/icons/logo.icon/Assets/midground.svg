@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Left figure gradient (blue) -->
+    <linearGradient id="leftFig" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5ba8f5"/>
+      <stop offset="100%" stop-color="#3b7ae0"/>
+    </linearGradient>
+    <!-- Center figure gradient (blue to purple) -->
+    <linearGradient id="centerFig" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6b8cf5"/>
+      <stop offset="50%" stop-color="#7b7af0"/>
+      <stop offset="100%" stop-color="#9b6bdb"/>
+    </linearGradient>
+    <!-- Right figure gradient (purple) -->
+    <linearGradient id="rightFig" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b06ce6"/>
+      <stop offset="100%" stop-color="#9555d0"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Left figure -->
+  <g filter="url(#glow)" opacity="0.95">
+    <!-- Head -->
+    <circle cx="310" cy="340" r="58" fill="url(#leftFig)"/>
+    <!-- Body -->
+    <ellipse cx="310" cy="530" rx="105" ry="120" fill="url(#leftFig)"/>
+  </g>
+
+  <!-- Center figure (largest) -->
+  <g filter="url(#glow)">
+    <!-- Head -->
+    <circle cx="512" cy="280" r="72" fill="url(#centerFig)"/>
+    <!-- Body -->
+    <ellipse cx="512" cy="500" rx="140" ry="155" fill="url(#centerFig)"/>
+  </g>
+
+  <!-- Right figure -->
+  <g filter="url(#glow)" opacity="0.95">
+    <!-- Head -->
+    <circle cx="714" cy="340" r="55" fill="url(#rightFig)"/>
+    <!-- Body -->
+    <ellipse cx="714" cy="530" rx="100" ry="115" fill="url(#rightFig)"/>
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import type { TeamMember, Title } from "@/lib/types";
 
@@ -191,6 +192,23 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
         multiline
         className="col-span-2"
       />
+
+      {/* Stakeholder toggle */}
+      <div className="col-span-2 flex items-center justify-between rounded-lg border border-input px-3 py-2">
+        <div>
+          <Label className="text-sm">Stakeholder</Label>
+          <p className="text-xs text-muted-foreground">
+            Not a direct report — excluded from the Salary Planner
+          </p>
+        </div>
+        <Switch
+          key={`exclude_salary-${member.id}`}
+          checked={member.exclude_from_salary}
+          onCheckedChange={(checked) => {
+            onMemberChange("exclude_from_salary", checked ? "1" : "0");
+          }}
+        />
+      </div>
     </div>
   );
 }

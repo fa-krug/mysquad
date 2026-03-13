@@ -6,7 +6,7 @@ fn main() {
             .args([
                 "swift-helper/authenticate.swift",
                 "-o",
-                "target/MySquad",
+                "target/MySquadHelper",
                 "-framework",
                 "LocalAuthentication",
             ])

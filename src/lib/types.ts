@@ -13,6 +13,7 @@ export interface TeamMember {
   start_date: string | null;
   notes: string | null;
   picture_path: string | null;
+  exclude_from_salary: boolean;
 }
 
 export interface Child {
@@ -60,6 +61,46 @@ export interface Title {
   id: number;
   name: string;
   member_count: number;
+}
+
+export interface Report {
+  id: number;
+  name: string;
+  collect_statuses: boolean;
+  include_stakeholders: boolean;
+  include_projects: boolean;
+}
+
+export interface ReportStatusItem {
+  id: number;
+  text: string;
+  checked: boolean;
+}
+
+export interface ReportMemberStatus {
+  member_id: number;
+  first_name: string;
+  last_name: string;
+  title_name: string | null;
+  is_stakeholder: boolean;
+  statuses: ReportStatusItem[];
+}
+
+export interface ReportProjectStatus {
+  project_id: number;
+  project_name: string;
+  statuses: ReportStatusItem[];
+}
+
+export interface ReportDetail {
+  id: number;
+  name: string;
+  collect_statuses: boolean;
+  include_stakeholders: boolean;
+  include_projects: boolean;
+  stakeholders: ReportMemberStatus[];
+  members: ReportMemberStatus[];
+  projects: ReportProjectStatus[];
 }
 
 export interface SalaryDataPointSummary {

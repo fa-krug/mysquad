@@ -57,6 +57,7 @@ pub struct TeamMember {
     pub start_date: Option<String>,
     pub notes: Option<String>,
     pub picture_path: Option<String>,
+    pub exclude_from_salary: bool,
 }
 
 #[tauri::command]
@@ -67,7 +68,8 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
         .prepare(
             "SELECT m.id, m.first_name, m.last_name, m.email, m.personal_email,
                     m.personal_phone, m.address_street, m.address_city, m.address_zip,
-                    m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path
+                    m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path,
+                    m.exclude_from_salary
              FROM team_members m
              LEFT JOIN titles t ON m.title_id = t.id
              ORDER BY m.last_name ASC, m.first_name ASC",
@@ -91,6 +93,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                 start_date: row.get(11)?,
                 notes: row.get(12)?,
                 picture_path: row.get(13)?,
+                exclude_from_salary: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -125,6 +128,7 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
         start_date: None,
         notes: None,
         picture_path: None,
+        exclude_from_salary: false,
     })
 }
 
@@ -149,6 +153,7 @@ pub fn update_team_member(
         "title_id",
         "start_date",
         "notes",
+        "exclude_from_salary",
     ];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
@@ -1114,8 +1119,10 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
             conn.execute(
                 "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                 SELECT ?1, member_id, is_active, is_promoted
-                 FROM salary_data_point_members WHERE data_point_id = ?2",
+                 SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted
+                 FROM salary_data_point_members sdpm
+                 JOIN team_members m ON m.id = sdpm.member_id
+                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0",
                 params![new_id, prev],
             ).map_err(|e| e.to_string())?;
 
@@ -1162,7 +1169,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
             conn.execute(
                 "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                 SELECT ?1, id, 1, 0 FROM team_members",
+                 SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0",
                 params![new_id],
             ).map_err(|e| e.to_string())?;
 
@@ -1370,6 +1377,273 @@ pub fn get_previous_member_data(
             Ok(Some(parts))
         }
     }
+}
+
+// ── Report commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Report {
+    pub id: i64,
+    pub name: String,
+    pub collect_statuses: bool,
+    pub include_stakeholders: bool,
+    pub include_projects: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportMemberStatus {
+    pub member_id: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub title_name: Option<String>,
+    pub is_stakeholder: bool,
+    pub statuses: Vec<ReportStatusItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportStatusItem {
+    pub id: i64,
+    pub text: String,
+    pub checked: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportProjectStatus {
+    pub project_id: i64,
+    pub project_name: String,
+    pub statuses: Vec<ReportStatusItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportDetail {
+    pub id: i64,
+    pub name: String,
+    pub collect_statuses: bool,
+    pub include_stakeholders: bool,
+    pub include_projects: bool,
+    pub stakeholders: Vec<ReportMemberStatus>,
+    pub members: Vec<ReportMemberStatus>,
+    pub projects: Vec<ReportProjectStatus>,
+}
+
+#[tauri::command]
+pub fn get_reports(db: State<AppDb>) -> Result<Vec<Report>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, collect_statuses, include_stakeholders, include_projects
+             FROM reports ORDER BY name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let reports = stmt
+        .query_map([], |row| {
+            Ok(Report {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                collect_statuses: row.get(2)?,
+                include_stakeholders: row.get(3)?,
+                include_projects: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(reports)
+}
+
+#[tauri::command]
+pub fn create_report(db: State<AppDb>) -> Result<Report, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("INSERT INTO reports (name) VALUES ('New Report')", [])
+        .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    Ok(Report {
+        id,
+        name: "New Report".into(),
+        collect_statuses: false,
+        include_stakeholders: false,
+        include_projects: false,
+    })
+}
+
+#[tauri::command]
+pub fn update_report(
+    db: State<AppDb>,
+    id: i64,
+    field: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let allowed = [
+        "name",
+        "collect_statuses",
+        "include_stakeholders",
+        "include_projects",
+    ];
+    if !allowed.contains(&field.as_str()) {
+        return Err(format!("Invalid field: {}", field));
+    }
+    let sql = format!("UPDATE reports SET {} = ?1 WHERE id = ?2", field);
+    conn.execute(&sql, params![value, id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_report(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM reports WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let (name, collect_statuses, include_stakeholders, include_projects): (
+        String,
+        bool,
+        bool,
+        bool,
+    ) = conn
+        .query_row(
+            "SELECT name, collect_statuses, include_stakeholders, include_projects
+             FROM reports WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stakeholders = Vec::new();
+    let mut members = Vec::new();
+    let mut projects = Vec::new();
+
+    if collect_statuses {
+        let mut member_stmt = conn
+            .prepare(
+                "SELECT m.id, m.first_name, m.last_name, t.name, m.exclude_from_salary
+                 FROM team_members m
+                 LEFT JOIN titles t ON t.id = m.title_id
+                 ORDER BY m.last_name ASC, m.first_name ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let all_members: Vec<(i64, String, String, Option<String>, bool)> = member_stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        for (mid, first, last, title, is_stakeholder) in all_members {
+            if is_stakeholder && !include_stakeholders {
+                continue;
+            }
+
+            let mut status_stmt = conn
+                .prepare(
+                    "SELECT id, text, checked FROM status_items
+                     WHERE team_member_id = ?1
+                     ORDER BY created_at DESC",
+                )
+                .map_err(|e| e.to_string())?;
+
+            let statuses = status_stmt
+                .query_map(params![mid], |row| {
+                    Ok(ReportStatusItem {
+                        id: row.get(0)?,
+                        text: row.get(1)?,
+                        checked: row.get(2)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+
+            let entry = ReportMemberStatus {
+                member_id: mid,
+                first_name: first,
+                last_name: last,
+                title_name: title,
+                is_stakeholder,
+                statuses,
+            };
+
+            if is_stakeholder {
+                stakeholders.push(entry);
+            } else {
+                members.push(entry);
+            }
+        }
+    }
+
+    if include_projects {
+        let mut proj_stmt = conn
+            .prepare(
+                "SELECT id, name FROM projects
+                 WHERE end_date IS NULL OR end_date >= date('now')
+                 ORDER BY name ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let proj_rows: Vec<(i64, String)> = proj_stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        for (pid, pname) in proj_rows {
+            let mut status_stmt = conn
+                .prepare(
+                    "SELECT id, text, checked FROM project_status_items
+                     WHERE project_id = ?1
+                     ORDER BY created_at DESC",
+                )
+                .map_err(|e| e.to_string())?;
+
+            let statuses = status_stmt
+                .query_map(params![pid], |row| {
+                    Ok(ReportStatusItem {
+                        id: row.get(0)?,
+                        text: row.get(1)?,
+                        checked: row.get(2)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+
+            projects.push(ReportProjectStatus {
+                project_id: pid,
+                project_name: pname,
+                statuses,
+            });
+        }
+    }
+
+    Ok(ReportDetail {
+        id,
+        name,
+        collect_statuses,
+        include_stakeholders,
+        include_projects,
+        stakeholders,
+        members,
+        projects,
+    })
 }
 
 // ── Helpers ──

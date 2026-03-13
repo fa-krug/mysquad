@@ -49,6 +49,18 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 4)?;
     }
 
+    if version < 5 {
+        let migration_sql = include_str!("../migrations/005_exclude_from_salary.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 5)?;
+    }
+
+    if version < 6 {
+        let migration_sql = include_str!("../migrations/006_reports.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 6)?;
+    }
+
     Ok(())
 }
 
@@ -92,7 +104,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -156,7 +168,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -172,7 +184,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
     }
 
     #[test]

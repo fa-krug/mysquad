@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Fingerprint, Loader2 } from "lucide-react";
 import logoSvg from "@/assets/logo.svg";
@@ -10,6 +10,7 @@ interface LockScreenProps {
 export function LockScreen({ onUnlock }: LockScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const attemptedRef = useRef(false);
 
   const handleUnlock = async () => {
     setLoading(true);
@@ -22,6 +23,13 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!attemptedRef.current) {
+      attemptedRef.current = true;
+      handleUnlock();
+    }
+  }, []);
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
