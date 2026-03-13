@@ -1212,7 +1212,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                  SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
                  FROM salary_data_point_members sdpm
                  JOIN team_members m ON m.id = sdpm.member_id
-                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0",
+                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL",
                 params![new_id, prev],
             ).map_err(|e| e.to_string())?;
 
@@ -1260,7 +1260,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
             conn.execute(
                 "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                 SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0",
+                 SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL",
                 params![new_id],
             ).map_err(|e| e.to_string())?;
 
