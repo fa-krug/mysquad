@@ -19,6 +19,10 @@ export const authenticate = (reason: string) => invoke<void>("authenticate", { r
 export const unlockDb = () => invoke<void>("unlock_db");
 export const lockDb = () => invoke<void>("lock_db");
 
+// Config (file-based, read before DB unlock)
+export const getConfig = (key: string) => invoke<string | null>("get_config", { key });
+export const setConfig = (key: string, value: string) => invoke<void>("set_config", { key, value });
+
 // Team Members
 export const getTeamMembers = () => invoke<TeamMember[]>("get_team_members");
 export const createTeamMember = () => invoke<TeamMember>("create_team_member");
