@@ -2512,6 +2512,213 @@ fn get_pictures_dir() -> Result<std::path::PathBuf, String> {
     Ok(pictures_dir)
 }
 
+// ── Data Point Salary Export / Import ──
+
+#[derive(Serialize, Deserialize)]
+struct SalaryExportMember {
+    email: String,
+    first_name: String,
+    last_name: String,
+    parts: Vec<SalaryExportPart>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SalaryExportPart {
+    name: Option<String>,
+    amount: f64,
+    frequency: i64,
+    is_variable: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SalaryExportData {
+    data_point_name: String,
+    members: Vec<SalaryExportMember>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn export_data_point_salaries(
+    db: State<AppDb>,
+    data_point_id: i64,
+    file_path: String,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let dp_name: String = conn
+        .query_row(
+            "SELECT name FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT sdpm.id, tm.email, tm.first_name, tm.last_name
+             FROM salary_data_point_members sdpm
+             JOIN team_members tm ON tm.id = sdpm.member_id
+             WHERE sdpm.data_point_id = ?1
+             ORDER BY tm.last_name, tm.first_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows: Vec<(i64, Option<String>, String, String)> = stmt
+        .query_map(params![data_point_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut members = Vec::new();
+    for (sdpm_id, email, first_name, last_name) in rows {
+        let mut parts_stmt = conn
+            .prepare(
+                "SELECT name, amount, frequency, is_variable FROM salary_parts
+                 WHERE data_point_member_id = ?1 ORDER BY sort_order",
+            )
+            .map_err(|e| e.to_string())?;
+        let parts: Vec<SalaryExportPart> = parts_stmt
+            .query_map(params![sdpm_id], |row| {
+                let amount_cents: i64 = row.get(1)?;
+                Ok(SalaryExportPart {
+                    name: row.get(0)?,
+                    amount: amount_cents as f64 / 100.0,
+                    frequency: row.get(2)?,
+                    is_variable: row.get(3)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        members.push(SalaryExportMember {
+            email: email.unwrap_or_default(),
+            first_name,
+            last_name,
+            parts,
+        });
+    }
+
+    let data = SalaryExportData {
+        data_point_name: dp_name,
+        members,
+    };
+    let json =
+        serde_json::to_string_pretty(&data).map_err(|e| format!("Failed to serialize: {}", e))?;
+    std::fs::write(&file_path, json).map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn import_data_point_salaries(
+    db: State<AppDb>,
+    data_point_id: i64,
+    file_path: String,
+) -> Result<String, String> {
+    let json =
+        std::fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let data: SalaryExportData =
+        serde_json::from_str(&json).map_err(|e| format!("Failed to parse file: {}", e))?;
+
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
+    let result: Result<String, String> = (|| {
+        let mut updated = 0;
+        let mut skipped = Vec::new();
+
+        for member in &data.members {
+            // Find team member by email
+            let tm_id: Option<i64> = if member.email.is_empty() {
+                None
+            } else {
+                conn.query_row(
+                    "SELECT id FROM team_members WHERE email = ?1",
+                    params![member.email],
+                    |row| row.get(0),
+                )
+                .ok()
+            };
+
+            let tm_id = match tm_id {
+                Some(id) => id,
+                None => {
+                    skipped.push(format!(
+                        "{} {} ({})",
+                        member.first_name,
+                        member.last_name,
+                        if member.email.is_empty() {
+                            "no email"
+                        } else {
+                            "email not found"
+                        }
+                    ));
+                    continue;
+                }
+            };
+
+            // Find their salary_data_point_member entry
+            let sdpm_id: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM salary_data_point_members WHERE data_point_id = ?1 AND member_id = ?2",
+                    params![data_point_id, tm_id],
+                    |row| row.get(0),
+                )
+                .ok();
+
+            let sdpm_id = match sdpm_id {
+                Some(id) => id,
+                None => {
+                    skipped.push(format!(
+                        "{} {} (not in data point)",
+                        member.first_name, member.last_name
+                    ));
+                    continue;
+                }
+            };
+
+            // Delete existing salary parts
+            conn.execute(
+                "DELETE FROM salary_parts WHERE data_point_member_id = ?1",
+                params![sdpm_id],
+            )
+            .map_err(|e| e.to_string())?;
+
+            // Insert new salary parts
+            for (i, part) in member.parts.iter().enumerate() {
+                let amount_cents = (part.amount * 100.0).round() as i64;
+                conn.execute(
+                    "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![sdpm_id, part.name, amount_cents, part.frequency, part.is_variable, i as i64],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+
+            updated += 1;
+        }
+
+        let mut msg = format!("Updated {} member(s)", updated);
+        if !skipped.is_empty() {
+            msg.push_str(&format!(". Skipped: {}", skipped.join(", ")));
+        }
+        Ok(msg)
+    })();
+
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
+        Err(_) => {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+    }
+
+    result
+}
+
 // ── Export / Import commands ──
 
 #[tauri::command(rename_all = "snake_case")]

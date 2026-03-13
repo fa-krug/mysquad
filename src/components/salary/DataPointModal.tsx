@@ -18,7 +18,10 @@ import {
   updateSalaryDataPointMember,
   updateSalaryRange,
   getSalaryDataPoint,
+  exportDataPointSalaries,
+  importDataPointSalaries,
 } from "@/lib/db";
+import { save, open as openFile } from "@tauri-apps/plugin-dialog";
 import type { SalaryDataPointDetail, SalaryDataPointSummary, Title } from "@/lib/types";
 
 interface DataPointModalProps {
@@ -49,6 +52,8 @@ export function DataPointModal({
     Record<number, { active: boolean; promoted: boolean; promotedTitleId: string }>
   >({});
   const [saving, setSaving] = useState(false);
+  const [salaryMessage, setSalaryMessage] = useState<string | null>(null);
+  const [salaryError, setSalaryError] = useState(false);
 
   // Other data points available as "previous" (exclude current)
   const otherDataPoints = dataPoints.filter((dp) => dp.id !== dataPointId);
@@ -139,6 +144,44 @@ export function DataPointModal({
         }
       });
       setMemberStates(mStates);
+    }
+  }
+
+  async function handleExportSalaries() {
+    if (!dataPointId) return;
+    setSalaryMessage(null);
+    setSalaryError(false);
+    try {
+      const filePath = await save({
+        defaultPath: `${name || "salaries"}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!filePath) return;
+      await exportDataPointSalaries(dataPointId, filePath);
+      setSalaryMessage("Salaries exported");
+      setTimeout(() => setSalaryMessage(null), 3000);
+    } catch (err) {
+      setSalaryMessage(err instanceof Error ? err.message : String(err));
+      setSalaryError(true);
+    }
+  }
+
+  async function handleImportSalaries() {
+    if (!dataPointId) return;
+    setSalaryMessage(null);
+    setSalaryError(false);
+    try {
+      const filePath = await openFile({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!filePath) return;
+      const msg = await importDataPointSalaries(dataPointId, filePath);
+      setSalaryMessage(msg);
+      setTimeout(() => setSalaryMessage(null), 5000);
+    } catch (err) {
+      setSalaryMessage(err instanceof Error ? err.message : String(err));
+      setSalaryError(true);
     }
   }
 
@@ -276,6 +319,28 @@ export function DataPointModal({
 
             <Separator />
             <h3 className="text-sm font-semibold">Team Members</h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportSalaries}
+                className="rounded-md border border-input px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+              >
+                Export Salaries
+              </button>
+              <button
+                type="button"
+                onClick={handleImportSalaries}
+                className="rounded-md border border-input px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+              >
+                Import Salaries
+              </button>
+              {salaryMessage && (
+                <span className={`text-xs ${salaryError ? "text-destructive" : "text-green-600"}`}>
+                  {salaryMessage}
+                </span>
+              )}
+            </div>
+
             {detail.members.map((member) => {
               const state = memberStates[member.id] ?? {
                 active: member.is_active,

@@ -113,6 +113,8 @@ pub fn run() {
             commands::get_scenario_member_comparison,
             commands::export_data,
             commands::import_data,
+            commands::export_data_point_salaries,
+            commands::import_data_point_salaries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

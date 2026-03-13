@@ -158,3 +158,9 @@ export const exportData = (filePath: string) =>
   invoke<void>("export_data", { file_path: filePath });
 export const importData = (filePath: string, mode: string) =>
   invoke<void>("import_data", { file_path: filePath, mode });
+
+// Data Point Salary Export / Import
+export const exportDataPointSalaries = (dataPointId: number, filePath: string) =>
+  invoke<void>("export_data_point_salaries", { data_point_id: dataPointId, file_path: filePath });
+export const importDataPointSalaries = (dataPointId: number, filePath: string) =>
+  invoke<string>("import_data_point_salaries", { data_point_id: dataPointId, file_path: filePath });

@@ -366,4 +366,191 @@ mod tests {
             .is_ok();
         assert!(has_col);
     }
+
+    #[test]
+    fn test_scenario_group_creation() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Alice', 'Smith')",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO salary_data_points (name) VALUES ('Base')", [])
+            .unwrap();
+        let base_dp_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted) VALUES (?1, 1, 1, 0)",
+            [base_dp_id],
+        ).unwrap();
+        let sdpm_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order) VALUES (?1, 'Base', 500000, 12, 0, 0)",
+            [sdpm_id],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO scenario_groups (name, budget, previous_data_point_id) VALUES ('Test Scenarios', 1000000, ?1)",
+            [base_dp_id],
+        ).unwrap();
+        let sg_id = conn.last_insert_rowid();
+
+        for i in 1..=2 {
+            conn.execute(
+                "INSERT INTO salary_data_points (name, scenario_group_id) VALUES (?1, ?2)",
+                rusqlite::params![format!("Scenario {}", i), sg_id],
+            )
+            .unwrap();
+        }
+
+        let child_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id = ?1",
+                [sg_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(child_count, 2);
+
+        let normal_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(normal_count, 1);
+    }
+
+    #[test]
+    fn test_promote_scenario() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        conn.execute("INSERT INTO salary_data_points (name) VALUES ('Base')", [])
+            .unwrap();
+        let base_dp_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO scenario_groups (name, budget, previous_data_point_id) VALUES ('Scenarios', 500000, ?1)",
+            [base_dp_id],
+        ).unwrap();
+        let sg_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES ('Scenario 1', ?1)",
+            [sg_id],
+        )
+        .unwrap();
+        let child1_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES ('Scenario 2', ?1)",
+            [sg_id],
+        )
+        .unwrap();
+
+        conn.execute_batch("BEGIN").unwrap();
+        conn.execute(
+            "UPDATE salary_data_points SET scenario_group_id = NULL WHERE id = ?1",
+            [child1_id],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE salary_data_points SET previous_data_point_id = ?1 WHERE id = ?2",
+            rusqlite::params![base_dp_id, child1_id],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE salary_data_points SET budget = 500000 WHERE id = ?1",
+            [child1_id],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM scenario_groups WHERE id = ?1", [sg_id])
+            .unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+
+        let sg_id_after: Option<i64> = conn
+            .query_row(
+                "SELECT scenario_group_id FROM salary_data_points WHERE id = ?1",
+                [child1_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(sg_id_after.is_none());
+
+        let budget: Option<i64> = conn
+            .query_row(
+                "SELECT budget FROM salary_data_points WHERE id = ?1",
+                [child1_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(budget, Some(500000));
+
+        let sibling_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE name = 'Scenario 2'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sibling_count, 0);
+
+        let group_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM scenario_groups", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(group_count, 0);
+    }
+
+    #[test]
+    fn test_remove_scenario_min_two() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        conn.execute("INSERT INTO scenario_groups (name) VALUES ('Test')", [])
+            .unwrap();
+        let sg_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES ('S1', ?1)",
+            [sg_id],
+        )
+        .unwrap();
+        let child1_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES ('S2', ?1)",
+            [sg_id],
+        )
+        .unwrap();
+
+        let child_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id = ?1",
+                [sg_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(child_count, 2);
+
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES ('S3', ?1)",
+            [sg_id],
+        )
+        .unwrap();
+
+        conn.execute("DELETE FROM salary_data_points WHERE id = ?1", [child1_id])
+            .unwrap();
+
+        let remaining: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id = ?1",
+                [sg_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 2);
+    }
 }
