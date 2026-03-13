@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +12,9 @@ interface CheckableListProps {
   onAdd: (text: string) => Promise<BaseCheckableItem>;
   onUpdate: (id: number, text?: string, checked?: boolean) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
-  onItemsChange: (items: BaseCheckableItem[]) => void;
+  onItemsChange: (
+    itemsOrUpdater: BaseCheckableItem[] | ((prev: BaseCheckableItem[]) => BaseCheckableItem[]),
+  ) => void;
 }
 
 interface ItemRowProps {
@@ -22,7 +24,7 @@ interface ItemRowProps {
   onItemsChange: (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => void;
 }
 
-function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
+const ItemRow = memo(function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
   const [text, setText] = useState(item.text);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -79,7 +81,7 @@ function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
       </button>
     </div>
   );
-}
+});
 
 export function CheckableList({
   title,
@@ -119,7 +121,7 @@ export function CheckableList({
     }
     try {
       const created = await onAdd(trimmed);
-      onItemsChange([...items, created]);
+      onItemsChange((prev) => [...prev, created]);
       setAdding(false);
       setNewText("");
     } catch (e) {
@@ -136,9 +138,12 @@ export function CheckableList({
     }
   };
 
-  const handleItemsUpdater = (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => {
-    onItemsChange(updater(items));
-  };
+  const handleItemsUpdater = useCallback(
+    (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => {
+      onItemsChange(updater);
+    },
+    [onItemsChange],
+  );
 
   const query = filterText.toLowerCase();
   const matchesFilter = (item: BaseCheckableItem) =>
