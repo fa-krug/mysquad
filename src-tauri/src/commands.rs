@@ -8,12 +8,12 @@ use tauri::State;
 
 // ── Auth commands ──
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn authenticate(reason: String) -> Result<(), String> {
     biometric::authenticate(&reason)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn unlock_db(db: State<AppDb>) -> Result<(), String> {
     let key = match keychain::retrieve_key() {
         Ok(k) => k,
@@ -34,7 +34,7 @@ pub fn unlock_db(db: State<AppDb>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn lock_db(db: State<AppDb>) -> Result<(), String> {
     db::close_db(&db);
     Ok(())
@@ -61,7 +61,7 @@ pub struct TeamMember {
     pub exclude_from_salary: bool,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -104,7 +104,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
     Ok(members)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -133,7 +133,7 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_team_member(
     db: State<AppDb>,
     id: i64,
@@ -165,7 +165,7 @@ pub fn update_team_member(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -181,7 +181,7 @@ pub fn delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn upload_member_picture(
     db: State<AppDb>,
     id: i64,
@@ -224,7 +224,7 @@ pub fn upload_member_picture(
     Ok(dest_path.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_member_picture(db: State<AppDb>, id: i64) -> Result<(), String> {
     let pictures_dir = get_pictures_dir()?;
     let filename = format!("{}.jpg", id);
@@ -247,7 +247,7 @@ pub fn delete_member_picture(db: State<AppDb>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_pictures_dir_path() -> Result<String, String> {
     let pictures_dir = get_pictures_dir()?;
     Ok(pictures_dir.to_string_lossy().into_owned())
@@ -263,7 +263,7 @@ pub struct Child {
     pub date_of_birth: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_children(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Child>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -285,7 +285,7 @@ pub fn get_children(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Child>,
     Ok(children)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_child(
     db: State<AppDb>,
     team_member_id: i64,
@@ -308,7 +308,7 @@ pub fn add_child(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_child(
     db: State<AppDb>,
     id: i64,
@@ -325,7 +325,7 @@ pub fn update_child(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_child(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -373,7 +373,7 @@ fn get_items(db: &AppDb, table: &str, team_member_id: i64) -> Result<Vec<Checkab
     Ok(items)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_status_items(
     db: State<AppDb>,
     team_member_id: i64,
@@ -381,7 +381,7 @@ pub fn get_status_items(
     get_items(&db, "status_items", team_member_id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_talk_topics(
     db: State<AppDb>,
     team_member_id: i64,
@@ -426,7 +426,7 @@ fn add_item(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_status_item(
     db: State<AppDb>,
     team_member_id: i64,
@@ -435,7 +435,7 @@ pub fn add_status_item(
     add_item(&db, "status_items", team_member_id, text)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_talk_topic(
     db: State<AppDb>,
     team_member_id: i64,
@@ -474,7 +474,7 @@ fn update_item(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_status_item(
     db: State<AppDb>,
     id: i64,
@@ -484,7 +484,7 @@ pub fn update_status_item(
     update_item(&db, "status_items", id, text, checked)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_talk_topic(
     db: State<AppDb>,
     id: i64,
@@ -506,12 +506,12 @@ fn delete_item(db: &AppDb, table: &str, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_status_item(db: State<AppDb>, id: i64) -> Result<(), String> {
     delete_item(&db, "status_items", id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_talk_topic(db: State<AppDb>, id: i64) -> Result<(), String> {
     delete_item(&db, "talk_topics", id)
 }
@@ -525,7 +525,7 @@ pub struct Title {
     pub member_count: i64,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -544,7 +544,7 @@ pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
     Ok(titles)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_title(db: State<AppDb>, name: String) -> Result<Title, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -558,7 +558,7 @@ pub fn create_title(db: State<AppDb>, name: String) -> Result<Title, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_title(db: State<AppDb>, id: i64, name: String) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -570,7 +570,7 @@ pub fn update_title(db: State<AppDb>, id: i64, name: String) -> Result<(), Strin
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -605,7 +605,7 @@ pub struct Project {
     pub updated_at: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_projects(db: State<AppDb>) -> Result<Vec<Project>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -634,7 +634,7 @@ pub fn get_projects(db: State<AppDb>) -> Result<Vec<Project>, String> {
     Ok(projects)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_project(db: State<AppDb>) -> Result<Project, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -661,7 +661,7 @@ pub fn create_project(db: State<AppDb>) -> Result<Project, String> {
     Ok(row)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_project(
     db: State<AppDb>,
     id: i64,
@@ -680,7 +680,7 @@ pub fn update_project(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_project(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -698,7 +698,7 @@ pub struct ProjectMember {
     pub last_name: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_project_members(
     db: State<AppDb>,
     project_id: i64,
@@ -730,7 +730,7 @@ pub fn get_project_members(
     Ok(members)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_project_member(
     db: State<AppDb>,
     project_id: i64,
@@ -760,7 +760,7 @@ pub fn add_project_member(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn remove_project_member(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -778,7 +778,7 @@ pub struct ProjectStatusItem {
     pub created_at: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_project_status_items(
     db: State<AppDb>,
     project_id: i64,
@@ -809,7 +809,7 @@ pub fn get_project_status_items(
     Ok(items)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_project_status_item(
     db: State<AppDb>,
     project_id: i64,
@@ -839,7 +839,7 @@ pub fn add_project_status_item(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_project_status_item(
     db: State<AppDb>,
     id: i64,
@@ -865,7 +865,7 @@ pub fn update_project_status_item(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -879,7 +879,7 @@ pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), Strin
 
 // ── Settings commands ──
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_setting(db: State<AppDb>, key: String) -> Result<Option<String>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -894,7 +894,7 @@ pub fn get_setting(db: State<AppDb>, key: String) -> Result<Option<String>, Stri
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_setting(db: State<AppDb>, key: String, value: String) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -955,7 +955,7 @@ pub struct SalaryRange {
 
 // ── Salary data point commands ──
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSummary>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -977,7 +977,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSum
     Ok(points)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPointDetail, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1100,7 +1100,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSummary, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1217,7 +1217,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
     result
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_salary_data_point(
     db: State<AppDb>,
     id: i64,
@@ -1236,7 +1236,7 @@ pub fn update_salary_data_point(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1245,7 +1245,7 @@ pub fn delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String>
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_salary_data_point_member(
     db: State<AppDb>,
     id: i64,
@@ -1267,7 +1267,7 @@ pub fn update_salary_data_point_member(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_salary_part(
     db: State<AppDb>,
     data_point_member_id: i64,
@@ -1296,7 +1296,7 @@ pub fn create_salary_part(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_salary_part(
     db: State<AppDb>,
     id: i64,
@@ -1315,7 +1315,7 @@ pub fn update_salary_part(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_salary_part(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1324,7 +1324,7 @@ pub fn delete_salary_part(db: State<AppDb>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_salary_range(
     db: State<AppDb>,
     data_point_id: i64,
@@ -1343,7 +1343,7 @@ pub fn update_salary_range(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_previous_member_data(
     db: State<AppDb>,
     data_point_id: i64,
@@ -1443,7 +1443,7 @@ pub struct ReportDetail {
     pub projects: Vec<ReportProjectStatus>,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_reports(db: State<AppDb>) -> Result<Vec<Report>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1469,7 +1469,7 @@ pub fn get_reports(db: State<AppDb>) -> Result<Vec<Report>, String> {
     Ok(reports)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_report(db: State<AppDb>) -> Result<Report, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1485,7 +1485,7 @@ pub fn create_report(db: State<AppDb>) -> Result<Report, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_report(
     db: State<AppDb>,
     id: i64,
@@ -1509,7 +1509,7 @@ pub fn update_report(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_report(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1518,7 +1518,7 @@ pub fn delete_report(db: State<AppDb>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
@@ -1698,7 +1698,7 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
 
 // ── Helpers ──
 
-fn get_app_data_dir() -> Result<std::path::PathBuf, String> {
+pub(crate) fn get_app_data_dir() -> Result<std::path::PathBuf, String> {
     let data_dir = dirs::data_local_dir().ok_or("Could not determine app data directory")?;
     let app_dir = data_dir.join("com.mysquad.app");
     std::fs::create_dir_all(&app_dir)
