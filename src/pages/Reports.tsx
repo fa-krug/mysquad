@@ -1,12 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { ReportList } from "@/components/reports/ReportList";
 import { ReportDetail } from "@/components/reports/ReportDetail";
 import { ReportEditDialog } from "@/components/reports/ReportEditDialog";
-import { getReports, createReport, deleteReport } from "@/lib/db";
+import { getReports, createReport, deleteReport, getSalaryOverTime } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
 import { usePendingDelete } from "@/hooks/usePendingDelete";
-import type { Report } from "@/lib/types";
+import type { Report, SalaryOverTimePoint } from "@/lib/types";
+
+const SalaryOverTimeChart = lazy(() =>
+  import("@/components/salary/SalaryOverTimeChart").then((m) => ({
+    default: m.SalaryOverTimeChart,
+  })),
+);
 
 export function Reports() {
   const location = useLocation();
@@ -16,6 +22,7 @@ export function Reports() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const { scheduleDelete, pendingIds } = usePendingDelete();
+  const [salaryOverTime, setSalaryOverTime] = useState<SalaryOverTimePoint[]>([]);
 
   const loadReports = useCallback(async () => {
     const r = await getReports();
@@ -25,12 +32,12 @@ export function Reports() {
 
   useEffect(() => {
     let cancelled = false;
-    getReports()
-      .then((r) => {
-        if (!cancelled) setReports(r);
-      })
-      .catch(() => {
-        if (!cancelled) showError("Failed to load reports");
+    Promise.allSettled([getReports(), getSalaryOverTime()])
+      .then(([reportsResult, sotResult]) => {
+        if (cancelled) return;
+        if (reportsResult.status === "fulfilled") setReports(reportsResult.value);
+        else showError("Failed to load reports");
+        if (sotResult.status === "fulfilled") setSalaryOverTime(sotResult.value);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -112,8 +119,10 @@ export function Reports() {
             report={selectedReport}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a report to view details
+          <div className="max-w-4xl p-6">
+            <Suspense fallback={<div className="h-96 animate-pulse rounded bg-muted" />}>
+              <SalaryOverTimeChart data={salaryOverTime} />
+            </Suspense>
           </div>
         )}
       </div>
