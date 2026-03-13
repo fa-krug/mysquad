@@ -15,6 +15,8 @@ pub fn run() {
             commands::authenticate,
             commands::unlock_db,
             commands::lock_db,
+            commands::get_config,
+            commands::set_config,
             commands::get_team_members,
             commands::create_team_member,
             commands::update_team_member,
