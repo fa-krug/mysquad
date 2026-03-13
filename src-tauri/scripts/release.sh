@@ -5,6 +5,9 @@ set -euo pipefail
 VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
 TAG="v${VERSION}"
 
+# Accept optional release notes file
+NOTES_FILE="${1:-}"
+
 echo "==> Building MySquad ${TAG}..."
 npm run tauri build
 
@@ -18,8 +21,14 @@ fi
 echo "==> Found: ${DMG}"
 echo "==> Creating release ${TAG}..."
 
-glab release create "$TAG" "$DMG" \
-  --name "MySquad ${TAG}" \
-  --notes "MySquad ${VERSION} for macOS"
+if [ -n "$NOTES_FILE" ] && [ -f "$NOTES_FILE" ]; then
+  glab release create "$TAG" "$DMG" \
+    --name "MySquad ${TAG}" \
+    --notes-file "$NOTES_FILE"
+else
+  glab release create "$TAG" "$DMG" \
+    --name "MySquad ${TAG}" \
+    --notes "MySquad ${VERSION} for macOS"
+fi
 
 echo "==> Done! Release ${TAG} published."
