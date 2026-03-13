@@ -11,6 +11,7 @@ import { SettingsPage } from "./pages/Settings";
 import { useTheme } from "./hooks/useTheme";
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
+import { pendingDeleteRegistry } from "./hooks/usePendingDelete";
 import { authenticate, unlockDb, lockDb } from "./lib/db";
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
   }, []);
 
   const handleLock = useCallback(async () => {
+    for (const cancel of pendingDeleteRegistry) cancel();
     await Promise.all([...flushRegistry].map((flush) => flush()));
     await lockDb();
     setUnlocked(false);
