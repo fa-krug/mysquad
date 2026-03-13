@@ -5,6 +5,25 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* App-like behavior: no text selection except in inputs/textareas */
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Prevent focus outline on Recharts containers */
+.recharts-wrapper,
+.recharts-surface {
+  outline: none !important;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);

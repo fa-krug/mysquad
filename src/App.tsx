@@ -66,6 +66,7 @@ function App() {
   if (!configLoaded) return null;
 
   if (!unlocked) {
+    if (!requireAuth) return null; // Still waiting for unlockDb() to finish
     return <LockScreen onUnlock={handleUnlock} />;
   }
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Users,
@@ -39,8 +40,10 @@ function NavItem({
   collapsed: boolean;
   extraClass?: string;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Tooltip>
+    <Tooltip open={open} onOpenChange={(isOpen) => setOpen(collapsed && isOpen)}>
       <TooltipTrigger
         render={
           <NavLink
@@ -59,7 +62,7 @@ function NavItem({
           </NavLink>
         }
       />
-      {collapsed && <TooltipContent side="right">{label}</TooltipContent>}
+      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   );
 }
