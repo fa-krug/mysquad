@@ -974,6 +974,7 @@ pub struct SalaryDataPointSummary {
     pub budget: Option<i64>,
     pub previous_data_point_id: Option<i64>,
     pub created_at: String,
+    pub scenario_group_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -982,6 +983,7 @@ pub struct SalaryDataPointDetail {
     pub name: String,
     pub budget: Option<i64>,
     pub previous_data_point_id: Option<i64>,
+    pub scenario_group_id: Option<i64>,
     pub members: Vec<SalaryDataPointMember>,
     pub ranges: Vec<SalaryRange>,
 }
@@ -1020,16 +1022,44 @@ pub struct SalaryRange {
     pub max_salary: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScenarioGroup {
+    pub id: i64,
+    pub name: String,
+    pub budget: Option<i64>,
+    pub previous_data_point_id: Option<i64>,
+    pub created_at: String,
+    pub children: Vec<SalaryDataPointSummary>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+pub enum SalaryListItem {
+    #[serde(rename = "data_point")]
+    DataPoint { data_point: SalaryDataPointSummary },
+    #[serde(rename = "scenario_group")]
+    ScenarioGroup { scenario_group: ScenarioGroup },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScenarioSummary {
+    pub data_point_id: i64,
+    pub data_point_name: String,
+    pub total_salary: i64,
+    pub headcount: i64,
+}
+
 // ── Salary data point commands ──
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSummary>, String> {
+pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let mut stmt = conn
-        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points ORDER BY id DESC")
+
+    let mut dp_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id DESC")
         .map_err(|e| e.to_string())?;
-    let points = stmt
+    let normal_points: Vec<SalaryDataPointSummary> = dp_stmt
         .query_map([], |row| {
             Ok(SalaryDataPointSummary {
                 id: row.get(0)?,
@@ -1037,12 +1067,91 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSum
                 budget: row.get(2)?,
                 previous_data_point_id: row.get(3)?,
                 created_at: row.get(4)?,
+                scenario_group_id: None,
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    Ok(points)
+
+    let mut sg_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM scenario_groups ORDER BY id DESC")
+        .map_err(|e| e.to_string())?;
+    #[allow(clippy::type_complexity)]
+    let groups: Vec<(i64, String, Option<i64>, Option<i64>, String)> = sg_stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut child_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id FROM salary_data_points WHERE scenario_group_id = ?1 ORDER BY id ASC")
+        .map_err(|e| e.to_string())?;
+
+    let mut scenario_groups: Vec<ScenarioGroup> = Vec::new();
+    for (sg_id, sg_name, sg_budget, sg_prev, sg_created) in groups {
+        let children: Vec<SalaryDataPointSummary> = child_stmt
+            .query_map(params![sg_id], |row| {
+                Ok(SalaryDataPointSummary {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    budget: row.get(2)?,
+                    previous_data_point_id: row.get(3)?,
+                    created_at: row.get(4)?,
+                    scenario_group_id: row.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        scenario_groups.push(ScenarioGroup {
+            id: sg_id,
+            name: sg_name,
+            budget: sg_budget,
+            previous_data_point_id: sg_prev,
+            created_at: sg_created,
+            children,
+        });
+    }
+
+    // Interleave by created_at descending
+    let mut items: Vec<SalaryListItem> = Vec::new();
+    let mut dp_iter = normal_points.into_iter().peekable();
+    let mut sg_iter = scenario_groups.into_iter().peekable();
+
+    loop {
+        match (dp_iter.peek(), sg_iter.peek()) {
+            (Some(dp), Some(sg)) => {
+                if dp.created_at >= sg.created_at {
+                    let dp = dp_iter.next().unwrap();
+                    items.push(SalaryListItem::DataPoint { data_point: dp });
+                } else {
+                    let sg = sg_iter.next().unwrap();
+                    items.push(SalaryListItem::ScenarioGroup { scenario_group: sg });
+                }
+            }
+            (Some(_), None) => {
+                let dp = dp_iter.next().unwrap();
+                items.push(SalaryListItem::DataPoint { data_point: dp });
+            }
+            (None, Some(_)) => {
+                let sg = sg_iter.next().unwrap();
+                items.push(SalaryListItem::ScenarioGroup { scenario_group: sg });
+            }
+            (None, None) => break,
+        }
+    }
+
+    Ok(items)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1050,11 +1159,11 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
-    let (name, budget, previous_data_point_id): (String, Option<i64>, Option<i64>) = conn
+    let (name, budget, previous_data_point_id, scenario_group_id): (String, Option<i64>, Option<i64>, Option<i64>) = conn
         .query_row(
-            "SELECT name, budget, previous_data_point_id FROM salary_data_points WHERE id = ?1",
+            "SELECT name, budget, previous_data_point_id, scenario_group_id FROM salary_data_points WHERE id = ?1",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .map_err(|e| e.to_string())?;
 
@@ -1139,35 +1248,62 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
         })
         .collect();
 
-    let mut range_stmt = conn
-        .prepare(
-            "SELECT sr.id, sr.title_id, t.name as title_name, sr.min_salary, sr.max_salary
-             FROM salary_ranges sr
-             JOIN titles t ON t.id = sr.title_id
-             WHERE sr.data_point_id = ?1
+    let ranges: Vec<SalaryRange> =
+        if let Some(sg_id) = scenario_group_id {
+            let mut range_stmt = conn.prepare(
+            "SELECT sgr.id, sgr.title_id, t.name as title_name, sgr.min_salary, sgr.max_salary
+             FROM scenario_group_ranges sgr
+             JOIN titles t ON t.id = sgr.title_id
+             WHERE sgr.scenario_group_id = ?1
              ORDER BY t.name ASC",
-        )
-        .map_err(|e| e.to_string())?;
+        ).map_err(|e| e.to_string())?;
+            let result = range_stmt
+                .query_map(params![sg_id], |row| {
+                    Ok(SalaryRange {
+                        id: row.get(0)?,
+                        title_id: row.get(1)?,
+                        title_name: row.get(2)?,
+                        min_salary: row.get(3)?,
+                        max_salary: row.get(4)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            result
+        } else {
+            let mut range_stmt = conn
+                .prepare(
+                    "SELECT sr.id, sr.title_id, t.name as title_name, sr.min_salary, sr.max_salary
+                 FROM salary_ranges sr
+                 JOIN titles t ON t.id = sr.title_id
+                 WHERE sr.data_point_id = ?1
+                 ORDER BY t.name ASC",
+                )
+                .map_err(|e| e.to_string())?;
 
-    let ranges = range_stmt
-        .query_map(params![id], |row| {
-            Ok(SalaryRange {
-                id: row.get(0)?,
-                title_id: row.get(1)?,
-                title_name: row.get(2)?,
-                min_salary: row.get(3)?,
-                max_salary: row.get(4)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+            let result = range_stmt
+                .query_map(params![id], |row| {
+                    Ok(SalaryRange {
+                        id: row.get(0)?,
+                        title_id: row.get(1)?,
+                        title_name: row.get(2)?,
+                        min_salary: row.get(3)?,
+                        max_salary: row.get(4)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            result
+        };
 
     Ok(SalaryDataPointDetail {
         id,
         name,
         budget,
         previous_data_point_id,
+        scenario_group_id,
         members,
         ranges,
     })
@@ -1182,7 +1318,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
     let prev_id: Option<i64> = conn
         .query_row(
-            "SELECT id FROM salary_data_points ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id DESC LIMIT 1",
             [],
             |row| row.get(0),
         )
@@ -1249,6 +1385,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                 budget: prev_budget,
                 previous_data_point_id: Some(prev),
                 created_at,
+                scenario_group_id: None,
             })
         } else {
             conn.execute(
@@ -1278,6 +1415,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                 budget: None,
                 previous_data_point_id: None,
                 created_at,
+                scenario_group_id: None,
             })
         }
     })();
@@ -1506,7 +1644,9 @@ pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut dp_stmt = conn
-        .prepare("SELECT id, name FROM salary_data_points ORDER BY id")
+        .prepare(
+            "SELECT id, name FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id",
+        )
         .map_err(|e| e.to_string())?;
 
     let data_points: Vec<(i64, String)> = dp_stmt
