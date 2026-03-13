@@ -106,6 +106,11 @@ export function TeamMembers() {
         const updated = { ...m, [field]: value };
         if (field === "title_id") {
           updated.title_name = titleName ?? null;
+          // Update current title if no promotion override exists
+          if (!updated.current_title_data_point_id) {
+            updated.current_title_id = value ? Number(value) : null;
+            updated.current_title_name = titleName ?? null;
+          }
         }
         return updated;
       }),

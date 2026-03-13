@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList, ResponsiveContainer } from "recharts";
 import { annualTotal, formatCents, formatDeltaPercent } from "@/lib/salary-utils";
 import type { SalaryDataPointMember, SalaryPart } from "@/lib/types";
 
@@ -8,7 +8,11 @@ interface ComparisonChartProps {
 }
 
 export function ComparisonChart({ members, previousData }: ComparisonChartProps) {
-  const active = members.filter((m) => m.is_active);
+  const active = members
+    .filter((m) => m.is_active)
+    .sort(
+      (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
+    );
   if (active.length === 0) return null;
 
   const data = active.map((m) => {
@@ -17,13 +21,20 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
     const previous = prevParts ? annualTotal(prevParts) / 100 : null;
     const delta = previous !== null ? current - previous : null;
     const deltaPct = previous !== null && previous > 0 ? (delta! / previous) * 100 : null;
+    const deltaLabel =
+      prevParts == null
+        ? "New"
+        : delta !== null
+          ? `${delta > 0 ? "+" : ""}${formatCents(delta * 100)} (${formatDeltaPercent(deltaPct!)})`
+          : "";
     return {
       name: `${m.last_name}, ${m.first_name}`,
       current,
       previous: previous ?? 0,
       delta,
       deltaPct,
-      isNew: prevParts === null,
+      isNew: prevParts == null,
+      deltaLabel,
     };
   });
 
@@ -37,36 +48,68 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ left: 120, right: 80, top: 5, bottom: 5 }}
+          margin={{ left: 120, right: 140, top: 5, bottom: 5 }}
         >
-          <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-          <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value) => formatCents((value as number) * 100)} />
-          <Bar dataKey="previous" fill="#cbd5e1" radius={[0, 4, 4, 0]} name="Previous" />
-          <Bar dataKey="current" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Current" />
+          <XAxis
+            type="number"
+            tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
+            tick={{ fill: "currentColor" }}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={110}
+            tick={{ fontSize: 12, fill: "currentColor" }}
+          />
+          <Tooltip
+            formatter={(value) => formatCents((value as number) * 100)}
+            contentStyle={{ backgroundColor: "var(--popover)", border: "1px solid var(--border)" }}
+            labelStyle={{ color: "var(--popover-foreground)" }}
+            itemStyle={{ color: "var(--popover-foreground)" }}
+            cursor={{ fill: "currentColor", opacity: 0.1 }}
+          />
+          <Bar
+            dataKey="previous"
+            fill="#94a3b8"
+            radius={[0, 4, 4, 0]}
+            name="Previous"
+            activeBar={false}
+          />
+          <Bar
+            dataKey="current"
+            fill="#3b82f6"
+            radius={[0, 4, 4, 0]}
+            name="Current"
+            activeBar={false}
+          >
+            <LabelList
+              dataKey="deltaLabel"
+              position="right"
+              content={({ x, y, width, height, value, index }) => {
+                const d = data[index as number];
+                const color = d.isNew
+                  ? "#94a3b8"
+                  : d.delta! > 0
+                    ? "#16a34a"
+                    : d.delta! < 0
+                      ? "#dc2626"
+                      : "#94a3b8";
+                return (
+                  <text
+                    x={(x as number) + (width as number) + 4}
+                    y={(y as number) + (height as number) / 2}
+                    fill={color}
+                    fontSize={11}
+                    dominantBaseline="central"
+                  >
+                    {value}
+                  </text>
+                );
+              }}
+            />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs px-2">
-        {data.map((d) => (
-          <span
-            key={d.name}
-            className={
-              d.isNew
-                ? "text-muted-foreground"
-                : d.delta! > 0
-                  ? "text-green-600"
-                  : d.delta! < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground"
-            }
-          >
-            {d.name}:{" "}
-            {d.isNew
-              ? "New"
-              : `${d.delta! > 0 ? "+" : ""}${formatCents(d.delta! * 100)} (${formatDeltaPercent(d.deltaPct!)})`}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

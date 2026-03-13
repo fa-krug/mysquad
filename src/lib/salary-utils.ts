@@ -17,11 +17,11 @@ export function variablePercent(parts: SalaryPart[]): number {
   return (variableTotal(parts) / total) * 100;
 }
 
-/** Format cents as dollar string */
+/** Format cents as euro string */
 export function formatCents(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("de-DE", {
     style: "currency",
-    currency: "USD",
+    currency: "EUR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(cents / 100);
@@ -42,19 +42,20 @@ export function rangeFitColor(total: number, range: SalaryRange | undefined): Ra
   if (total < min_salary) return "red";
   if (total > max_salary) return "red";
   const span = max_salary - min_salary;
-  const lowThreshold = min_salary + span * 0.1;
-  const highThreshold = max_salary - span * 0.1;
+  const lowThreshold = min_salary + span * 0.15;
+  const highThreshold = max_salary - span * 0.15;
   if (total < lowThreshold || total > highThreshold) return "yellow";
   return "green";
 }
 
-/** Get the salary range for a member based on their title */
+/** Get the salary range for a member based on their effective title (promoted or original) */
 export function getRangeForMember(
   member: SalaryDataPointMember,
   ranges: SalaryRange[],
 ): SalaryRange | undefined {
-  if (!member.title_id) return undefined;
-  return ranges.find((r) => r.title_id === member.title_id);
+  const effectiveTitleId = member.promoted_title_id ?? member.title_id;
+  if (!effectiveTitleId) return undefined;
+  return ranges.find((r) => r.title_id === effectiveTitleId);
 }
 
 /** Calculate budget totals (excluding promoted members) */

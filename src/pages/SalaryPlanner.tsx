@@ -30,6 +30,7 @@ export function SalaryPlanner() {
   const [titles, setTitles] = useState<Title[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDpId, setEditingDpId] = useState<number | null>(null);
+  const [editingIsNew, setEditingIsNew] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const { scheduleDelete, pendingIds } = usePendingDelete();
@@ -45,14 +46,12 @@ export function SalaryPlanner() {
     const d = await getSalaryDataPoint(id);
     setDetail(d);
 
-    // Load comparison data for active members
+    // Load comparison data for all members
     const prev: Record<number, SalaryPart[] | null> = {};
     await Promise.all(
-      d.members
-        .filter((m) => m.is_active)
-        .map(async (m) => {
-          prev[m.member_id] = await getPreviousMemberData(id, m.member_id);
-        }),
+      d.members.map(async (m) => {
+        prev[m.member_id] = await getPreviousMemberData(id, m.member_id);
+      }),
     );
     setPreviousData(prev);
   }, []);
@@ -87,12 +86,9 @@ export function SalaryPlanner() {
       if (cancelled) return;
       setDetail(d);
       Promise.all(
-        d.members
-          .filter((m) => m.is_active)
-          .map(
-            async (m) =>
-              [m.member_id, await getPreviousMemberData(selectedId, m.member_id)] as const,
-          ),
+        d.members.map(
+          async (m) => [m.member_id, await getPreviousMemberData(selectedId, m.member_id)] as const,
+        ),
       ).then((entries) => {
         if (cancelled) return;
         setPreviousData(Object.fromEntries(entries));
@@ -112,6 +108,8 @@ export function SalaryPlanner() {
       handleCreate();
     } else if (state.action === "delete" && selectedId !== null) {
       handleDelete(selectedId);
+    } else if (typeof state.dataPointId === "number") {
+      setSelectedId(state.dataPointId);
     }
   }, [location.state]);
 
@@ -122,6 +120,7 @@ export function SalaryPlanner() {
       await loadDataPoints();
       setSelectedId(dp.id);
       setEditingDpId(dp.id);
+      setEditingIsNew(true);
       setModalOpen(true);
       showSuccess("Data point created");
     } catch {
@@ -133,6 +132,7 @@ export function SalaryPlanner() {
 
   function handleEdit(dp: SalaryDataPointSummary) {
     setEditingDpId(dp.id);
+    setEditingIsNew(false);
     setModalOpen(true);
   }
 
@@ -196,6 +196,13 @@ export function SalaryPlanner() {
   }
 
   const activeMembers = useMemo(() => detail?.members.filter((m) => m.is_active) ?? [], [detail]);
+  const sortedMembers = useMemo(
+    () =>
+      detail?.members
+        .slice()
+        .sort((a, b) => (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1)) ?? [],
+    [detail],
+  );
   const visibleDataPoints = useMemo(
     () => dataPoints.filter((d) => !pendingIds.has(d.id)),
     [dataPoints, pendingIds],
@@ -224,35 +231,41 @@ export function SalaryPlanner() {
             Select a data point to view details
           </div>
         ) : (
-          <div className="max-w-2xl p-6 space-y-6">
-            <h1 className="text-2xl font-bold">{detail.name}</h1>
+          <>
+            <div className="sticky top-0 z-10 bg-background px-6 pt-6 pb-2">
+              <h1 className="text-2xl font-bold">{detail.name}</h1>
+            </div>
+            <div className="px-6 pb-6 space-y-6">
+              <div className="flex flex-col 2xl:flex-row gap-6">
+                {/* Member salary cards */}
+                <div className="max-w-2xl min-w-0 2xl:flex-1 space-y-6">
+                  {sortedMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No members in this data point.</p>
+                  ) : (
+                    sortedMembers.map((member) => (
+                      <MemberSalaryCard
+                        key={member.id}
+                        member={member}
+                        ranges={detail.ranges}
+                        onAddPart={handleAddPart}
+                        onDeletePart={handleDeletePart}
+                        onChanged={handlePartChanged}
+                      />
+                    ))
+                  )}
+                </div>
 
-            {/* Member salary cards */}
-            {activeMembers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active members in this data point.</p>
-            ) : (
-              activeMembers.map((member) => (
-                <MemberSalaryCard
-                  key={member.id}
-                  member={member}
-                  ranges={detail.ranges}
-                  onAddPart={handleAddPart}
-                  onDeletePart={handleDeletePart}
-                  onChanged={handlePartChanged}
-                />
-              ))
-            )}
-
-            {/* Analytics */}
-            {activeMembers.length > 0 && (
-              <>
-                <hr className="border-border" />
-                <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
-                  <SalaryAnalytics detail={detail} previousData={previousData} />
-                </Suspense>
-              </>
-            )}
-          </div>
+                {/* Analytics */}
+                {activeMembers.length > 0 && (
+                  <div className="max-w-2xl min-w-0 2xl:flex-1 2xl:sticky 2xl:top-0 2xl:self-start space-y-6">
+                    <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
+                      <SalaryAnalytics detail={detail} previousData={previousData} />
+                    </Suspense>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -260,6 +273,8 @@ export function SalaryPlanner() {
       <DataPointModal
         dataPointId={editingDpId}
         titles={titles}
+        dataPoints={dataPoints}
+        isNew={editingIsNew}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSaved={handleModalSaved}

@@ -2,6 +2,7 @@ import { useState, memo } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { updateSalaryPart } from "@/lib/db";
@@ -60,19 +61,15 @@ export const SalaryPartRow = memo(function SalaryPartRow({
         />
       </td>
       <td className="px-2 py-1">
-        <div className="relative flex items-center">
-          <span className="absolute left-2 text-xs text-muted-foreground">$</span>
-          <Input
-            type="number"
-            min="0"
-            value={amount}
-            onChange={(e) => {
-              setAmount(e.target.value);
-              amountSave.save(e.target.value || null);
-            }}
-            className="h-8 pl-5 text-sm w-28"
-          />
-        </div>
+        <MoneyInput
+          min="0"
+          value={amount}
+          onChange={(e) => {
+            setAmount(e.target.value);
+            amountSave.save(e.target.value || null);
+          }}
+          className="h-8 text-sm w-28"
+        />
       </td>
       <td className="px-2 py-1">
         <Input

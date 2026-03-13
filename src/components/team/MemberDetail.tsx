@@ -140,8 +140,8 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
             <h2 className="text-lg font-semibold">
               {member.first_name} {member.last_name}
             </h2>
-            {member.title_name && (
-              <p className="text-sm text-muted-foreground">{member.title_name}</p>
+            {member.current_title_name && (
+              <p className="text-sm text-muted-foreground">{member.current_title_name}</p>
             )}
           </div>
         </div>

@@ -71,6 +71,18 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 7)?;
     }
 
+    if version < 8 {
+        let migration_sql = include_str!("../migrations/008_promoted_title.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 8)?;
+    }
+
+    if version < 9 {
+        let migration_sql = include_str!("../migrations/009_previous_data_point.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 9)?;
+    }
+
     Ok(())
 }
 
@@ -114,7 +126,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 9);
     }
 
     #[test]
@@ -178,7 +190,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 9);
     }
 
     #[test]
@@ -194,7 +206,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 9);
     }
 
     #[test]

@@ -111,9 +111,9 @@ export function MemberList({
                     <div className="text-sm font-medium truncate">
                       {member.last_name}, {member.first_name}
                     </div>
-                    {member.title_name && (
+                    {member.current_title_name && (
                       <div className="text-xs text-muted-foreground truncate">
-                        {member.title_name}
+                        {member.current_title_name}
                       </div>
                     )}
                   </div>

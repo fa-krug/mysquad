@@ -77,7 +77,7 @@ export function Titles() {
     if (!title) return;
 
     // Check if any members use this title before scheduling
-    const assignedMembers = members.filter((m) => m.title_id === id);
+    const assignedMembers = members.filter((m) => m.title_id === id || m.current_title_id === id);
     if (assignedMembers.length > 0) {
       showError(`Cannot delete "${title.name}" — ${assignedMembers.length} member(s) assigned`);
       return;

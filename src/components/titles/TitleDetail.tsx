@@ -40,7 +40,7 @@ export function TitleDetail({ title, members, onTitleChange, focusName }: TitleD
     saveName(newVal === "" ? null : newVal);
   };
 
-  const titleMembers = members.filter((m) => m.title_id === title.id);
+  const titleMembers = members.filter((m) => (m.current_title_id ?? m.title_id) === title.id);
 
   return (
     <div className="max-w-2xl p-6 space-y-6">

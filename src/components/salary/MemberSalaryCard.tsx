@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Plus, Star } from "lucide-react";
+import { Plus, Star, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
@@ -33,14 +33,21 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   const fit = rangeFitColor(total, range);
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className={cn("rounded-lg border border-border p-4", !member.is_active && "opacity-60")}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold">
             {member.last_name}, {member.first_name}
           </h3>
-          {member.title_name && (
-            <span className="text-xs text-muted-foreground">({member.title_name})</span>
+          {(member.promoted_title_name ?? member.title_name) && (
+            <span className="text-xs text-muted-foreground">
+              ({member.promoted_title_name ?? member.title_name})
+            </span>
+          )}
+          {!member.is_active && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              <UserX className="h-3 w-3" /> Inactive
+            </span>
           )}
           {member.is_promoted && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">

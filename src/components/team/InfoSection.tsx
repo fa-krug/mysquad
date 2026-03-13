@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -89,6 +90,7 @@ function AutoSaveDatePicker({ label, initialValue, onSave }: AutoSaveDatePickerP
 }
 
 export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps) {
+  const navigate = useNavigate();
   const [titleId, setTitleId] = useState<string>(
     member.title_id != null ? String(member.title_id) : "",
   );
@@ -141,9 +143,9 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
         type="email"
       />
 
-      {/* Title dropdown */}
+      {/* Original title dropdown */}
       <div className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Title</Label>
+        <Label className="text-xs text-muted-foreground">Original Title</Label>
         <select
           className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring dark:bg-input/30"
           value={titleId}
@@ -161,6 +163,30 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
           {titleError && <span className="text-destructive truncate">{titleError}</span>}
         </div>
       </div>
+
+      {/* Current title (read-only, derived from data points) */}
+      {member.current_title_name && member.current_title_name !== member.title_name && (
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Current Title</Label>
+          <div className="flex items-center h-8 text-sm">
+            <span>{member.current_title_name}</span>
+            {member.current_title_data_point_id && (
+              <button
+                type="button"
+                className="ml-2 text-xs text-primary hover:underline"
+                onClick={() =>
+                  navigate("/salary", {
+                    state: { dataPointId: member.current_title_data_point_id },
+                  })
+                }
+              >
+                View data point
+              </button>
+            )}
+          </div>
+          <div className="h-3" />
+        </div>
+      )}
 
       {/* Start date */}
       <AutoSaveDatePicker

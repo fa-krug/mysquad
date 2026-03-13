@@ -10,6 +10,9 @@ export interface TeamMember {
   address_zip: string | null;
   title_id: number | null;
   title_name: string | null;
+  current_title_id: number | null;
+  current_title_name: string | null;
+  current_title_data_point_id: number | null;
   start_date: string | null;
   notes: string | null;
   picture_path: string | null;
@@ -107,6 +110,7 @@ export interface SalaryDataPointSummary {
   id: number;
   name: string;
   budget: number | null;
+  previous_data_point_id: number | null;
   created_at: string;
 }
 
@@ -114,6 +118,7 @@ export interface SalaryDataPointDetail {
   id: number;
   name: string;
   budget: number | null;
+  previous_data_point_id: number | null;
   members: SalaryDataPointMember[];
   ranges: SalaryRange[];
 }
@@ -127,6 +132,8 @@ export interface SalaryDataPointMember {
   title_name: string | null;
   is_active: boolean;
   is_promoted: boolean;
+  promoted_title_id: number | null;
+  promoted_title_name: string | null;
   parts: SalaryPart[];
 }
 
