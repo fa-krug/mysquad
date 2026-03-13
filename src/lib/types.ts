@@ -113,6 +113,7 @@ export interface SalaryDataPointSummary {
   budget: number | null;
   previous_data_point_id: number | null;
   created_at: string;
+  scenario_group_id: number | null;
 }
 
 export interface SalaryDataPointDetail {
@@ -120,6 +121,7 @@ export interface SalaryDataPointDetail {
   name: string;
   budget: number | null;
   previous_data_point_id: number | null;
+  scenario_group_id: number | null;
   members: SalaryDataPointMember[];
   ranges: SalaryRange[];
 }
@@ -167,4 +169,30 @@ export interface SalaryOverTimePoint {
   data_point_id: number;
   data_point_name: string;
   members: SalaryOverTimeMember[];
+}
+
+export interface ScenarioGroup {
+  id: number;
+  name: string;
+  budget: number | null;
+  previous_data_point_id: number | null;
+  created_at: string;
+  children: SalaryDataPointSummary[];
+}
+
+export type SalaryListItem =
+  | { type: "data_point"; data_point: SalaryDataPointSummary }
+  | { type: "scenario_group"; scenario_group: ScenarioGroup };
+
+export interface ScenarioSummary {
+  data_point_id: number;
+  data_point_name: string;
+  total_salary: number;
+  headcount: number;
+}
+
+export interface ScenarioMemberComparison {
+  data_point_id: number;
+  data_point_name: string;
+  annual_total: number;
 }
