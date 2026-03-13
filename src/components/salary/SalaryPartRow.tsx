@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,11 @@ interface SalaryPartRowProps {
   onChanged: () => void;
 }
 
-export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps) {
+export const SalaryPartRow = memo(function SalaryPartRow({
+  part,
+  onDelete,
+  onChanged,
+}: SalaryPartRowProps) {
   const [name, setName] = useState(part.name ?? "");
   const [amount, setAmount] = useState(part.amount ? String(Math.round(part.amount / 100)) : "");
   const [frequency, setFrequency] = useState(String(part.frequency));
@@ -105,4 +109,4 @@ export function SalaryPartRow({ part, onDelete, onChanged }: SalaryPartRowProps)
       </td>
     </tr>
   );
-}
+});

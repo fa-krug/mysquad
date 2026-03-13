@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Plus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
@@ -20,7 +21,7 @@ interface MemberSalaryCardProps {
   onChanged: () => void;
 }
 
-export function MemberSalaryCard({
+export const MemberSalaryCard = memo(function MemberSalaryCard({
   member,
   ranges,
   onAddPart,
@@ -91,4 +92,4 @@ export function MemberSalaryCard({
       </Button>
     </div>
   );
-}
+});

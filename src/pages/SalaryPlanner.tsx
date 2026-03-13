@@ -164,25 +164,31 @@ export function SalaryPlanner() {
     }
   }
 
-  async function handleAddPart(dataPointMemberId: number) {
-    await createSalaryPart(dataPointMemberId);
-    if (selectedId) await loadDetailOnly(selectedId);
-  }
-
-  async function handleDeletePart(partId: number) {
-    await deleteSalaryPartApi(partId);
-    if (selectedId) await loadDetailOnly(selectedId);
-  }
-
   // Light refetch: only detail, no comparison data (used for part edits)
   const loadDetailOnly = useCallback(async (id: number) => {
     const d = await getSalaryDataPoint(id);
     setDetail(d);
   }, []);
 
-  function handlePartChanged() {
+  const handleAddPart = useCallback(
+    async (dataPointMemberId: number) => {
+      await createSalaryPart(dataPointMemberId);
+      if (selectedId) await loadDetailOnly(selectedId);
+    },
+    [selectedId, loadDetailOnly],
+  );
+
+  const handleDeletePart = useCallback(
+    async (partId: number) => {
+      await deleteSalaryPartApi(partId);
+      if (selectedId) await loadDetailOnly(selectedId);
+    },
+    [selectedId, loadDetailOnly],
+  );
+
+  const handlePartChanged = useCallback(() => {
     if (selectedId) loadDetailOnly(selectedId);
-  }
+  }, [selectedId, loadDetailOnly]);
 
   async function handleModalSaved() {
     await loadDataPoints();
