@@ -101,7 +101,7 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
   };
 
   const assignedIds = new Set(members.map((m) => m.team_member_id));
-  const availableMembers = allTeamMembers.filter((m) => !assignedIds.has(m.id));
+  const availableMembers = allTeamMembers.filter((m) => !m.left_date && !assignedIds.has(m.id));
 
   return (
     <div className="h-full overflow-auto">
