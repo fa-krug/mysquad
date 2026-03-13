@@ -1,22 +1,15 @@
 import { useState } from "react";
-import { PlusIcon, Trash2Icon, PencilIcon } from "lucide-react";
+import { PlusIcon, Trash2Icon, PencilIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import type { Report } from "@/lib/types";
 
 interface ReportListProps {
   reports: Report[];
   selectedId: number | null;
+  loading?: boolean;
+  creating?: boolean;
   onSelect: (id: number) => void;
   onCreate: () => void;
   onDelete: (id: number) => void;
@@ -26,30 +19,52 @@ interface ReportListProps {
 export function ReportList({
   reports,
   selectedId,
+  loading,
+  creating,
   onSelect,
   onCreate,
   onDelete,
   onEdit,
 }: ReportListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
-  const pendingReport = reports.find((r) => r.id === pendingDeleteId);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const ids = reports.map((r) => r.id);
+    const currentIndex = ids.indexOf(selectedId ?? -1);
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
+      onSelect(ids[next]);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
+      onSelect(ids[prev]);
+    }
+  };
 
   return (
     <div className="w-64 shrink-0 border-r flex flex-col h-full">
       <div className="flex items-center justify-between px-3 h-12 border-b">
         <span className="text-sm font-semibold">Reports</span>
-        <Button variant="ghost" size="icon-sm" onClick={onCreate} title="Add report">
-          <PlusIcon />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onCreate}
+          disabled={creating}
+          title="Add report"
+        >
+          {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
         </Button>
       </div>
 
       <ScrollArea className="flex-1">
-        {reports.length === 0 ? (
+        {loading ? (
+          <ListSkeleton rows={4} />
+        ) : reports.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No reports yet</div>
         ) : (
-          <ul className="py-1">
+          <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
             {reports.map((report) => (
               <li
                 key={report.id}
@@ -76,16 +91,17 @@ export function ReportList({
                     >
                       <PencilIcon className="size-3.5" />
                     </button>
-                    <button
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPendingDeleteId(report.id);
+                        onDelete(report.id);
                       }}
-                      title="Delete report"
                     >
-                      <Trash2Icon className="size-3.5" />
-                    </button>
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 )}
               </li>
@@ -93,37 +109,6 @@ export function ReportList({
           </ul>
         )}
       </ScrollArea>
-
-      <AlertDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeleteId(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Report</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete <strong>{pendingReport?.name}</strong>? This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                if (pendingDeleteId !== null) {
-                  onDelete(pendingDeleteId);
-                  setPendingDeleteId(null);
-                }
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
