@@ -13,11 +13,14 @@ interface ScheduleDeleteOptions {
 
 export function usePendingDelete() {
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
-  const timersRef = useRef<Map<number, { toastId: string | number }>>(new Map());
+  const timersRef = useRef<Map<number, { toastId: string | number; onUndo?: () => void }>>(
+    new Map(),
+  );
 
   const cancelAll = useCallback(() => {
     for (const [, entry] of timersRef.current) {
       toast.dismiss(entry.toastId);
+      entry.onUndo?.();
     }
     timersRef.current.clear();
     setPendingIds(new Set());
@@ -69,7 +72,7 @@ export function usePendingDelete() {
         onDismiss: () => execute(),
       });
 
-      timersRef.current.set(id, { toastId: toastId as string | number });
+      timersRef.current.set(id, { toastId: toastId as string | number, onUndo: onUndoCallback });
     },
     [],
   );
