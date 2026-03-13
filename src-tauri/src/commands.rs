@@ -86,6 +86,7 @@ pub struct TeamMember {
     pub notes: Option<String>,
     pub picture_path: Option<String>,
     pub exclude_from_salary: bool,
+    pub left_date: Option<String>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -97,7 +98,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
             "SELECT m.id, m.first_name, m.last_name, m.email, m.personal_email,
                     m.personal_phone, m.address_street, m.address_city, m.address_zip,
                     m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path,
-                    m.exclude_from_salary,
+                    m.exclude_from_salary, m.left_date,
                     promo.promoted_title_id, pt.name as promoted_title_name,
                     promo.data_point_id as promo_data_point_id
              FROM team_members m
@@ -121,9 +122,9 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
         .query_map([], |row| {
             let title_id: Option<i64> = row.get(9)?;
             let title_name: Option<String> = row.get(10)?;
-            let promoted_title_id: Option<i64> = row.get(15)?;
-            let promoted_title_name: Option<String> = row.get(16)?;
-            let promo_data_point_id: Option<i64> = row.get(17)?;
+            let promoted_title_id: Option<i64> = row.get(16)?;
+            let promoted_title_name: Option<String> = row.get(17)?;
+            let promo_data_point_id: Option<i64> = row.get(18)?;
             Ok(TeamMember {
                 id: row.get(0)?,
                 first_name: row.get(1)?,
@@ -151,6 +152,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                 notes: row.get(12)?,
                 picture_path: row.get(13)?,
                 exclude_from_salary: row.get(14)?,
+                left_date: row.get(15)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -189,6 +191,7 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
         notes: None,
         picture_path: None,
         exclude_from_salary: false,
+        left_date: None,
     })
 }
 
@@ -214,6 +217,7 @@ pub fn update_team_member(
         "start_date",
         "notes",
         "exclude_from_salary",
+        "left_date",
     ];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
