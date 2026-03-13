@@ -12,6 +12,7 @@ import type {
   ProjectStatusItem,
   Report,
   ReportDetail,
+  SalaryOverTimePoint,
 } from "./types";
 
 // Auth
@@ -117,6 +118,8 @@ export const getPreviousMemberData = (dataPointId: number, memberId: number) =>
     data_point_id: dataPointId,
     member_id: memberId,
   });
+
+export const getSalaryOverTime = () => invoke<SalaryOverTimePoint[]>("get_salary_over_time");
 
 // Projects
 export const getProjects = () => invoke<Project[]>("get_projects");

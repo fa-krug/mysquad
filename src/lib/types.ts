@@ -17,6 +17,7 @@ export interface TeamMember {
   notes: string | null;
   picture_path: string | null;
   exclude_from_salary: boolean;
+  left_date: string | null;
 }
 
 export interface Child {
@@ -152,4 +153,18 @@ export interface SalaryRange {
   title_name: string;
   min_salary: number;
   max_salary: number;
+}
+
+export interface SalaryOverTimeMember {
+  member_id: number;
+  first_name: string;
+  last_name: string;
+  left_date: string | null;
+  annual_total: number;
+}
+
+export interface SalaryOverTimePoint {
+  data_point_id: number;
+  data_point_name: string;
+  members: SalaryOverTimeMember[];
 }
