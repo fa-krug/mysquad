@@ -9,7 +9,7 @@ import type {
   ReportProjectStatus,
 } from "@/lib/types";
 import { CheckIcon, Download } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { showSuccess, showError } from "@/lib/toast";
 
 interface ReportDetailProps {
   report: Report;
@@ -69,7 +69,8 @@ function ProjectStatusSection({ project }: { project: ReportProjectStatus }) {
   );
 }
 
-function generatePdf(detail: ReportDetailType) {
+async function generatePdf(detail: ReportDetailType) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
@@ -173,13 +174,16 @@ function generatePdf(detail: ReportDetailType) {
   }
 
   doc.save(`${detail.name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+  showSuccess("PDF exported");
 }
 
 export function ReportDetail({ report }: ReportDetailProps) {
   const [detail, setDetail] = useState<ReportDetailType | null>(null);
 
   useEffect(() => {
-    getReportDetail(report.id).then(setDetail);
+    getReportDetail(report.id)
+      .then(setDetail)
+      .catch(() => showError("Failed to load report details"));
   }, [report.id, report.collect_statuses, report.include_stakeholders, report.include_projects]);
 
   if (!detail) return null;
@@ -202,7 +206,14 @@ export function ReportDetail({ report }: ReportDetailProps) {
     <div className="max-w-2xl p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{detail.name}</h2>
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => generatePdf(detail)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => {
+            generatePdf(detail).catch(() => showError("Export failed"));
+          }}
+        >
           <Download className="size-4" />
           Download PDF
         </Button>

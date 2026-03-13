@@ -1,14 +1,19 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LockScreen } from "./components/layout/LockScreen";
-import { TeamMembers } from "./pages/TeamMembers";
-import { Titles } from "./pages/Titles";
-import { SalaryPlanner } from "./pages/SalaryPlanner";
-import { Projects } from "./pages/Projects";
-import { Reports } from "./pages/Reports";
-import { SettingsPage } from "./pages/Settings";
 import { useTheme } from "./hooks/useTheme";
+
+const TeamMembers = lazy(() =>
+  import("@/pages/TeamMembers").then((m) => ({ default: m.TeamMembers })),
+);
+const Titles = lazy(() => import("@/pages/Titles").then((m) => ({ default: m.Titles })));
+const SalaryPlanner = lazy(() =>
+  import("@/pages/SalaryPlanner").then((m) => ({ default: m.SalaryPlanner })),
+);
+const Projects = lazy(() => import("@/pages/Projects").then((m) => ({ default: m.Projects })));
+const Reports = lazy(() => import("@/pages/Reports").then((m) => ({ default: m.Reports })));
+const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
 import { pendingDeleteRegistry } from "./hooks/usePendingDelete";
@@ -46,10 +51,7 @@ function App() {
           <Route path="/titles" element={<Titles />} />
           <Route path="/salary" element={<SalaryPlanner />} />
           <Route path="/reports" element={<Reports />} />
-          <Route
-            path="/settings"
-            element={<SettingsPage theme={theme} onThemeChange={setTheme} />}
-          />
+          <Route path="/settings" element={<Settings theme={theme} onThemeChange={setTheme} />} />
         </Route>
       </Routes>
     </BrowserRouter>
