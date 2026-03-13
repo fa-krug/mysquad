@@ -1482,6 +1482,78 @@ pub fn get_previous_member_data(
     }
 }
 
+// ── Salary over time command ──
+
+#[derive(Serialize)]
+pub struct SalaryOverTimeMember {
+    pub member_id: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub left_date: Option<String>,
+    pub annual_total: i64,
+}
+
+#[derive(Serialize)]
+pub struct SalaryOverTimePoint {
+    pub data_point_id: i64,
+    pub data_point_name: String,
+    pub members: Vec<SalaryOverTimeMember>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut dp_stmt = conn
+        .prepare("SELECT id, name FROM salary_data_points ORDER BY id")
+        .map_err(|e| e.to_string())?;
+
+    let data_points: Vec<(i64, String)> = dp_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut member_stmt = conn
+        .prepare(
+            "SELECT sdpm.member_id, m.first_name, m.last_name, m.left_date,
+                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+             FROM salary_data_point_members sdpm
+             JOIN team_members m ON m.id = sdpm.member_id
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.is_active = 1
+             GROUP BY sdpm.member_id
+             ORDER BY m.last_name, m.first_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for (dp_id, dp_name) in data_points {
+        let members = member_stmt
+            .query_map(params![dp_id], |row| {
+                Ok(SalaryOverTimeMember {
+                    member_id: row.get(0)?,
+                    first_name: row.get(1)?,
+                    last_name: row.get(2)?,
+                    left_date: row.get(3)?,
+                    annual_total: row.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        result.push(SalaryOverTimePoint {
+            data_point_id: dp_id,
+            data_point_name: dp_name,
+            members,
+        });
+    }
+
+    Ok(result)
+}
+
 // ── Report commands ──
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

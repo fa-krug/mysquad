@@ -84,6 +84,7 @@ pub fn run() {
             commands::delete_salary_part,
             commands::update_salary_range,
             commands::get_previous_member_data,
+            commands::get_salary_over_time,
             commands::get_projects,
             commands::create_project,
             commands::update_project,
