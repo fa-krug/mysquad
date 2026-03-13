@@ -1,18 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { DataPointList } from "@/components/salary/DataPointList";
 import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
 import { SalaryAnalytics } from "@/components/salary/SalaryAnalytics";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { usePendingDelete } from "@/hooks/usePendingDelete";
 import {
   getSalaryDataPoints,
   getSalaryDataPoint,
@@ -23,9 +15,11 @@ import {
   getPreviousMemberData,
   getTitles,
 } from "@/lib/db";
+import { showSuccess, showError } from "@/lib/toast";
 import type { SalaryDataPointSummary, SalaryDataPointDetail, SalaryPart, Title } from "@/lib/types";
 
 export function SalaryPlanner() {
+  const location = useLocation();
   const [dataPoints, setDataPoints] = useState<SalaryDataPointSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
@@ -34,7 +28,8 @@ export function SalaryPlanner() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDpId, setEditingDpId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const { scheduleDelete, pendingIds } = usePendingDelete();
 
   const loadDataPoints = useCallback(async () => {
     const [dps, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
@@ -61,15 +56,22 @@ export function SalaryPlanner() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getSalaryDataPoints(), getTitles()]).then(([dps, t]) => {
-      if (cancelled) return;
-      setDataPoints(dps);
-      setTitles(t);
-      if (dps.length > 0) {
-        setSelectedId(dps[0].id);
-      }
-      setLoading(false);
-    });
+    Promise.all([getSalaryDataPoints(), getTitles()])
+      .then(([dps, t]) => {
+        if (cancelled) return;
+        setDataPoints(dps);
+        setTitles(t);
+        if (dps.length > 0) {
+          setSelectedId(dps[0].id);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          showError("Failed to load salary data");
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -98,12 +100,32 @@ export function SalaryPlanner() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    const state = location.state;
+    if (!state) return;
+    window.history.replaceState({}, "");
+
+    if (state.action === "create" || state.action === "create-datapoint") {
+      handleCreate();
+    } else if (state.action === "delete" && selectedId !== null) {
+      handleDelete(selectedId);
+    }
+  }, [location.state]);
+
   async function handleCreate() {
-    const dp = await createSalaryDataPoint();
-    await loadDataPoints();
-    setSelectedId(dp.id);
-    setEditingDpId(dp.id);
-    setModalOpen(true);
+    setCreating(true);
+    try {
+      const dp = await createSalaryDataPoint();
+      await loadDataPoints();
+      setSelectedId(dp.id);
+      setEditingDpId(dp.id);
+      setModalOpen(true);
+      showSuccess("Data point created");
+    } catch {
+      showError("Failed to create data point");
+    } finally {
+      setCreating(false);
+    }
   }
 
   function handleEdit(dp: SalaryDataPointSummary) {
@@ -111,18 +133,30 @@ export function SalaryPlanner() {
     setModalOpen(true);
   }
 
-  async function handleDelete(id: number) {
-    setPendingDeleteId(id);
-  }
-
-  async function confirmDelete() {
-    if (pendingDeleteId === null) return;
-    const id = pendingDeleteId;
-    setPendingDeleteId(null);
-    await deleteSalaryDataPoint(id);
-    const dps = await loadDataPoints();
-    if (selectedId === id) {
-      setSelectedId(dps.length > 0 ? dps[0].id : null);
+  function handleDelete(id: number) {
+    const dp = dataPoints.find((d) => d.id === id);
+    if (!dp) return;
+    const wasSelected = selectedId === id;
+    scheduleDelete({
+      id,
+      label: dp.name || "Data point",
+      onConfirm: async () => {
+        await deleteSalaryDataPoint(id);
+        const dps = await loadDataPoints();
+        if (wasSelected) {
+          setSelectedId(dps.length > 0 ? dps[0].id : null);
+          setDetail(null);
+        }
+      },
+      onUndo: wasSelected
+        ? () => {
+            setSelectedId(id);
+          }
+        : undefined,
+    });
+    if (wasSelected) {
+      const remaining = dataPoints.filter((d) => d.id !== id && !pendingIds.has(d.id));
+      setSelectedId(remaining.length > 0 ? remaining[0].id : null);
       setDetail(null);
     }
   }
@@ -152,23 +186,18 @@ export function SalaryPlanner() {
     if (selectedId) await loadDetail(selectedId);
   }
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
   const activeMembers = detail?.members.filter((m) => m.is_active) ?? [];
+  const visibleDataPoints = dataPoints.filter((d) => !pendingIds.has(d.id));
 
   return (
     <div className="flex h-full">
       {/* Left panel */}
       <div className="w-64 shrink-0">
         <DataPointList
-          dataPoints={dataPoints}
+          dataPoints={visibleDataPoints}
           selectedId={selectedId}
+          loading={loading}
+          creating={creating}
           onSelect={setSelectedId}
           onCreate={handleCreate}
           onEdit={handleEdit}
@@ -212,28 +241,6 @@ export function SalaryPlanner() {
           </div>
         )}
       </div>
-
-      <AlertDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeleteId(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Data Point</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this data point? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Edit modal */}
       <DataPointModal
