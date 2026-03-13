@@ -18,6 +18,7 @@ import {
   uploadMemberPicture,
   deleteMemberPicture,
 } from "@/lib/db";
+import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/lib/toast";
 import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/types";
 
@@ -137,9 +138,12 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
             onDelete={handleDeletePicture}
           />
           <div>
-            <h2 className="text-lg font-semibold">
-              {member.first_name} {member.last_name}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">
+                {member.first_name} {member.last_name}
+              </h2>
+              {member.left_date && <Badge variant="secondary">Left</Badge>}
+            </div>
             {member.current_title_name && (
               <p className="text-sm text-muted-foreground">{member.current_title_name}</p>
             )}
