@@ -1,7 +1,7 @@
 import { PlusIcon, Loader2Icon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
+import { useVirtualList } from "@/hooks/useVirtualList";
 import type { Title } from "@/lib/types";
 
 interface TitleListProps {
@@ -23,6 +23,11 @@ export function TitleList({
   onCreate,
   onDelete,
 }: TitleListProps) {
+  const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
+    count: titles.length,
+    estimateSize: 40,
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const ids = titles.map((t) => t.id);
     const currentIndex = ids.indexOf(selectedId ?? -1);
@@ -31,10 +36,12 @@ export function TitleList({
       e.preventDefault();
       const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
       onSelect(ids[next]);
+      if (shouldVirtualize) virtualizer.scrollToIndex(next);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
       onSelect(ids[prev]);
+      if (shouldVirtualize) virtualizer.scrollToIndex(prev);
     }
   };
 
@@ -53,11 +60,51 @@ export function TitleList({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {loading ? (
           <ListSkeleton />
         ) : titles.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No titles yet</div>
+        ) : shouldVirtualize ? (
+          <ul
+            className="py-1 outline-none relative"
+            style={{ height: totalSize }}
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+          >
+            {virtualItems.map((virtualRow) => {
+              const title = titles[virtualRow.index];
+              return (
+                <li
+                  key={title.id}
+                  className={`group absolute left-0 w-full flex items-start px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                    selectedId === title.id ? "bg-muted" : ""
+                  }`}
+                  style={{ top: virtualRow.start, height: virtualRow.size }}
+                  onClick={() => onSelect(title.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{title.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {title.member_count} {title.member_count === 1 ? "member" : "members"}
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(title.id);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
             {titles.map((title) => (
@@ -90,7 +137,7 @@ export function TitleList({
             ))}
           </ul>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
