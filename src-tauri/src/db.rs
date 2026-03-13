@@ -17,6 +17,10 @@ impl AppDb {
 pub fn open_db_with_key(path: &str, key: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
     conn.pragma_update(None, "key", key)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "cache_size", "-16000")?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "recursive_triggers", "OFF")?;
     Ok(conn)

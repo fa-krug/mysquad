@@ -3,6 +3,7 @@ use crate::db::{self, AppDb};
 use crate::keychain;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::State;
 
 // ── Auth commands ──
@@ -1019,36 +1020,52 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut parts_stmt = conn
-        .prepare(
-            "SELECT id, name, amount, frequency, is_variable, sort_order
+    // Batch-fetch all salary_parts for these members in one query
+    let member_ids: Vec<i64> = members.iter().map(|m| m.id).collect();
+    let mut parts_map: HashMap<i64, Vec<SalaryPart>> = HashMap::new();
+
+    if !member_ids.is_empty() {
+        let placeholders: Vec<String> = (1..=member_ids.len()).map(|i| format!("?{}", i)).collect();
+        let sql = format!(
+            "SELECT data_point_member_id, id, name, amount, frequency, is_variable, sort_order
              FROM salary_parts
-             WHERE data_point_member_id = ?1
+             WHERE data_point_member_id IN ({})
              ORDER BY sort_order ASC, id ASC",
-        )
-        .map_err(|e| e.to_string())?;
+            placeholders.join(", ")
+        );
+        let params: Vec<&dyn rusqlite::types::ToSql> = member_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    SalaryPart {
+                        id: row.get(1)?,
+                        name: row.get(2)?,
+                        amount: row.get(3)?,
+                        frequency: row.get(4)?,
+                        is_variable: row.get(5)?,
+                        sort_order: row.get(6)?,
+                    },
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (dpm_id, part) = row.map_err(|e| e.to_string())?;
+            parts_map.entry(dpm_id).or_default().push(part);
+        }
+    }
 
     let members: Vec<SalaryDataPointMember> = members
         .into_iter()
         .map(|mut member| {
-            let parts = parts_stmt
-                .query_map(params![member.id], |row| {
-                    Ok(SalaryPart {
-                        id: row.get(0)?,
-                        name: row.get(1)?,
-                        amount: row.get(2)?,
-                        frequency: row.get(3)?,
-                        is_variable: row.get(4)?,
-                        sort_order: row.get(5)?,
-                    })
-                })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-            member.parts = parts;
-            Ok(member)
+            member.parts = parts_map.remove(&member.id).unwrap_or_default();
+            member
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect();
 
     let mut range_stmt = conn
         .prepare(
@@ -1548,41 +1565,58 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
-        for (mid, first, last, title, is_stakeholder) in all_members {
-            if is_stakeholder && !include_stakeholders {
-                continue;
-            }
+        // Filter to included members, then batch-fetch all their statuses
+        let included_members: Vec<&(i64, String, String, Option<String>, bool)> = all_members
+            .iter()
+            .filter(|(_, _, _, _, is_stakeholder)| !is_stakeholder || include_stakeholders)
+            .collect();
 
-            let mut status_stmt = conn
-                .prepare(
-                    "SELECT id, text, checked FROM status_items
-                     WHERE team_member_id = ?1
-                     ORDER BY created_at DESC",
-                )
-                .map_err(|e| e.to_string())?;
+        let member_ids: Vec<i64> = included_members.iter().map(|(mid, ..)| *mid).collect();
+        let mut status_map: HashMap<i64, Vec<ReportStatusItem>> = HashMap::new();
 
-            let statuses = status_stmt
-                .query_map(params![mid], |row| {
-                    Ok(ReportStatusItem {
-                        id: row.get(0)?,
-                        text: row.get(1)?,
-                        checked: row.get(2)?,
-                    })
+        if !member_ids.is_empty() {
+            let placeholders: Vec<String> =
+                (1..=member_ids.len()).map(|i| format!("?{}", i)).collect();
+            let sql = format!(
+                "SELECT team_member_id, id, text, checked FROM status_items
+                 WHERE team_member_id IN ({})
+                 ORDER BY created_at DESC",
+                placeholders.join(", ")
+            );
+            let params: Vec<&dyn rusqlite::types::ToSql> = member_ids
+                .iter()
+                .map(|id| id as &dyn rusqlite::types::ToSql)
+                .collect();
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params.as_slice(), |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        ReportStatusItem {
+                            id: row.get(1)?,
+                            text: row.get(2)?,
+                            checked: row.get(3)?,
+                        },
+                    ))
                 })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| e.to_string())?;
+            for row in rows {
+                let (mid, item) = row.map_err(|e| e.to_string())?;
+                status_map.entry(mid).or_default().push(item);
+            }
+        }
 
+        for (mid, first, last, title, is_stakeholder) in included_members {
             let entry = ReportMemberStatus {
-                member_id: mid,
-                first_name: first,
-                last_name: last,
-                title_name: title,
-                is_stakeholder,
-                statuses,
+                member_id: *mid,
+                first_name: first.clone(),
+                last_name: last.clone(),
+                title_name: title.clone(),
+                is_stakeholder: *is_stakeholder,
+                statuses: status_map.remove(mid).unwrap_or_default(),
             };
 
-            if is_stakeholder {
+            if *is_stakeholder {
                 stakeholders.push(entry);
             } else {
                 members.push(entry);
@@ -1605,31 +1639,47 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
-        for (pid, pname) in proj_rows {
-            let mut status_stmt = conn
-                .prepare(
-                    "SELECT id, text, checked FROM project_status_items
-                     WHERE project_id = ?1
-                     ORDER BY created_at DESC",
-                )
-                .map_err(|e| e.to_string())?;
+        // Batch-fetch all project status items in one query
+        let proj_ids: Vec<i64> = proj_rows.iter().map(|(pid, _)| *pid).collect();
+        let mut proj_status_map: HashMap<i64, Vec<ReportStatusItem>> = HashMap::new();
 
-            let statuses = status_stmt
-                .query_map(params![pid], |row| {
-                    Ok(ReportStatusItem {
-                        id: row.get(0)?,
-                        text: row.get(1)?,
-                        checked: row.get(2)?,
-                    })
+        if !proj_ids.is_empty() {
+            let placeholders: Vec<String> =
+                (1..=proj_ids.len()).map(|i| format!("?{}", i)).collect();
+            let sql = format!(
+                "SELECT project_id, id, text, checked FROM project_status_items
+                 WHERE project_id IN ({})
+                 ORDER BY created_at DESC",
+                placeholders.join(", ")
+            );
+            let params: Vec<&dyn rusqlite::types::ToSql> = proj_ids
+                .iter()
+                .map(|id| id as &dyn rusqlite::types::ToSql)
+                .collect();
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params.as_slice(), |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        ReportStatusItem {
+                            id: row.get(1)?,
+                            text: row.get(2)?,
+                            checked: row.get(3)?,
+                        },
+                    ))
                 })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| e.to_string())?;
+            for row in rows {
+                let (pid, item) = row.map_err(|e| e.to_string())?;
+                proj_status_map.entry(pid).or_default().push(item);
+            }
+        }
 
+        for (pid, pname) in proj_rows {
             projects.push(ReportProjectStatus {
                 project_id: pid,
                 project_name: pname,
-                statuses,
+                statuses: proj_status_map.remove(&pid).unwrap_or_default(),
             });
         }
     }
