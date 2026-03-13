@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { getSetting, setSetting } from "@/lib/db";
+import { getSetting, setSetting, setConfig } from "@/lib/db";
 
 interface SettingsPageProps {
   theme?: string;
   onThemeChange?: (theme: "light" | "dark" | "system") => void;
+  requireAuth: boolean;
+  onRequireAuthChange: (value: boolean) => void;
 }
 
 const AUTO_LOCK_OPTIONS = [
@@ -13,10 +15,17 @@ const AUTO_LOCK_OPTIONS = [
   { value: "-1", label: "Never" },
 ];
 
-export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
+export function SettingsPage({
+  theme,
+  onThemeChange,
+  requireAuth,
+  onRequireAuthChange,
+}: SettingsPageProps) {
   const [autoLockTimeout, setAutoLockTimeout] = useState<string>("60");
   const [autoLockError, setAutoLockError] = useState<string | null>(null);
   const [autoLockSaved, setAutoLockSaved] = useState(false);
+  const [authSaved, setAuthSaved] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     getSetting("auto_lock_timeout")
@@ -29,6 +38,25 @@ export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
         setAutoLockError(e instanceof Error ? e.message : String(e));
       });
   }, []);
+
+  async function handleRequireAuthChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const checked = e.target.checked;
+    setAuthError(null);
+    setAuthSaved(false);
+    try {
+      await setConfig("require_auth", checked ? "true" : "false");
+      onRequireAuthChange(checked);
+      if (!checked) {
+        // Force auto-lock to Never when auth is disabled
+        setAutoLockTimeout("-1");
+        await setSetting("auto_lock_timeout", "-1");
+      }
+      setAuthSaved(true);
+      setTimeout(() => setAuthSaved(false), 1500);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function handleAutoLockChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
@@ -78,6 +106,27 @@ export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
           </select>
         </div>
 
+        {/* Require authentication */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="require-auth-toggle"
+              checked={requireAuth}
+              onChange={handleRequireAuthChange}
+              className="h-4 w-4 rounded border-input"
+            />
+            <label htmlFor="require-auth-toggle" className="text-sm font-medium">
+              Require authentication on startup
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            When disabled, the app opens without Touch ID. Your data is still encrypted.
+          </p>
+          {authError && <p className="text-sm text-destructive">{authError}</p>}
+          {authSaved && <p className="text-sm text-green-600">Saved</p>}
+        </div>
+
         {/* Auto-lock timeout */}
         <div className="space-y-1.5">
           <label htmlFor="auto-lock-select" className="text-sm font-medium">
@@ -85,9 +134,10 @@ export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
           </label>
           <select
             id="auto-lock-select"
-            value={autoLockTimeout}
+            value={requireAuth ? autoLockTimeout : "-1"}
             onChange={handleAutoLockChange}
-            className="block w-full rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            disabled={!requireAuth}
+            className="block w-full rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {AUTO_LOCK_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -95,6 +145,11 @@ export function SettingsPage({ theme, onThemeChange }: SettingsPageProps) {
               </option>
             ))}
           </select>
+          {!requireAuth && (
+            <p className="text-xs text-muted-foreground">
+              Auto-lock is disabled when authentication is not required.
+            </p>
+          )}
           {autoLockError && <p className="text-sm text-destructive">{autoLockError}</p>}
           {autoLockSaved && <p className="text-sm text-green-600">Saved</p>}
         </div>
