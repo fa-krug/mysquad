@@ -18,7 +18,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
     try {
       await onUnlock();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Authentication failed");
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }

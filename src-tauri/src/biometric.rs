@@ -24,18 +24,21 @@ fn get_helper_path() -> Result<PathBuf, String> {
         .ok_or("Cannot find executable directory")?
         .to_path_buf();
 
+    // Bundled app: helper is next to the main executable (via externalBin)
     let helper = exe_dir.join("MySquadHelper");
     if helper.exists() {
         return Ok(helper);
     }
 
-    // Fallback: check target directory (development)
-    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/MySquadHelper");
-    if dev_helper.exists() {
-        return Ok(dev_helper);
+    // Development: helper is in target/ (compiled by build.rs), exe is in target/debug/
+    if let Some(target_dir) = exe_dir.parent() {
+        let dev_helper = target_dir.join("MySquadHelper");
+        if dev_helper.exists() {
+            return Ok(dev_helper);
+        }
     }
 
-    Err("Authentication helper not found".into())
+    Err("Authentication helper not found. Ensure the app was built with `cargo build` or `npm run tauri build`.".into())
 }
 
 #[cfg(test)]
