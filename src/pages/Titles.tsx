@@ -1,14 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { TitleList } from "@/components/titles/TitleList";
 import { TitleDetail } from "@/components/titles/TitleDetail";
 import { getTitles, createTitle, updateTitle, deleteTitle, getTeamMembers } from "@/lib/db";
+import { showSuccess, showError } from "@/lib/toast";
+import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type { Title, TeamMember } from "@/lib/types";
 
 export function Titles() {
+  const location = useLocation();
   const [titles, setTitles] = useState<Title[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focusName, setFocusName] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+
+  const { scheduleDelete, pendingIds } = usePendingDelete();
 
   const loadTitles = useCallback(async () => {
     const [t, m] = await Promise.all([getTitles(), getTeamMembers()]);
@@ -19,33 +27,71 @@ export function Titles() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getTitles(), getTeamMembers()]).then(([t, m]) => {
-      if (!cancelled) {
-        setTitles(t);
-        setMembers(m);
-      }
-    });
+    Promise.all([getTitles(), getTeamMembers()])
+      .then(([t, m]) => {
+        if (!cancelled) {
+          setTitles(t);
+          setMembers(m);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) showError("Failed to load titles");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  useEffect(() => {
+    const state = location.state;
+    if (!state) return;
+    window.history.replaceState({}, "");
+
+    if (state.action === "create" || state.action === "create-title") {
+      handleCreate();
+    } else if (state.action === "delete" && selectedId !== null) {
+      handleDelete(selectedId);
+    }
+  }, [location.state]);
+
   const handleCreate = async () => {
-    const created = await createTitle("New Title");
-    await loadTitles();
-    setSelectedId(created.id);
-    setFocusName(true);
+    setCreating(true);
+    try {
+      const created = await createTitle("New Title");
+      await loadTitles();
+      setSelectedId(created.id);
+      setFocusName(true);
+      showSuccess("Title created");
+    } catch {
+      showError("Failed to create title");
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteTitle(id);
-      if (selectedId === id) setSelectedId(null);
-      await loadTitles();
-    } catch (e) {
-      // Title with members can't be deleted — error from backend
-      alert(e instanceof Error ? e.message : String(e));
+  const handleDelete = (id: number) => {
+    const title = titles.find((t) => t.id === id);
+    if (!title) return;
+
+    // Check if any members use this title before scheduling
+    const assignedMembers = members.filter((m) => m.title_id === id);
+    if (assignedMembers.length > 0) {
+      showError(`Cannot delete "${title.name}" — ${assignedMembers.length} member(s) assigned`);
+      return;
     }
+
+    if (selectedId === id) setSelectedId(null);
+    scheduleDelete({
+      id,
+      label: title.name || "Title",
+      onConfirm: async () => {
+        await deleteTitle(id);
+        await loadTitles();
+      },
+    });
   };
 
   const handleTitleChange = async (field: string, value: string) => {
@@ -56,13 +102,16 @@ export function Titles() {
     }
   };
 
-  const selectedTitle = titles.find((t) => t.id === selectedId) ?? null;
+  const visibleTitles = titles.filter((t) => !pendingIds.has(t.id));
+  const selectedTitle = visibleTitles.find((t) => t.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
       <TitleList
-        titles={titles}
+        titles={visibleTitles}
         selectedId={selectedId}
+        loading={loading}
+        creating={creating}
         onSelect={(id) => {
           setSelectedId(id);
           setFocusName(false);
