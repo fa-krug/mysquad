@@ -1694,6 +1694,487 @@ pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>
     Ok(result)
 }
 
+// ── Scenario group commands ──
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_scenario_group(
+    db: State<AppDb>,
+    previous_data_point_id: Option<i64>,
+    count: i64,
+) -> Result<ScenarioGroup, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    if count < 2 {
+        return Err("Scenario group must have at least 2 scenarios".to_string());
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let group_name = format!("{} Scenarios", today);
+
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
+    let result: Result<ScenarioGroup, String> = (|| {
+        let prev_budget: Option<i64> = previous_data_point_id.and_then(|prev_id| {
+            conn.query_row(
+                "SELECT budget FROM salary_data_points WHERE id = ?1",
+                params![prev_id],
+                |row| row.get(0),
+            )
+            .ok()
+        });
+
+        conn.execute(
+            "INSERT INTO scenario_groups (name, budget, previous_data_point_id) VALUES (?1, ?2, ?3)",
+            params![group_name, prev_budget, previous_data_point_id],
+        ).map_err(|e| e.to_string())?;
+        let group_id = conn.last_insert_rowid();
+
+        if let Some(prev_id) = previous_data_point_id {
+            conn.execute(
+                "INSERT INTO scenario_group_ranges (scenario_group_id, title_id, min_salary, max_salary)
+                 SELECT ?1, title_id, min_salary, max_salary
+                 FROM salary_ranges WHERE data_point_id = ?2",
+                params![group_id, prev_id],
+            ).map_err(|e| e.to_string())?;
+        }
+
+        let mut children = Vec::new();
+        for i in 1..=count {
+            let child_name = format!("Scenario {}", i);
+
+            if let Some(prev_id) = previous_data_point_id {
+                conn.execute(
+                    "INSERT INTO salary_data_points (name, scenario_group_id) VALUES (?1, ?2)",
+                    params![child_name, group_id],
+                )
+                .map_err(|e| e.to_string())?;
+                let child_id = conn.last_insert_rowid();
+
+                conn.execute(
+                    "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted, promoted_title_id)
+                     SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
+                     FROM salary_data_point_members sdpm
+                     JOIN team_members m ON m.id = sdpm.member_id
+                     WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL",
+                    params![child_id, prev_id],
+                ).map_err(|e| e.to_string())?;
+
+                conn.execute(
+                    "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order)
+                     SELECT new_sdpm.id, sp.name, sp.amount, sp.frequency, sp.is_variable, sp.sort_order
+                     FROM salary_parts sp
+                     JOIN salary_data_point_members old_sdpm ON old_sdpm.id = sp.data_point_member_id
+                     JOIN salary_data_point_members new_sdpm ON new_sdpm.data_point_id = ?1
+                         AND new_sdpm.member_id = old_sdpm.member_id
+                     WHERE old_sdpm.data_point_id = ?2",
+                    params![child_id, prev_id],
+                ).map_err(|e| e.to_string())?;
+
+                let created_at: String = conn
+                    .query_row(
+                        "SELECT created_at FROM salary_data_points WHERE id = ?1",
+                        params![child_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                children.push(SalaryDataPointSummary {
+                    id: child_id,
+                    name: child_name,
+                    budget: None,
+                    previous_data_point_id: None,
+                    created_at,
+                    scenario_group_id: Some(group_id),
+                });
+            } else {
+                conn.execute(
+                    "INSERT INTO salary_data_points (name, scenario_group_id) VALUES (?1, ?2)",
+                    params![child_name, group_id],
+                )
+                .map_err(|e| e.to_string())?;
+                let child_id = conn.last_insert_rowid();
+
+                conn.execute(
+                    "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
+                     SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL",
+                    params![child_id],
+                ).map_err(|e| e.to_string())?;
+
+                let created_at: String = conn
+                    .query_row(
+                        "SELECT created_at FROM salary_data_points WHERE id = ?1",
+                        params![child_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                children.push(SalaryDataPointSummary {
+                    id: child_id,
+                    name: child_name,
+                    budget: None,
+                    previous_data_point_id: None,
+                    created_at,
+                    scenario_group_id: Some(group_id),
+                });
+            }
+        }
+
+        let group_created_at: String = conn
+            .query_row(
+                "SELECT created_at FROM scenario_groups WHERE id = ?1",
+                params![group_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(ScenarioGroup {
+            id: group_id,
+            name: group_name,
+            budget: prev_budget,
+            previous_data_point_id,
+            created_at: group_created_at,
+            children,
+        })
+    })();
+
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
+        Err(_) => {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+    }
+
+    result
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM scenario_groups WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_scenario_group(
+    db: State<AppDb>,
+    id: i64,
+    field: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let allowed = ["name", "budget"];
+    if !allowed.contains(&field.as_str()) {
+        return Err(format!("Invalid field: {}", field));
+    }
+    let sql = format!("UPDATE scenario_groups SET {} = ?1 WHERE id = ?2", field);
+    conn.execute(&sql, params![value, id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_scenario_group_range(
+    db: State<AppDb>,
+    scenario_group_id: i64,
+    title_id: i64,
+    min_salary: i64,
+    max_salary: i64,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "INSERT INTO scenario_group_ranges (scenario_group_id, title_id, min_salary, max_salary)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(scenario_group_id, title_id) DO UPDATE SET min_salary = excluded.min_salary, max_salary = excluded.max_salary",
+        params![scenario_group_id, title_id, min_salary, max_salary],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn add_scenario(
+    db: State<AppDb>,
+    scenario_group_id: i64,
+) -> Result<SalaryDataPointSummary, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    // Get current child count
+    let child_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id = ?1",
+            params![scenario_group_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let new_name = format!("Scenario {}", child_count + 1);
+
+    // Find lowest-ID sibling to copy from
+    let source_dp_id: i64 = conn
+        .query_row(
+            "SELECT id FROM salary_data_points WHERE scenario_group_id = ?1 ORDER BY id ASC LIMIT 1",
+            params![scenario_group_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
+    let result: Result<SalaryDataPointSummary, String> = (|| {
+        conn.execute(
+            "INSERT INTO salary_data_points (name, scenario_group_id) VALUES (?1, ?2)",
+            params![new_name, scenario_group_id],
+        )
+        .map_err(|e| e.to_string())?;
+        let new_id = conn.last_insert_rowid();
+
+        // Copy members from source
+        conn.execute(
+            "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted, promoted_title_id)
+             SELECT ?1, member_id, is_active, is_promoted, promoted_title_id
+             FROM salary_data_point_members WHERE data_point_id = ?2",
+            params![new_id, source_dp_id],
+        ).map_err(|e| e.to_string())?;
+
+        // Copy salary parts
+        conn.execute(
+            "INSERT INTO salary_parts (data_point_member_id, name, amount, frequency, is_variable, sort_order)
+             SELECT new_sdpm.id, sp.name, sp.amount, sp.frequency, sp.is_variable, sp.sort_order
+             FROM salary_parts sp
+             JOIN salary_data_point_members old_sdpm ON old_sdpm.id = sp.data_point_member_id
+             JOIN salary_data_point_members new_sdpm ON new_sdpm.data_point_id = ?1
+                 AND new_sdpm.member_id = old_sdpm.member_id
+             WHERE old_sdpm.data_point_id = ?2",
+            params![new_id, source_dp_id],
+        ).map_err(|e| e.to_string())?;
+
+        let created_at: String = conn
+            .query_row(
+                "SELECT created_at FROM salary_data_points WHERE id = ?1",
+                params![new_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(SalaryDataPointSummary {
+            id: new_id,
+            name: new_name,
+            budget: None,
+            previous_data_point_id: None,
+            created_at,
+            scenario_group_id: Some(scenario_group_id),
+        })
+    })();
+
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
+        Err(_) => {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+    }
+
+    result
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn remove_scenario(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let sg_id: i64 = conn
+        .query_row(
+            "SELECT scenario_group_id FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let child_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM salary_data_points WHERE scenario_group_id = ?1",
+            params![sg_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if child_count <= 2 {
+        return Err("Cannot remove scenario: group must have at least 2 scenarios".to_string());
+    }
+
+    conn.execute(
+        "DELETE FROM salary_data_points WHERE id = ?1",
+        params![data_point_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn promote_scenario(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
+    let result: Result<(), String> = (|| {
+        // 1. Look up group info
+        let (sg_id, sg_prev, sg_budget): (i64, Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT sg.id, sg.previous_data_point_id, sg.budget
+                 FROM scenario_groups sg
+                 JOIN salary_data_points sdp ON sdp.scenario_group_id = sg.id
+                 WHERE sdp.id = ?1",
+                params![data_point_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|e| e.to_string())?;
+
+        // 2. Detach from group
+        conn.execute(
+            "UPDATE salary_data_points SET scenario_group_id = NULL WHERE id = ?1",
+            params![data_point_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // 3. Set previous_data_point_id from group
+        conn.execute(
+            "UPDATE salary_data_points SET previous_data_point_id = ?1 WHERE id = ?2",
+            params![sg_prev, data_point_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // 4. Set budget from group
+        conn.execute(
+            "UPDATE salary_data_points SET budget = ?1 WHERE id = ?2",
+            params![sg_budget, data_point_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // 5. Copy group ranges to salary_ranges
+        conn.execute(
+            "INSERT INTO salary_ranges (data_point_id, title_id, min_salary, max_salary)
+             SELECT ?1, title_id, min_salary, max_salary
+             FROM scenario_group_ranges WHERE scenario_group_id = ?2",
+            params![data_point_id, sg_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // 6. Delete group (CASCADE removes siblings and group ranges)
+        conn.execute("DELETE FROM scenario_groups WHERE id = ?1", params![sg_id])
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    })();
+
+    match &result {
+        Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
+        Err(_) => {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+    }
+
+    result
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_scenario_summaries(
+    db: State<AppDb>,
+    scenario_group_id: i64,
+) -> Result<Vec<ScenarioSummary>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT sdp.id, sdp.name,
+                    COALESCE(SUM(CASE WHEN sdpm.is_active = 1 THEN sp.amount * sp.frequency ELSE 0 END), 0) as total_salary
+             FROM salary_data_points sdp
+             LEFT JOIN salary_data_point_members sdpm ON sdpm.data_point_id = sdp.id
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdp.scenario_group_id = ?1
+             GROUP BY sdp.id
+             ORDER BY sdp.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let summaries: Vec<(i64, String, i64)> = stmt
+        .query_map(params![scenario_group_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for (dp_id, dp_name, total_salary) in summaries {
+        let headcount: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM salary_data_point_members WHERE data_point_id = ?1 AND is_active = 1",
+                params![dp_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+
+        result.push(ScenarioSummary {
+            data_point_id: dp_id,
+            data_point_name: dp_name,
+            total_salary,
+            headcount,
+        });
+    }
+
+    Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct ScenarioMemberComparison {
+    pub data_point_id: i64,
+    pub data_point_name: String,
+    pub annual_total: i64,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_scenario_member_comparison(
+    db: State<AppDb>,
+    scenario_group_id: i64,
+    member_id: i64,
+) -> Result<Vec<ScenarioMemberComparison>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT sdp.id, sdp.name,
+                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+             FROM salary_data_points sdp
+             JOIN salary_data_point_members sdpm ON sdpm.data_point_id = sdp.id AND sdpm.member_id = ?2
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdp.scenario_group_id = ?1
+             GROUP BY sdp.id
+             ORDER BY sdp.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map(params![scenario_group_id, member_id], |row| {
+            Ok(ScenarioMemberComparison {
+                data_point_id: row.get(0)?,
+                data_point_name: row.get(1)?,
+                annual_total: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}
+
 // ── Report commands ──
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
