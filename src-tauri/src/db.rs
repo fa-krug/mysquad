@@ -89,6 +89,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 10)?;
     }
 
+    if version < 11 {
+        let migration_sql = include_str!("../migrations/011_scenario_groups.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 11)?;
+    }
+
     Ok(())
 }
 
@@ -132,7 +138,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
     }
 
     #[test]
@@ -192,11 +198,11 @@ mod tests {
         let has_salary: bool = conn.prepare("SELECT salary FROM team_members").is_ok();
         assert!(!has_salary);
 
-        // Verify user_version is 3 (all migrations run)
+        // Verify user_version is 11 (all migrations run)
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
     }
 
     #[test]
@@ -212,7 +218,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
     }
 
     #[test]
@@ -332,5 +338,32 @@ mod tests {
         ).ok(); // May fail if no team_members, that's fine
         conn.execute("DELETE FROM projects WHERE id = ?1", [id])
             .unwrap();
+    }
+
+    #[test]
+    fn test_migration_v11_scenario_groups() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scenario_groups'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scenario_group_ranges'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(count, 1);
+
+        // Verify scenario_group_id column on salary_data_points
+        let has_col: bool = conn
+            .prepare("SELECT scenario_group_id FROM salary_data_points LIMIT 0")
+            .is_ok();
+        assert!(has_col);
     }
 }
