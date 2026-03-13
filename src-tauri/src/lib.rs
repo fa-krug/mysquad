@@ -2,6 +2,7 @@ pub mod biometric;
 pub mod commands;
 pub mod config;
 pub mod db;
+pub mod export_import;
 pub mod keychain;
 
 use db::AppDb;
@@ -101,6 +102,8 @@ pub fn run() {
             commands::update_report,
             commands::delete_report,
             commands::get_report_detail,
+            commands::export_data,
+            commands::import_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

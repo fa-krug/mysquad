@@ -152,3 +152,9 @@ export const deleteProjectStatusItem = (id: number) =>
 export const getSetting = (key: string) => invoke<string | null>("get_setting", { key });
 export const setSetting = (key: string, value: string) =>
   invoke<void>("set_setting", { key, value });
+
+// Export / Import
+export const exportData = (filePath: string) =>
+  invoke<void>("export_data", { file_path: filePath });
+export const importData = (filePath: string, mode: string) =>
+  invoke<void>("import_data", { file_path: filePath, mode });

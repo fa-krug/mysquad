@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getSetting, setSetting, setConfig } from "@/lib/db";
+import { getSetting, setSetting, setConfig, exportData, importData } from "@/lib/db";
+import { save, open } from "@tauri-apps/plugin-dialog";
 
 interface SettingsPageProps {
   theme?: string;
@@ -26,6 +27,12 @@ export function SettingsPage({
   const [autoLockSaved, setAutoLockSaved] = useState(false);
   const [authSaved, setAuthSaved] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exportImportMessage, setExportImportMessage] = useState<string | null>(null);
+  const [exportImportError, setExportImportError] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importFilePath, setImportFilePath] = useState<string | null>(null);
 
   useEffect(() => {
     getSetting("auto_lock_timeout")
@@ -79,6 +86,70 @@ export function SettingsPage({
       await setSetting("theme", value);
     } catch {
       // Best effort — theme already applied in memory
+    }
+  }
+
+  function clearExportImportMessage() {
+    setTimeout(() => {
+      setExportImportMessage(null);
+      setExportImportError(false);
+    }, 3000);
+  }
+
+  async function handleExport() {
+    setExportImportMessage(null);
+    setExportImportError(false);
+    try {
+      const filePath = await save({
+        defaultPath: "mysquad-export.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!filePath) return;
+      setExporting(true);
+      await exportData(filePath);
+      setExportImportMessage("Data exported successfully");
+      clearExportImportMessage();
+    } catch (err) {
+      setExportImportMessage(err instanceof Error ? err.message : String(err));
+      setExportImportError(true);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleImportClick() {
+    setExportImportMessage(null);
+    setExportImportError(false);
+    try {
+      const filePath = await open({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!filePath) return;
+      setImportFilePath(filePath);
+      setShowImportDialog(true);
+    } catch (err) {
+      setExportImportMessage(err instanceof Error ? err.message : String(err));
+      setExportImportError(true);
+    }
+  }
+
+  async function handleImport(mode: string) {
+    setShowImportDialog(false);
+    if (!importFilePath) return;
+    setImporting(true);
+    setExportImportMessage(null);
+    setExportImportError(false);
+    try {
+      await importData(importFilePath, mode);
+      setExportImportMessage("Data imported successfully");
+      clearExportImportMessage();
+    } catch (err) {
+      setExportImportMessage(err instanceof Error ? err.message : String(err));
+      setExportImportError(true);
+    } finally {
+      setImporting(false);
+      setImportFilePath(null);
     }
   }
 
@@ -153,6 +224,74 @@ export function SettingsPage({
           {autoLockError && <p className="text-sm text-destructive">{autoLockError}</p>}
           {autoLockSaved && <p className="text-sm text-green-600">Saved</p>}
         </div>
+
+        {/* Data Management */}
+        <div className="space-y-1.5">
+          <h2 className="text-sm font-medium">Data Management</h2>
+          <p className="text-xs text-muted-foreground">
+            Export all your data to a JSON file, or import data from a previous export.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? "Exporting…" : "Export Data"}
+            </button>
+            <button
+              onClick={handleImportClick}
+              disabled={importing}
+              className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {importing ? "Importing…" : "Import Data"}
+            </button>
+          </div>
+          {exportImportMessage && (
+            <p className={`text-sm ${exportImportError ? "text-destructive" : "text-green-600"}`}>
+              {exportImportMessage}
+            </p>
+          )}
+        </div>
+
+        {/* Import Mode Dialog */}
+        {showImportDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4 shadow-lg">
+              <h3 className="text-lg font-semibold">Import Mode</h3>
+              <p className="text-sm text-muted-foreground">How should imported data be handled?</p>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleImport("overwrite")}
+                  className="w-full rounded-lg border border-input px-3 py-2 text-sm text-left transition-colors hover:bg-muted"
+                >
+                  <span className="font-medium">Overwrite</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Replace all existing data with the imported data
+                  </span>
+                </button>
+                <button
+                  onClick={() => handleImport("update")}
+                  className="w-full rounded-lg border border-input px-3 py-2 text-sm text-left transition-colors hover:bg-muted"
+                >
+                  <span className="font-medium">Update</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Add new records and update existing ones
+                  </span>
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportDialog(false);
+                  setImportFilePath(null);
+                }}
+                className="w-full rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1890,3 +1890,30 @@ fn get_pictures_dir() -> Result<std::path::PathBuf, String> {
         .map_err(|e| format!("Failed to create pictures directory: {}", e))?;
     Ok(pictures_dir)
 }
+
+// ── Export / Import commands ──
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn export_data(db: State<AppDb>, file_path: String) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let data = crate::export_import::export_all_data(conn)?;
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize data: {}", e))?;
+    std::fs::write(&file_path, json).map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn import_data(db: State<AppDb>, file_path: String, mode: String) -> Result<(), String> {
+    let json =
+        std::fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let data: crate::export_import::ExportData =
+        serde_json::from_str(&json).map_err(|e| format!("Failed to parse import file: {}", e))?;
+    if data.version != 1 {
+        return Err(format!("Unsupported export version: {}", data.version));
+    }
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    crate::export_import::import_all_data(conn, data, &mode)
+}
