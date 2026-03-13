@@ -5,12 +5,43 @@ pub mod db;
 pub mod keychain;
 
 use db::AppDb;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+static WINDOW_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppDb::new())
+        .setup(|app| {
+            let new_window = MenuItemBuilder::new("New Window")
+                .id("new_window")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?;
+
+            let file_menu = SubmenuBuilder::new(app, "File").item(&new_window).build()?;
+
+            let menu = MenuBuilder::new(app).item(&file_menu).build()?;
+
+            app.set_menu(menu)?;
+
+            app.on_menu_event(move |app_handle, event| {
+                if event.id().0 == "new_window" {
+                    let n = WINDOW_COUNTER.fetch_add(1, Ordering::SeqCst);
+                    let label = format!("main_{}", n);
+                    let _ = WebviewWindowBuilder::new(app_handle, &label, WebviewUrl::default())
+                        .title("MySquad")
+                        .inner_size(1200.0, 800.0)
+                        .min_inner_size(900.0, 600.0)
+                        .build();
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::authenticate,
             commands::unlock_db,

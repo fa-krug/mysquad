@@ -79,6 +79,9 @@ pub struct TeamMember {
     pub address_zip: Option<String>,
     pub title_id: Option<i64>,
     pub title_name: Option<String>,
+    pub current_title_id: Option<i64>,
+    pub current_title_name: Option<String>,
+    pub current_title_data_point_id: Option<i64>,
     pub start_date: Option<String>,
     pub notes: Option<String>,
     pub picture_path: Option<String>,
@@ -94,15 +97,33 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
             "SELECT m.id, m.first_name, m.last_name, m.email, m.personal_email,
                     m.personal_phone, m.address_street, m.address_city, m.address_zip,
                     m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path,
-                    m.exclude_from_salary
+                    m.exclude_from_salary,
+                    promo.promoted_title_id, pt.name as promoted_title_name,
+                    promo.data_point_id as promo_data_point_id
              FROM team_members m
              LEFT JOIN titles t ON m.title_id = t.id
+             LEFT JOIN (
+                 SELECT sdpm.member_id, sdpm.promoted_title_id, sdpm.data_point_id
+                 FROM salary_data_point_members sdpm
+                 INNER JOIN (
+                     SELECT member_id, MAX(data_point_id) as max_dp_id
+                     FROM salary_data_point_members
+                     WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                     GROUP BY member_id
+                 ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+             ) promo ON promo.member_id = m.id
+             LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
              ORDER BY m.last_name ASC, m.first_name ASC",
         )
         .map_err(|e| e.to_string())?;
 
     let members = stmt
         .query_map([], |row| {
+            let title_id: Option<i64> = row.get(9)?;
+            let title_name: Option<String> = row.get(10)?;
+            let promoted_title_id: Option<i64> = row.get(15)?;
+            let promoted_title_name: Option<String> = row.get(16)?;
+            let promo_data_point_id: Option<i64> = row.get(17)?;
             Ok(TeamMember {
                 id: row.get(0)?,
                 first_name: row.get(1)?,
@@ -113,8 +134,19 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                 address_street: row.get(6)?,
                 address_city: row.get(7)?,
                 address_zip: row.get(8)?,
-                title_id: row.get(9)?,
-                title_name: row.get(10)?,
+                title_id,
+                title_name: title_name.clone(),
+                current_title_id: if promoted_title_id.is_some() {
+                    promoted_title_id
+                } else {
+                    title_id
+                },
+                current_title_name: if promoted_title_name.is_some() {
+                    promoted_title_name
+                } else {
+                    title_name
+                },
+                current_title_data_point_id: promo_data_point_id,
                 start_date: row.get(11)?,
                 notes: row.get(12)?,
                 picture_path: row.get(13)?,
@@ -150,6 +182,9 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
         address_zip: None,
         title_id: None,
         title_name: None,
+        current_title_id: None,
+        current_title_name: None,
+        current_title_data_point_id: None,
         start_date: None,
         notes: None,
         picture_path: None,
@@ -933,6 +968,7 @@ pub struct SalaryDataPointSummary {
     pub id: i64,
     pub name: String,
     pub budget: Option<i64>,
+    pub previous_data_point_id: Option<i64>,
     pub created_at: String,
 }
 
@@ -941,6 +977,7 @@ pub struct SalaryDataPointDetail {
     pub id: i64,
     pub name: String,
     pub budget: Option<i64>,
+    pub previous_data_point_id: Option<i64>,
     pub members: Vec<SalaryDataPointMember>,
     pub ranges: Vec<SalaryRange>,
 }
@@ -955,6 +992,8 @@ pub struct SalaryDataPointMember {
     pub title_name: Option<String>,
     pub is_active: bool,
     pub is_promoted: bool,
+    pub promoted_title_id: Option<i64>,
+    pub promoted_title_name: Option<String>,
     pub parts: Vec<SalaryPart>,
 }
 
@@ -984,7 +1023,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSum
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
-        .prepare("SELECT id, name, budget, created_at FROM salary_data_points ORDER BY id DESC")
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points ORDER BY id DESC")
         .map_err(|e| e.to_string())?;
     let points = stmt
         .query_map([], |row| {
@@ -992,7 +1031,8 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryDataPointSum
                 id: row.get(0)?,
                 name: row.get(1)?,
                 budget: row.get(2)?,
-                created_at: row.get(3)?,
+                previous_data_point_id: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -1006,21 +1046,23 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
-    let (name, budget): (String, Option<i64>) = conn
+    let (name, budget, previous_data_point_id): (String, Option<i64>, Option<i64>) = conn
         .query_row(
-            "SELECT name, budget FROM salary_data_points WHERE id = ?1",
+            "SELECT name, budget, previous_data_point_id FROM salary_data_points WHERE id = ?1",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .map_err(|e| e.to_string())?;
 
     let mut member_stmt = conn
         .prepare(
             "SELECT sdpm.id, sdpm.member_id, m.first_name, m.last_name,
-                    m.title_id, t.name as title_name, sdpm.is_active, sdpm.is_promoted
+                    m.title_id, t.name as title_name, sdpm.is_active, sdpm.is_promoted,
+                    sdpm.promoted_title_id, pt.name as promoted_title_name
              FROM salary_data_point_members sdpm
              JOIN team_members m ON m.id = sdpm.member_id
              LEFT JOIN titles t ON t.id = m.title_id
+             LEFT JOIN titles pt ON pt.id = sdpm.promoted_title_id
              WHERE sdpm.data_point_id = ?1
              ORDER BY m.last_name ASC, m.first_name ASC",
         )
@@ -1037,6 +1079,8 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
                 title_name: row.get(5)?,
                 is_active: row.get(6)?,
                 is_promoted: row.get(7)?,
+                promoted_title_id: row.get(8)?,
+                promoted_title_name: row.get(9)?,
                 parts: Vec::new(),
             })
         })
@@ -1119,6 +1163,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
         id,
         name,
         budget,
+        previous_data_point_id,
         members,
         ranges,
     })
@@ -1152,15 +1197,15 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                 .map_err(|e| e.to_string())?;
 
             conn.execute(
-                "INSERT INTO salary_data_points (name, budget) VALUES (?1, ?2)",
-                params![today, prev_budget],
+                "INSERT INTO salary_data_points (name, budget, previous_data_point_id) VALUES (?1, ?2, ?3)",
+                params![today, prev_budget, prev],
             )
             .map_err(|e| e.to_string())?;
             let new_id = conn.last_insert_rowid();
 
             conn.execute(
-                "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                 SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted
+                "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted, promoted_title_id)
+                 SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
                  FROM salary_data_point_members sdpm
                  JOIN team_members m ON m.id = sdpm.member_id
                  WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0",
@@ -1198,6 +1243,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                 id: new_id,
                 name: today.clone(),
                 budget: prev_budget,
+                previous_data_point_id: Some(prev),
                 created_at,
             })
         } else {
@@ -1226,6 +1272,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                 id: new_id,
                 name: today.clone(),
                 budget: None,
+                previous_data_point_id: None,
                 created_at,
             })
         }
@@ -1250,7 +1297,7 @@ pub fn update_salary_data_point(
 ) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let allowed = ["name", "budget"];
+    let allowed = ["name", "budget", "previous_data_point_id"];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
     }
@@ -1278,7 +1325,7 @@ pub fn update_salary_data_point_member(
 ) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let allowed = ["is_active", "is_promoted"];
+    let allowed = ["is_active", "is_promoted", "promoted_title_id"];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
     }
@@ -1376,17 +1423,28 @@ pub fn get_previous_member_data(
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
+    // Look up the explicit previous_data_point_id
+    let prev_dp_id: Option<i64> = conn
+        .query_row(
+            "SELECT previous_data_point_id FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let prev_dp_id = match prev_dp_id {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+
     let prev_sdpm_id: Option<i64> = conn
         .query_row(
             "SELECT sdpm.id
              FROM salary_data_point_members sdpm
-             JOIN salary_data_points dp ON dp.id = sdpm.data_point_id
              WHERE sdpm.member_id = ?1
-               AND dp.id < ?2
-               AND sdpm.is_active = 1
-             ORDER BY dp.id DESC
-             LIMIT 1",
-            params![member_id, data_point_id],
+               AND sdpm.data_point_id = ?2
+               AND sdpm.is_active = 1",
+            params![member_id, prev_dp_id],
             |row| row.get(0),
         )
         .ok();
@@ -1568,9 +1626,22 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
     if collect_statuses {
         let mut member_stmt = conn
             .prepare(
-                "SELECT m.id, m.first_name, m.last_name, t.name, m.exclude_from_salary
+                "SELECT m.id, m.first_name, m.last_name,
+                        COALESCE(pt.name, t.name) as current_title,
+                        m.exclude_from_salary
                  FROM team_members m
                  LEFT JOIN titles t ON t.id = m.title_id
+                 LEFT JOIN (
+                     SELECT sdpm.member_id, sdpm.promoted_title_id
+                     FROM salary_data_point_members sdpm
+                     INNER JOIN (
+                         SELECT member_id, MAX(data_point_id) as max_dp_id
+                         FROM salary_data_point_members
+                         WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                         GROUP BY member_id
+                     ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+                 ) promo ON promo.member_id = m.id
+                 LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
                  ORDER BY m.last_name ASC, m.first_name ASC",
             )
             .map_err(|e| e.to_string())?;
