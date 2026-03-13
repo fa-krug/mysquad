@@ -5,9 +5,10 @@ import { getSetting } from "@/lib/db";
 interface UseAutoLockOptions {
   onLock: () => void;
   enabled: boolean;
+  requireAuth: boolean;
 }
 
-export function useAutoLock({ onLock, enabled }: UseAutoLockOptions) {
+export function useAutoLock({ onLock, enabled, requireAuth }: UseAutoLockOptions) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onLockRef = useRef(onLock);
   useEffect(() => {
@@ -39,7 +40,7 @@ export function useAutoLock({ onLock, enabled }: UseAutoLockOptions) {
   }, [clearIdleTimer]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !requireAuth) return;
 
     const handleBlur = () => startIdleTimer();
     const handleFocus = () => clearIdleTimer();
@@ -57,5 +58,5 @@ export function useAutoLock({ onLock, enabled }: UseAutoLockOptions) {
       clearIdleTimer();
       unlisteners.forEach((u) => u());
     };
-  }, [enabled, startIdleTimer, clearIdleTimer]);
+  }, [enabled, requireAuth, startIdleTimer, clearIdleTimer]);
 }
