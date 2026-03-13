@@ -196,6 +196,14 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
         onSave={makeOnSave("start_date")}
       />
 
+      {/* Leave date */}
+      <AutoSaveDatePicker
+        key={`left_date-${member.id}`}
+        label="Leave Date"
+        initialValue={member.left_date}
+        onSave={makeOnSave("left_date")}
+      />
+
       {/* Personal email */}
       <AutoSaveInput
         key={`personal_email-${member.id}`}
