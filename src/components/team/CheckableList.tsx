@@ -3,6 +3,7 @@ import { ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { useVirtualList } from "@/hooks/useVirtualList";
 import type { BaseCheckableItem } from "@/lib/types";
 
 interface CheckableListProps {
@@ -148,6 +149,11 @@ export function CheckableList({
   const totalChecked = items.filter((i) => i.checked).length;
   const showCompleted = completedOpen || !!query;
 
+  const { scrollRef, shouldVirtualize, totalSize, virtualItems } = useVirtualList({
+    count: unchecked.length,
+    estimateSize: 32,
+  });
+
   const handleStartFilter = () => {
     setFiltering(true);
     setFilterText("");
@@ -234,15 +240,39 @@ export function CheckableList({
         </div>
       )}
 
-      {unchecked.map((item) => (
-        <ItemRow
-          key={item.id}
-          item={item}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          onItemsChange={handleItemsUpdater}
-        />
-      ))}
+      {shouldVirtualize ? (
+        <div ref={scrollRef} className="overflow-y-auto max-h-64">
+          <div className="relative" style={{ height: totalSize }}>
+            {virtualItems.map((virtualRow) => {
+              const item = unchecked[virtualRow.index];
+              return (
+                <div
+                  key={item.id}
+                  className="absolute left-0 w-full"
+                  style={{ top: virtualRow.start, height: virtualRow.size }}
+                >
+                  <ItemRow
+                    item={item}
+                    onUpdate={onUpdate}
+                    onDelete={onDelete}
+                    onItemsChange={handleItemsUpdater}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        unchecked.map((item) => (
+          <ItemRow
+            key={item.id}
+            item={item}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            onItemsChange={handleItemsUpdater}
+          />
+        ))
+      )}
 
       {/* Completed items — collapsible */}
       {totalChecked > 0 && (
