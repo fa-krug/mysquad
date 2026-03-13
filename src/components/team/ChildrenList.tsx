@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { memo, useEffect, useState, useCallback } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ interface ChildRowProps {
   onUpdate: (id: number, name: string, dob: string | null) => Promise<void>;
 }
 
-function ChildRow({ child, onDelete, onUpdate }: ChildRowProps) {
+const ChildRow = memo(function ChildRow({ child, onDelete, onUpdate }: ChildRowProps) {
   const [name, setName] = useState(child.name);
   const [dob, setDob] = useState(child.date_of_birth ?? "");
 
@@ -68,7 +68,7 @@ function ChildRow({ child, onDelete, onUpdate }: ChildRowProps) {
       </Button>
     </div>
   );
-}
+});
 
 export function ChildrenList({ teamMemberId }: ChildrenListProps) {
   const [children, setChildren] = useState<Child[]>([]);
@@ -101,19 +101,19 @@ export function ChildrenList({ teamMemberId }: ChildrenListProps) {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     try {
       await deleteChild(id);
       setChildren((prev) => prev.filter((c) => c.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  };
+  }, []);
 
-  const handleUpdate = async (id: number, name: string, dob: string | null) => {
+  const handleUpdate = useCallback(async (id: number, name: string, dob: string | null) => {
     await updateChild(id, name, dob);
     setChildren((prev) => prev.map((c) => (c.id === id ? { ...c, name, date_of_birth: dob } : c)));
-  };
+  }, []);
 
   if (loading) {
     return <div className="text-sm text-muted-foreground py-2">Loading…</div>;
@@ -136,7 +136,7 @@ export function ChildrenList({ teamMemberId }: ChildrenListProps) {
         <div className="flex flex-col">
           {children.map((child) => (
             <ChildRow
-              key={`${child.id}-${child.name}-${child.date_of_birth}`}
+              key={child.id}
               child={child}
               onDelete={handleDelete}
               onUpdate={handleUpdate}
