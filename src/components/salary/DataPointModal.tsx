@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import {
   updateSalaryDataPoint,
   updateSalaryDataPointMember,
@@ -20,18 +21,30 @@ import {
   getSalaryDataPoint,
   exportDataPointSalaries,
   importDataPointSalaries,
+  createScenarioGroup,
+  updateScenarioGroup,
+  updateScenarioGroupRange,
+  addScenario,
+  removeScenario,
 } from "@/lib/db";
 import { save, open as openFile } from "@tauri-apps/plugin-dialog";
-import type { SalaryDataPointDetail, SalaryDataPointSummary, Title } from "@/lib/types";
+import type {
+  SalaryDataPointDetail,
+  SalaryDataPointSummary,
+  SalaryListItem,
+  ScenarioGroup,
+  Title,
+} from "@/lib/types";
 
 interface DataPointModalProps {
   dataPointId: number | null;
   titles: Title[];
-  dataPoints: SalaryDataPointSummary[];
+  dataPoints: SalaryListItem[];
   isNew: boolean;
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  editingGroup: ScenarioGroup | null;
 }
 
 export function DataPointModal({
@@ -42,6 +55,7 @@ export function DataPointModal({
   open,
   onClose,
   onSaved,
+  editingGroup,
 }: DataPointModalProps) {
   const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
   const [name, setName] = useState("");
@@ -54,9 +68,17 @@ export function DataPointModal({
   const [saving, setSaving] = useState(false);
   const [salaryMessage, setSalaryMessage] = useState<string | null>(null);
   const [salaryError, setSalaryError] = useState(false);
+  const [isScenario, setIsScenario] = useState(false);
+  const [scenarioCount, setScenarioCount] = useState(2);
 
-  // Other data points available as "previous" (exclude current)
-  const otherDataPoints = dataPoints.filter((dp) => dp.id !== dataPointId);
+  // Extract normal data points from SalaryListItem[] for the "Compare to" dropdown
+  const normalDataPoints = dataPoints
+    .filter(
+      (item): item is { type: "data_point"; data_point: SalaryDataPointSummary } =>
+        item.type === "data_point",
+    )
+    .map((item) => item.data_point);
+  const otherDataPoints = normalDataPoints.filter((dp) => dp.id !== dataPointId);
 
   function applyDetail(d: SalaryDataPointDetail) {
     setDetail(d);
@@ -106,6 +128,15 @@ export function DataPointModal({
       }
     });
   }, [open, dataPointId]);
+
+  useEffect(() => {
+    if (!open || !editingGroup) return;
+    setName(editingGroup.name);
+    setBudget(editingGroup.budget != null ? String(Math.round(editingGroup.budget / 100)) : "");
+    // Load ranges for the group - they'll come from the first child's detail if we need them
+    // For now, just reset ranges (group ranges are managed via the group commands)
+    setRanges({});
+  }, [open, editingGroup]);
 
   async function handlePreviousChange(newPrevId: string) {
     setPreviousDpId(newPrevId);
@@ -185,7 +216,48 @@ export function DataPointModal({
     }
   }
 
+  async function handleGroupSave() {
+    if (!editingGroup) return;
+    setSaving(true);
+    try {
+      if (name !== editingGroup.name) {
+        await updateScenarioGroup(editingGroup.id, "name", name);
+      }
+      const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
+      const oldBudget = editingGroup.budget != null ? String(editingGroup.budget) : null;
+      if (budgetCents !== oldBudget) {
+        await updateScenarioGroup(editingGroup.id, "budget", budgetCents);
+      }
+      for (const title of titles) {
+        const r = ranges[title.id];
+        if (!r) continue;
+        const minCents = r.min === "" ? 0 : Math.round(parseFloat(r.min) * 100);
+        const maxCents = r.max === "" ? 0 : Math.round(parseFloat(r.max) * 100);
+        if (minCents > 0 || maxCents > 0) {
+          await updateScenarioGroupRange(editingGroup.id, title.id, minCents, maxCents);
+        }
+      }
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSave() {
+    // Handle new scenario group creation (pure create mode, no pre-created data point)
+    if (isNew && !editingGroup && !dataPointId && isScenario) {
+      setSaving(true);
+      try {
+        await createScenarioGroup(previousDpId ? Number(previousDpId) : null, scenarioCount);
+        onSaved();
+        onClose();
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     if (!detail) return;
     setSaving(true);
     try {
@@ -239,6 +311,115 @@ export function DataPointModal({
     }
   }
 
+  if (editingGroup) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle>Edit Scenario Group</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1 pr-4">
+            <div className="flex flex-col gap-4 py-2">
+              <div className="flex flex-col gap-1.5">
+                <Label>Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Budget</Label>
+                <MoneyInput
+                  min="0"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  placeholder="Annual budget"
+                />
+              </div>
+              <Separator />
+              <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
+              {titles.map((title) => (
+                <div key={title.id} className="flex items-center gap-2">
+                  <span className="flex-1 min-w-0 truncate text-sm" title={title.name}>
+                    {title.name}
+                  </span>
+                  <MoneyInput
+                    min="0"
+                    className="w-24 sm:w-32"
+                    placeholder="Min"
+                    value={ranges[title.id]?.min ?? ""}
+                    onChange={(e) =>
+                      setRanges((prev) => ({
+                        ...prev,
+                        [title.id]: {
+                          ...prev[title.id],
+                          min: e.target.value,
+                          max: prev[title.id]?.max ?? "",
+                        },
+                      }))
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <MoneyInput
+                    min="0"
+                    className="w-24 sm:w-32"
+                    placeholder="Max"
+                    value={ranges[title.id]?.max ?? ""}
+                    onChange={(e) =>
+                      setRanges((prev) => ({
+                        ...prev,
+                        [title.id]: { min: prev[title.id]?.min ?? "", max: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+              <Separator />
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">
+                  Scenarios ({editingGroup.children.length})
+                </h3>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={editingGroup.children.length <= 2}
+                    onClick={async () => {
+                      if (editingGroup.children.length <= 2) return;
+                      const lastChild = editingGroup.children[editingGroup.children.length - 1];
+                      await removeScenario(lastChild.id);
+                      onSaved();
+                    }}
+                  >
+                    −
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await addScenario(editingGroup.id);
+                      onSaved();
+                    }}
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {editingGroup.children.map((c) => c.name).join(", ")}
+              </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleGroupSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (!detail) return null;
 
   return (
@@ -277,6 +458,27 @@ export function DataPointModal({
                 placeholder="Annual budget"
               />
             </div>
+
+            {isNew && !editingGroup && (
+              <>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <Label>Create as Scenario Group</Label>
+                  <Switch checked={isScenario} onCheckedChange={setIsScenario} />
+                </div>
+                {isScenario && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Number of Scenarios</Label>
+                    <Input
+                      type="number"
+                      min={2}
+                      value={scenarioCount}
+                      onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
+                    />
+                  </div>
+                )}
+              </>
+            )}
 
             <Separator />
             <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
