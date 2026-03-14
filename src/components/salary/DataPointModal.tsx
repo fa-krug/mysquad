@@ -134,9 +134,21 @@ export function DataPointModal({
     if (!open || !editingGroup) return;
     setName(editingGroup.name);
     setBudget(editingGroup.budget != null ? String(Math.round(editingGroup.budget / 100)) : "");
-    // Load ranges for the group - they'll come from the first child's detail if we need them
-    // For now, just reset ranges (group ranges are managed via the group commands)
-    setRanges({});
+    // Load group ranges from first child's detail (get_salary_data_point returns group ranges for scenario children)
+    if (editingGroup.children.length > 0) {
+      getSalaryDataPoint(editingGroup.children[0].id).then((d) => {
+        const rangeMap: Record<number, { min: string; max: string }> = {};
+        d.ranges.forEach((r) => {
+          rangeMap[r.title_id] = {
+            min: String(Math.round(r.min_salary / 100)),
+            max: String(Math.round(r.max_salary / 100)),
+          };
+        });
+        setRanges(rangeMap);
+      });
+    } else {
+      setRanges({});
+    }
   }, [open, editingGroup]);
 
   async function handlePreviousChange(newPrevId: string) {
@@ -374,6 +386,7 @@ export function DataPointModal({
                       const lastChild = editingGroup.children[editingGroup.children.length - 1];
                       await removeScenario(lastChild.id);
                       onSaved();
+                      onClose();
                     }}
                   >
                     −
@@ -384,6 +397,7 @@ export function DataPointModal({
                     onClick={async () => {
                       await addScenario(editingGroup.id);
                       onSaved();
+                      onClose();
                     }}
                   >
                     +
@@ -442,53 +456,75 @@ export function DataPointModal({
             <DialogTitle>New Data Point</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-2">
-            <div className="flex flex-col gap-1.5">
-              <Label>Name</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Data point name"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Compare to</Label>
-              <select
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                value={previousDpId}
-                onChange={(e) => setPreviousDpId(e.target.value)}
-              >
-                <option value="">None</option>
-                {otherDataPoints.map((dp) => (
-                  <option key={dp.id} value={String(dp.id)}>
-                    {dp.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Budget</Label>
-              <MoneyInput
-                min="0"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder="Annual budget"
-              />
-            </div>
-            <Separator />
             <div className="flex items-center justify-between">
               <Label>Create as Scenario Group</Label>
               <Switch checked={isScenario} onCheckedChange={setIsScenario} />
             </div>
-            {isScenario && (
-              <div className="flex flex-col gap-1.5">
-                <Label>Number of Scenarios</Label>
-                <Input
-                  type="number"
-                  min={2}
-                  value={scenarioCount}
-                  onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
-                />
-              </div>
+            {isScenario ? (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Branch from</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                    value={previousDpId}
+                    onChange={(e) => setPreviousDpId(e.target.value)}
+                  >
+                    <option value="">None (empty scenarios)</option>
+                    {otherDataPoints.map((dp) => (
+                      <option key={dp.id} value={String(dp.id)}>
+                        {dp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Number of Scenarios</Label>
+                  <Input
+                    type="number"
+                    min={2}
+                    value={scenarioCount}
+                    onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Name and budget are auto-generated. You can edit them after creation.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Name</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Data point name"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Compare to</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                    value={previousDpId}
+                    onChange={(e) => setPreviousDpId(e.target.value)}
+                  >
+                    <option value="">None</option>
+                    {otherDataPoints.map((dp) => (
+                      <option key={dp.id} value={String(dp.id)}>
+                        {dp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Budget</Label>
+                  <MoneyInput
+                    min="0"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    placeholder="Annual budget"
+                  />
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
