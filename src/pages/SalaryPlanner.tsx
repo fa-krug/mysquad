@@ -414,7 +414,7 @@ export function SalaryPlanner() {
               </div>
             </div>
             <div className="px-6 pb-6 space-y-6">
-              {detail.scenario_group_id && scenarioSummaries.length > 0 && (
+              {!anyPresented && detail.scenario_group_id && scenarioSummaries.length > 0 && (
                 <ScenarioComparisonTable
                   summaries={scenarioSummaries}
                   currentDataPointId={detail.id}
