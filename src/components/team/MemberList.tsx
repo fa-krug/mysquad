@@ -102,7 +102,7 @@ export function MemberList({
     }
   };
 
-  const renderTreeRow = (row: TreeRow) => {
+  const renderTreeRow = (row: TreeRow, style?: React.CSSProperties) => {
     const { member, depth, hasChildren, isExpanded } = row;
     const paddingLeft = 8 + Math.min(depth, 4) * 12;
 
@@ -112,7 +112,7 @@ export function MemberList({
         className={`group relative flex items-center gap-2 py-2 cursor-pointer hover:bg-muted/50 ${
           selectedId === member.id ? "bg-muted" : ""
         }`}
-        style={{ paddingLeft, paddingRight: 8 }}
+        style={{ paddingLeft, paddingRight: 8, ...style }}
         onClick={() => onSelect(member.id)}
         onMouseEnter={() => setHoveredId(member.id)}
         onMouseLeave={() => setHoveredId(null)}
@@ -271,91 +271,13 @@ export function MemberList({
             >
               {virtualItems.map((virtualRow) => {
                 const row = visibleRows[virtualRow.index];
-                const { member, depth, hasChildren, isExpanded } = row;
-                const paddingLeft = 8 + Math.min(depth, 4) * 12;
-
-                return (
-                  <li
-                    key={member.id}
-                    className={`group absolute flex items-center gap-2 py-2 cursor-pointer hover:bg-muted/50 ${
-                      selectedId === member.id ? "bg-muted" : ""
-                    }`}
-                    style={{
-                      top: virtualRow.start,
-                      height: virtualRow.size,
-                      left: 0,
-                      width: "100%",
-                      paddingLeft,
-                      paddingRight: 8,
-                    }}
-                    onClick={() => onSelect(member.id)}
-                    onMouseEnter={() => setHoveredId(member.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                  >
-                    {/* Tree connector line for non-root rows */}
-                    {depth > 0 && (
-                      <div
-                        className="absolute border-l border-b border-border/40"
-                        style={{
-                          left: 8 + Math.min(depth - 1, 3) * 12 + 6,
-                          top: 0,
-                          bottom: "50%",
-                          width: 8,
-                        }}
-                      />
-                    )}
-
-                    {/* Chevron toggle or spacer */}
-                    {hasChildren ? (
-                      <button
-                        className="shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCollapse(member.id);
-                        }}
-                        tabIndex={-1}
-                      >
-                        <ChevronRight
-                          className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                        />
-                      </button>
-                    ) : (
-                      <span className="shrink-0 w-4" />
-                    )}
-
-                    <MemberAvatar
-                      firstName={member.first_name}
-                      lastName={member.last_name}
-                      picturePath={member.picture_path}
-                      picturesDir={picturesDir}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {member.last_name}, {member.first_name}
-                      </div>
-                      {member.current_title_name && (
-                        <div className="text-xs text-muted-foreground truncate">
-                          {member.current_title_name}
-                        </div>
-                      )}
-                    </div>
-
-                    {hoveredId === member.id && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(member.id);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </li>
-                );
+                return renderTreeRow(row, {
+                  position: "absolute",
+                  top: virtualRow.start,
+                  height: virtualRow.size,
+                  left: 0,
+                  width: "100%",
+                });
               })}
             </ul>
 
