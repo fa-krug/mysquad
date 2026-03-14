@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { getSetting, setSetting, setConfig, exportData, importData } from "@/lib/db";
 import { save, open } from "@tauri-apps/plugin-dialog";
 
@@ -8,6 +9,7 @@ interface SettingsPageProps {
   requireAuth: boolean;
   onRequireAuthChange: (value: boolean) => void;
   onShowWelcome?: () => void;
+  onCheckForUpdate: (options?: { silent?: boolean }) => Promise<boolean>;
 }
 
 const AUTO_LOCK_OPTIONS = [
@@ -23,6 +25,7 @@ export function SettingsPage({
   requireAuth,
   onRequireAuthChange,
   onShowWelcome,
+  onCheckForUpdate,
 }: SettingsPageProps) {
   const [autoLockTimeout, setAutoLockTimeout] = useState<string>("60");
   const [autoLockError, setAutoLockError] = useState<string | null>(null);
@@ -35,6 +38,14 @@ export function SettingsPage({
   const [exportImportError, setExportImportError] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importFilePath, setImportFilePath] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("");
+  const [checking, setChecking] = useState(false);
+  const [upToDate, setUpToDate] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion);
+  }, []);
 
   useEffect(() => {
     getSetting("auto_lock_timeout")
@@ -88,6 +99,23 @@ export function SettingsPage({
       await setSetting("theme", value);
     } catch {
       // Best effort — theme already applied in memory
+    }
+  }
+
+  async function handleCheckForUpdate() {
+    setChecking(true);
+    setUpToDate(false);
+    setCheckError(null);
+    try {
+      const found = await onCheckForUpdate();
+      if (!found) {
+        setUpToDate(true);
+        setTimeout(() => setUpToDate(false), 3000);
+      }
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -306,6 +334,23 @@ export function SettingsPage({
             </div>
           </div>
         )}
+
+        {/* About */}
+        <div className="space-y-1.5">
+          <h2 className="text-sm font-medium">About</h2>
+          <p className="text-xs text-muted-foreground">MySquad v{appVersion}</p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={handleCheckForUpdate}
+              disabled={checking}
+              className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {checking ? "Checking..." : "Check for Updates"}
+            </button>
+            {upToDate && <span className="text-sm text-green-600">You're up to date</span>}
+            {checkError && <span className="text-sm text-destructive">{checkError}</span>}
+          </div>
+        </div>
       </div>
     </div>
   );
