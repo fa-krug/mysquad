@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
+import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
   AlertDialog,
@@ -26,6 +27,12 @@ interface UpdateDialogProps {
 }
 
 export function UpdateDialog({ state, onDismiss, onStateChange }: UpdateDialogProps) {
+  const [currentVersion, setCurrentVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setCurrentVersion);
+  }, []);
+
   if (!state) return null;
 
   async function handleUpdate(update: Update) {
@@ -77,7 +84,8 @@ export function UpdateDialog({ state, onDismiss, onStateChange }: UpdateDialogPr
             <AlertDialogHeader>
               <AlertDialogTitle>Update Available</AlertDialogTitle>
               <AlertDialogDescription>
-                Version {state.update.version} is available.
+                Version {state.update.version} is available
+                {currentVersion ? ` (you have ${currentVersion})` : ""}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {state.update.body && (
