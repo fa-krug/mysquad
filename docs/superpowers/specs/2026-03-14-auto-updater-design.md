@@ -18,7 +18,8 @@ No new Rust commands needed — the plugin's JS bindings handle everything from 
 
 ### On launch (after unlock)
 
-1. App calls `check()` from `@tauri-apps/plugin-updater`
+1. Guard: only run in the main window (`getCurrent().label === 'main'`), skip in secondary windows
+2. App calls `check()` from `@tauri-apps/plugin-updater`
 2. Plugin fetches `latest.json` from GitHub Releases, compares versions
 3. If no update — nothing happens, silent
 4. If update available — show modal dialog with:
@@ -27,7 +28,13 @@ No new Rust commands needed — the plugin's JS bindings handle everything from 
    - Release notes body (from `update.body`)
    - Two buttons: **"Update Now"** and **"Later"**
 5. "Later" — dismiss, continue using the app normally
-6. "Update Now" — show progress bar while downloading, install, prompt to relaunch
+6. "Update Now" → transition to **Downloading** state:
+   - Show progress bar with percentage (via `downloadAndInstall` progress callback)
+   - Dialog is not dismissable during download
+7. Download + install completes → transition to **Ready to Relaunch** state:
+   - Message: "Update installed successfully"
+   - Single button: **"Relaunch Now"**
+   - Clicking calls `relaunch()` from `@tauri-apps/plugin-process`
 
 ### From Settings ("Check for Updates" button)
 
@@ -40,10 +47,11 @@ Same flow as above, except if no update is found, show a brief "You're up to dat
 
 ## Update Dialog Component
 
-New `UpdateDialog` component using the existing `AlertDialog` from shadcn/ui. Three states:
+New `UpdateDialog` component using the existing `AlertDialog` from shadcn/ui. Four states:
 
 - **Update available** — Version comparison, scrollable release notes area, "Update Now" and "Later" buttons
 - **Downloading** — Progress bar with percentage, dialog not dismissable
+- **Ready to relaunch** — "Update installed successfully" message with "Relaunch Now" button
 - **Error** — Error message with "Retry" and "Cancel" buttons
 
 Location: `src/components/layout/UpdateDialog.tsx` (alongside AppLayout, Sidebar, LockScreen).
@@ -60,8 +68,9 @@ New "About" section at the bottom of Settings page:
 
 ### Rust (src-tauri/Cargo.toml)
 
+Add under `[dependencies]` (consistent with existing dependency style — no mobile-exclusion gate needed since this app targets desktop only):
+
 ```toml
-[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 ```
@@ -75,11 +84,19 @@ tauri-plugin-process = "2"
 
 ### Plugin registration (src-tauri/src/lib.rs)
 
-Register both plugins in the Tauri builder:
+Register `tauri-plugin-process` as a `.plugin()` call on the builder chain (like existing `tauri_plugin_dialog::init()`). Register `tauri-plugin-updater` inside the existing `.setup()` block via `app.handle().plugin()` — the updater uses a Builder pattern that requires this:
 
 ```rust
-app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
-app.handle().plugin(tauri_plugin_process::init())?;
+tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_process::init())
+    // ...
+    .setup(|app| {
+        #[cfg(desktop)]
+        app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+        // ... existing menu setup code ...
+        Ok(())
+    })
 ```
 
 ## Configuration
@@ -108,6 +125,8 @@ Add to the existing permissions array:
 "process:allow-restart"
 ```
 
+The capabilities are scoped to `"windows": ["main"]`. Update checks will only work from the primary window. Secondary windows (opened via Cmd+N) do not need update capabilities since the check is triggered once on unlock in the main window.
+
 ## CI/CD & Signing
 
 ### Key generation
@@ -126,20 +145,29 @@ tauri signer generate -w ~/.tauri/myapp.key
 ### Workflow changes (.github/workflows/release.yml)
 
 1. Add `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as env vars during the build step
-2. Tauri automatically generates signed update bundles (`.tar.gz` on macOS, `.nsis.zip` on Windows) and `latest.json` when these env vars are present
-3. Upload `latest.json` as an additional release asset via `@semantic-release/github`
-4. Add the update bundle artifacts to the semantic-release assets list
+2. Tauri automatically generates signed update bundles and per-platform `latest.json` when these env vars are present:
+   - macOS: `.app.tar.gz` + `.app.tar.gz.sig` + `latest.json`
+   - Windows: `.nsis.zip` + `.nsis.zip.sig` + `latest.json`
+3. Add a post-build step to merge the per-platform `latest.json` files into a single manifest. Each platform's `latest.json` contains a `platforms` object keyed by target triple (e.g., `darwin-aarch64`, `windows-x86_64`). The merge script combines these into one `latest.json` with all platform entries.
+4. Expand the `upload-artifact` step in each platform build job to include update bundle directories (macOS: `src-tauri/target/release/bundle/macos/*.tar.gz*`, Windows: `src-tauri/target/release/bundle/nsis/*.nsis.zip*`) alongside the existing DMG/NSIS paths, plus each platform's `latest.json`
+5. In the release job, upload the merged `latest.json` and all update bundles (`.app.tar.gz`, `.app.tar.gz.sig`, `.nsis.zip`, `.nsis.zip.sig`) as release assets via `@semantic-release/github`
+
+### macOS code signing note
+
+The ed25519 signature is for the Tauri updater's own verification. If the app is distributed with macOS code signing (e.g., Developer ID), the update bundle must also be code-signed separately. This is handled by the existing Tauri build process when `APPLE_SIGNING_IDENTITY` and related env vars are set in CI. This spec does not add macOS code signing — it is a separate concern.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | `src-tauri/Cargo.toml` | Add `tauri-plugin-updater` and `tauri-plugin-process` dependencies |
+| `Cargo.lock` | Auto-updated by cargo |
 | `package.json` | Add `@tauri-apps/plugin-updater` and `@tauri-apps/plugin-process` |
-| `src-tauri/src/lib.rs` | Register updater and process plugins |
+| `package-lock.json` | Auto-updated by npm |
+| `src-tauri/src/lib.rs` | Register updater and process plugins on builder chain |
 | `src-tauri/tauri.conf.json` | Add updater plugin config (pubkey, endpoints) |
 | `src-tauri/capabilities/default.json` | Add `updater:default` and `process:allow-restart` permissions |
-| `src/components/layout/UpdateDialog.tsx` | New — modal dialog for update available/downloading/error states |
+| `src/components/layout/UpdateDialog.tsx` | New — modal dialog for update available/downloading/relaunch/error states |
 | `src/pages/Settings.tsx` | Add "About" section with version display and "Check for Updates" button |
-| `src/App.tsx` (or wherever post-unlock init lives) | Trigger update check after unlock |
-| `.github/workflows/release.yml` | Add signing env vars, upload `latest.json` and update bundles |
+| `src/App.tsx` | Trigger update check in `useEffect` when `unlocked` transitions to `true`, guarded by window label check (`getCurrent().label === 'main'`) to avoid errors in secondary windows |
+| `.github/workflows/release.yml` | Add signing env vars, merge `latest.json`, upload update bundles |
