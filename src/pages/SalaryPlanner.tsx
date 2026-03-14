@@ -21,7 +21,10 @@ import {
   promoteScenario,
   getScenarioSummaries,
   getScenarioMemberComparison,
+  updateSalaryDataPointMember,
 } from "@/lib/db";
+import { EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/lib/toast";
 import type {
   SalaryListItem,
@@ -290,12 +293,19 @@ export function SalaryPlanner() {
     if (selectedId) loadDetailOnly(selectedId);
   }, [selectedId, loadDetailOnly]);
 
+  const handleTogglePresented = useCallback(
+    async (id: number, value: boolean) => {
+      await updateSalaryDataPointMember(id, "is_presented", value ? "1" : "0");
+      if (selectedId) await loadDetailOnly(selectedId);
+    },
+    [selectedId, loadDetailOnly],
+  );
+
   async function handleModalSaved() {
     await loadDataPoints();
     if (selectedId) await loadDetail(selectedId);
   }
 
-  const activeMembers = useMemo(() => detail?.members.filter((m) => m.is_active) ?? [], [detail]);
   const sortedMembers = useMemo(
     () =>
       detail?.members
@@ -303,6 +313,35 @@ export function SalaryPlanner() {
         .sort((a, b) => (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1)) ?? [],
     [detail],
   );
+
+  const anyPresented = useMemo(
+    () => detail?.members.some((m) => m.is_presented) ?? false,
+    [detail],
+  );
+  const presentedMembers = useMemo(
+    () => (anyPresented ? sortedMembers.filter((m) => m.is_presented) : sortedMembers),
+    [sortedMembers, anyPresented],
+  );
+
+  const filteredDetail = useMemo(() => {
+    if (!detail) return null;
+    if (!anyPresented) return detail;
+    return { ...detail, members: detail.members.filter((m) => m.is_presented) };
+  }, [detail, anyPresented]);
+
+  const filteredPreviousData = useMemo(() => {
+    if (!anyPresented) return previousData;
+    const visibleMemberIds = new Set(presentedMembers.map((m) => m.member_id));
+    return Object.fromEntries(
+      Object.entries(previousData).filter(([id]) => visibleMemberIds.has(Number(id))),
+    );
+  }, [previousData, presentedMembers, anyPresented]);
+
+  const activeMembers = useMemo(
+    () => (filteredDetail?.members ?? []).filter((m) => m.is_active),
+    [filteredDetail],
+  );
+
   const visibleItems = useMemo(
     () =>
       listItems.filter((item) => {
@@ -313,9 +352,9 @@ export function SalaryPlanner() {
   );
 
   const previousTotal = useMemo(() => {
-    if (!previousData || Object.keys(previousData).length === 0) return null;
+    if (!filteredPreviousData || Object.keys(filteredPreviousData).length === 0) return null;
     let total = 0;
-    for (const parts of Object.values(previousData)) {
+    for (const parts of Object.values(filteredPreviousData)) {
       if (parts) {
         for (const p of parts) {
           total += p.amount * p.frequency;
@@ -323,7 +362,7 @@ export function SalaryPlanner() {
       }
     }
     return total;
-  }, [previousData]);
+  }, [filteredPreviousData]);
 
   return (
     <div className="flex h-full">
@@ -353,7 +392,26 @@ export function SalaryPlanner() {
         ) : (
           <>
             <div className="sticky top-0 z-10 bg-background px-6 pt-6 pb-2">
-              <h1 className="text-2xl font-bold">{detail.name}</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold">{detail.name}</h1>
+                {anyPresented && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await Promise.all(
+                        detail.members
+                          .filter((m) => m.is_presented)
+                          .map((m) => updateSalaryDataPointMember(m.id, "is_presented", "0")),
+                      );
+                      await loadDetailOnly(selectedId!);
+                    }}
+                  >
+                    <EyeOff className="h-4 w-4 mr-1" />
+                    Clear presentation
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="px-6 pb-6 space-y-6">
               {detail.scenario_group_id && scenarioSummaries.length > 0 && (
@@ -362,15 +420,16 @@ export function SalaryPlanner() {
                   currentDataPointId={detail.id}
                   budget={detail.budget}
                   previousTotal={previousTotal}
+                  anyPresented={anyPresented}
                 />
               )}
               <div className="flex flex-col 2xl:flex-row gap-6">
                 {/* Member salary cards */}
                 <div className="max-w-2xl min-w-0 2xl:flex-1 space-y-6">
-                  {sortedMembers.length === 0 ? (
+                  {presentedMembers.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No members in this data point.</p>
                   ) : (
-                    sortedMembers.map((member) => (
+                    presentedMembers.map((member) => (
                       <MemberSalaryCard
                         key={member.id}
                         member={member}
@@ -378,6 +437,8 @@ export function SalaryPlanner() {
                         onAddPart={handleAddPart}
                         onDeletePart={handleDeletePart}
                         onChanged={handlePartChanged}
+                        anyPresented={anyPresented}
+                        onTogglePresented={handleTogglePresented}
                         scenarioComparison={
                           detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
                         }
@@ -390,7 +451,11 @@ export function SalaryPlanner() {
                 {activeMembers.length > 0 && (
                   <div className="max-w-2xl min-w-0 2xl:flex-1 2xl:sticky 2xl:top-0 2xl:self-start space-y-6">
                     <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
-                      <SalaryAnalytics detail={detail} previousData={previousData} />
+                      <SalaryAnalytics
+                        detail={filteredDetail!}
+                        previousData={filteredPreviousData}
+                        anyPresented={anyPresented}
+                      />
                     </Suspense>
                   </div>
                 )}
