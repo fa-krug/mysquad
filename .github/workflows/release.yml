@@ -86,6 +86,7 @@ jobs:
         run: bash src-tauri/scripts/inject-icon.sh
 
       - name: List bundle output
+        shell: bash
         run: find src-tauri/target/release/bundle -type f | head -50
 
       - name: Upload artifacts
@@ -100,8 +101,8 @@ jobs:
         with:
           name: updater-macos
           path: |
-            src-tauri/target/release/bundle/macos/*.sig
-            src-tauri/target/release/bundle/dmg/*.sig
+            src-tauri/target/release/bundle/macos/*.tar.gz
+            src-tauri/target/release/bundle/macos/*.tar.gz.sig
 
       - name: Upload updater artifacts (Windows)
         if: runner.os == 'Windows'
