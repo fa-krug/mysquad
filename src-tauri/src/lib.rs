@@ -17,8 +17,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_sharekit::init())
+        .plugin(tauri_plugin_process::init())
         .manage(AppDb::new())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             let new_window = MenuItemBuilder::new("New Window")
                 .id("new_window")
                 .accelerator("CmdOrCtrl+N")
