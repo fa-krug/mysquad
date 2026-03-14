@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Plus, Star, UserX } from "lucide-react";
+import { Eye, Plus, Star, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
@@ -19,6 +19,8 @@ interface MemberSalaryCardProps {
   onAddPart: (dataPointMemberId: number) => void;
   onDeletePart: (partId: number) => void;
   onChanged: () => void;
+  anyPresented: boolean;
+  onTogglePresented: (id: number, value: boolean) => void;
   scenarioComparison?: ScenarioMemberComparison[];
 }
 
@@ -28,6 +30,8 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onAddPart,
   onDeletePart,
   onChanged,
+  anyPresented,
+  onTogglePresented,
   scenarioComparison,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
@@ -35,7 +39,12 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   const fit = rangeFitColor(total, range);
 
   return (
-    <div className={cn("rounded-lg border border-border p-4", !member.is_active && "opacity-60")}>
+    <div
+      className={cn(
+        "group/card rounded-lg border border-border p-4",
+        !member.is_active && "opacity-60",
+      )}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold">
@@ -56,6 +65,22 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
               <Star className="h-3 w-3" /> Promoted
             </span>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-6 w-6 p-0",
+              member.is_presented
+                ? "text-blue-600"
+                : "text-muted-foreground opacity-0 group-hover/card:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePresented(member.id, !member.is_presented);
+            }}
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </Button>
         </div>
         <div className={cn("text-sm font-semibold", fitColors[fit])}>
           {formatCents(total)}/yr
@@ -99,7 +124,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
       >
         <Plus className="h-3.5 w-3.5 mr-1" /> Add Part
       </Button>
-      {scenarioComparison && scenarioComparison.length > 0 && (
+      {!anyPresented && scenarioComparison && scenarioComparison.length > 0 && (
         <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/50">
           <div className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">
             Scenario comparison
