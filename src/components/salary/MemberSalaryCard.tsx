@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
 import { cn } from "@/lib/utils";
-import type { SalaryDataPointMember, SalaryRange } from "@/lib/types";
+import type { SalaryDataPointMember, SalaryRange, ScenarioMemberComparison } from "@/lib/types";
 
 const fitColors: Record<string, string> = {
   green: "text-green-600",
@@ -19,6 +19,7 @@ interface MemberSalaryCardProps {
   onAddPart: (dataPointMemberId: number) => void;
   onDeletePart: (partId: number) => void;
   onChanged: () => void;
+  scenarioComparison?: ScenarioMemberComparison[];
 }
 
 export const MemberSalaryCard = memo(function MemberSalaryCard({
@@ -27,6 +28,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onAddPart,
   onDeletePart,
   onChanged,
+  scenarioComparison,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
   const range = getRangeForMember(member, ranges);
@@ -97,6 +99,21 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
       >
         <Plus className="h-3.5 w-3.5 mr-1" /> Add Part
       </Button>
+      {scenarioComparison && scenarioComparison.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/50">
+          <div className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">
+            Scenario comparison
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            {scenarioComparison.map((sc) => (
+              <div key={sc.data_point_id} className="flex items-center gap-1">
+                <span className="text-muted-foreground">{sc.data_point_name}:</span>
+                <span className="font-medium">{formatCents(sc.annual_total)}/yr</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
