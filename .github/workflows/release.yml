@@ -64,9 +64,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Build Tauri app
-        run: npm run tauri:build
-
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
