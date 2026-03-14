@@ -21,6 +21,7 @@ import {
   getSalaryDataPoint,
   exportDataPointSalaries,
   importDataPointSalaries,
+  createSalaryDataPoint,
   createScenarioGroup,
   updateScenarioGroup,
   updateScenarioGroupRange,
@@ -245,19 +246,6 @@ export function DataPointModal({
   }
 
   async function handleSave() {
-    // Handle new scenario group creation (pure create mode, no pre-created data point)
-    if (isNew && !editingGroup && !dataPointId && isScenario) {
-      setSaving(true);
-      try {
-        await createScenarioGroup(previousDpId ? Number(previousDpId) : null, scenarioCount);
-        onSaved();
-        onClose();
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
     if (!detail) return;
     setSaving(true);
     try {
@@ -420,6 +408,102 @@ export function DataPointModal({
     );
   }
 
+  // Pure create mode: no pre-created data point, show simplified form
+  if (isNew && !dataPointId && !editingGroup) {
+    async function handleCreateSave() {
+      setSaving(true);
+      try {
+        if (isScenario) {
+          await createScenarioGroup(previousDpId ? Number(previousDpId) : null, scenarioCount);
+        } else {
+          const dp = await createSalaryDataPoint();
+          if (name && name !== dp.name) {
+            await updateSalaryDataPoint(dp.id, "name", name);
+          }
+          const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
+          if (budgetCents) {
+            await updateSalaryDataPoint(dp.id, "budget", budgetCents);
+          }
+          if (previousDpId) {
+            await updateSalaryDataPoint(dp.id, "previous_data_point_id", previousDpId);
+          }
+        }
+        onSaved();
+        onClose();
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    return (
+      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Data Point</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <Label>Name</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Data point name"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Compare to</Label>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                value={previousDpId}
+                onChange={(e) => setPreviousDpId(e.target.value)}
+              >
+                <option value="">None</option>
+                {otherDataPoints.map((dp) => (
+                  <option key={dp.id} value={String(dp.id)}>
+                    {dp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Budget</Label>
+              <MoneyInput
+                min="0"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                placeholder="Annual budget"
+              />
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <Label>Create as Scenario Group</Label>
+              <Switch checked={isScenario} onCheckedChange={setIsScenario} />
+            </div>
+            {isScenario && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Number of Scenarios</Label>
+                <Input
+                  type="number"
+                  min={2}
+                  value={scenarioCount}
+                  onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateSave} disabled={saving}>
+              {saving ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (!detail) return null;
 
   return (
@@ -458,27 +542,6 @@ export function DataPointModal({
                 placeholder="Annual budget"
               />
             </div>
-
-            {isNew && !editingGroup && (
-              <>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <Label>Create as Scenario Group</Label>
-                  <Switch checked={isScenario} onCheckedChange={setIsScenario} />
-                </div>
-                {isScenario && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Number of Scenarios</Label>
-                    <Input
-                      type="number"
-                      min={2}
-                      value={scenarioCount}
-                      onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
-                    />
-                  </div>
-                )}
-              </>
-            )}
 
             <Separator />
             <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
