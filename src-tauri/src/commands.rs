@@ -87,6 +87,8 @@ pub struct TeamMember {
     pub picture_path: Option<String>,
     pub exclude_from_salary: bool,
     pub left_date: Option<String>,
+    pub lead_id: Option<i64>,
+    pub lead_name: Option<String>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -99,10 +101,12 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                     m.personal_phone, m.address_street, m.address_city, m.address_zip,
                     m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path,
                     m.exclude_from_salary, m.left_date,
+                    m.lead_id, lead.first_name || ' ' || lead.last_name as lead_name,
                     promo.promoted_title_id, pt.name as promoted_title_name,
                     promo.data_point_id as promo_data_point_id
              FROM team_members m
              LEFT JOIN titles t ON m.title_id = t.id
+             LEFT JOIN team_members lead ON m.lead_id = lead.id
              LEFT JOIN (
                  SELECT sdpm.member_id, sdpm.promoted_title_id, sdpm.data_point_id
                  FROM salary_data_point_members sdpm
@@ -122,9 +126,11 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
         .query_map([], |row| {
             let title_id: Option<i64> = row.get(9)?;
             let title_name: Option<String> = row.get(10)?;
-            let promoted_title_id: Option<i64> = row.get(16)?;
-            let promoted_title_name: Option<String> = row.get(17)?;
-            let promo_data_point_id: Option<i64> = row.get(18)?;
+            let lead_id: Option<i64> = row.get(16)?;
+            let lead_name: Option<String> = row.get(17)?;
+            let promoted_title_id: Option<i64> = row.get(18)?;
+            let promoted_title_name: Option<String> = row.get(19)?;
+            let promo_data_point_id: Option<i64> = row.get(20)?;
             Ok(TeamMember {
                 id: row.get(0)?,
                 first_name: row.get(1)?,
@@ -153,6 +159,8 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                 picture_path: row.get(13)?,
                 exclude_from_salary: row.get(14)?,
                 left_date: row.get(15)?,
+                lead_id,
+                lead_name,
             })
         })
         .map_err(|e| e.to_string())?
@@ -192,6 +200,8 @@ pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
         picture_path: None,
         exclude_from_salary: false,
         left_date: None,
+        lead_id: None,
+        lead_name: None,
     })
 }
 
