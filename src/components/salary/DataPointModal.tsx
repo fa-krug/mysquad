@@ -106,6 +106,14 @@ export function DataPointModal({
     setMemberStates(mStates);
   }
 
+  // Reset scenario state when modal opens
+  useEffect(() => {
+    if (open) {
+      setIsScenario(false);
+      setScenarioCount(2);
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open || !dataPointId) return;
     getSalaryDataPoint(dataPointId).then((d) => {
