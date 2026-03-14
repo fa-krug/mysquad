@@ -1,0 +1,8 @@
+{
+  "build": {
+    "beforeBundleCommand": "bash src-tauri/scripts/compile-icon.sh"
+  },
+  "bundle": {
+    "externalBin": ["target/MySquadHelper"]
+  }
+}
