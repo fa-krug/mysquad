@@ -154,6 +154,42 @@ mod tests {
     }
 
     #[test]
+    fn test_lead_id_self_reference_blocked() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Alice', 'A')",
+            [],
+        )
+        .unwrap();
+        let alice_id = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Bob', 'B')",
+            [],
+        )
+        .unwrap();
+        let bob_id = conn.last_insert_rowid();
+
+        // Valid: Bob's lead is Alice
+        conn.execute(
+            "UPDATE team_members SET lead_id = ?1 WHERE id = ?2",
+            rusqlite::params![alice_id, bob_id],
+        )
+        .unwrap();
+
+        let lead: Option<i64> = conn
+            .query_row(
+                "SELECT lead_id FROM team_members WHERE id = ?1",
+                [bob_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(lead, Some(alice_id));
+    }
+
+    #[test]
     fn test_migrations_idempotent() {
         let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
         run_migrations(&conn).unwrap();

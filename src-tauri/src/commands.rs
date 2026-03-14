@@ -228,9 +228,37 @@ pub fn update_team_member(
         "notes",
         "exclude_from_salary",
         "left_date",
+        "lead_id",
     ];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
+    }
+    if field == "lead_id" {
+        // Self-reference check
+        if let Some(ref val) = value {
+            let lead_id: i64 = val.parse().map_err(|_| "Invalid lead_id".to_string())?;
+            if lead_id == id {
+                return Err("A member cannot be their own lead".to_string());
+            }
+            // Cycle detection: walk up from proposed lead to root
+            let mut current = lead_id;
+            loop {
+                let parent: Option<i64> = conn
+                    .query_row(
+                        "SELECT lead_id FROM team_members WHERE id = ?1",
+                        params![current],
+                        |row| row.get(0),
+                    )
+                    .map_err(|e| e.to_string())?;
+                match parent {
+                    Some(p) if p == id => {
+                        return Err("This assignment would create a cycle".to_string());
+                    }
+                    Some(p) => current = p,
+                    None => break,
+                }
+            }
+        }
     }
     let sql = format!("UPDATE team_members SET {} = ?1 WHERE id = ?2", field);
     conn.execute(&sql, params![value, id])
