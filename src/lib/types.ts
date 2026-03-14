@@ -18,6 +18,8 @@ export interface TeamMember {
   picture_path: string | null;
   exclude_from_salary: boolean;
   left_date: string | null;
+  lead_id: number | null;
+  lead_name: string | null;
 }
 
 export interface Child {
