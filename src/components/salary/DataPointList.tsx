@@ -1,52 +1,86 @@
 import type React from "react";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  ChevronRight,
+  ChevronDown,
+  ArrowUpFromLine,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/salary-utils";
-import type { SalaryDataPointSummary } from "@/lib/types";
+import type { SalaryListItem, SalaryDataPointSummary, ScenarioGroup } from "@/lib/types";
 
 interface DataPointListProps {
-  dataPoints: SalaryDataPointSummary[];
+  items: SalaryListItem[];
   selectedId: number | null;
   loading?: boolean;
   creating?: boolean;
   onSelect: (id: number) => void;
   onCreate: () => void;
   onEdit: (dp: SalaryDataPointSummary) => void;
+  onEditGroup: (group: ScenarioGroup) => void;
   onDelete: (id: number) => void;
+  onDeleteGroup: (id: number) => void;
+  onPromote: (dataPointId: number) => void;
 }
 
 export function DataPointList({
-  dataPoints,
+  items,
   selectedId,
   loading,
   creating,
   onSelect,
   onCreate,
   onEdit,
+  onEditGroup,
   onDelete,
+  onDeleteGroup,
+  onPromote,
 }: DataPointListProps) {
-  const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
-    count: dataPoints.length,
-    estimateSize: 50,
-  });
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+
+  function toggleGroup(groupId: number) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
+  // Build flat list of selectable IDs for keyboard navigation
+  const selectableIds = useMemo(() => {
+    const ids: number[] = [];
+    for (const item of items) {
+      if (item.type === "data_point") {
+        ids.push(item.data_point.id);
+      } else if (expandedGroups.has(item.scenario_group.id)) {
+        for (const child of item.scenario_group.children) {
+          ids.push(child.id);
+        }
+      }
+    }
+    return ids;
+  }, [items, expandedGroups]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const ids = dataPoints.map((dp) => dp.id);
-    const currentIndex = ids.indexOf(selectedId ?? -1);
-
+    const currentIndex = selectableIds.indexOf(selectedId ?? -1);
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const next = currentIndex < ids.length - 1 ? currentIndex + 1 : 0;
-      onSelect(ids[next]);
-      if (shouldVirtualize) virtualizer.scrollToIndex(next);
+      const next = currentIndex < selectableIds.length - 1 ? currentIndex + 1 : 0;
+      onSelect(selectableIds[next]);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = currentIndex > 0 ? currentIndex - 1 : ids.length - 1;
-      onSelect(ids[prev]);
-      if (shouldVirtualize) virtualizer.scrollToIndex(prev);
+      const prev = currentIndex > 0 ? currentIndex - 1 : selectableIds.length - 1;
+      onSelect(selectableIds[prev]);
     }
   };
 
@@ -64,71 +98,10 @@ export function DataPointList({
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-2">
             <ListSkeleton />
-          </div>
-        ) : shouldVirtualize ? (
-          <div
-            className="relative p-2 outline-none"
-            style={{ height: totalSize }}
-            tabIndex={0}
-            onKeyDown={handleKeyDown}
-          >
-            {virtualItems.map((virtualRow) => {
-              const dp = dataPoints[virtualRow.index];
-              return (
-                <div
-                  key={dp.id}
-                  style={{
-                    position: "absolute",
-                    top: virtualRow.start,
-                    height: virtualRow.size,
-                    left: 0,
-                    right: 0,
-                  }}
-                  onClick={() => onSelect(dp.id)}
-                  className={cn(
-                    "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50",
-                    selectedId === dp.id && "bg-muted",
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{dp.name}</div>
-                    {dp.budget != null && (
-                      <div className="text-xs text-muted-foreground">
-                        Budget: {formatCents(dp.budget)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(dp);
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(dp.id);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         ) : (
           <div
@@ -136,54 +109,141 @@ export function DataPointList({
             tabIndex={0}
             onKeyDown={handleKeyDown}
           >
-            {dataPoints.length === 0 && (
+            {items.length === 0 && (
               <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                 No data points yet.
               </p>
             )}
-            {dataPoints.map((dp) => (
-              <div
-                key={dp.id}
-                onClick={() => onSelect(dp.id)}
-                className={cn(
-                  "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50",
-                  selectedId === dp.id && "bg-muted",
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{dp.name}</div>
-                  {dp.budget != null && (
-                    <div className="text-xs text-muted-foreground">
-                      Budget: {formatCents(dp.budget)}
+            {items.map((item) => {
+              if (item.type === "data_point") {
+                const dp = item.data_point;
+                return (
+                  <div
+                    key={`dp-${dp.id}`}
+                    onClick={() => onSelect(dp.id)}
+                    className={cn(
+                      "group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50",
+                      selectedId === dp.id && "bg-muted",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{dp.name}</div>
+                      {dp.budget != null && (
+                        <div className="text-xs text-muted-foreground">
+                          Budget: {formatCents(dp.budget)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(dp);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(dp.id);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+                    <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(dp);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(dp.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              } else {
+                const group = item.scenario_group;
+                const isExpanded = expandedGroups.has(group.id);
+                return (
+                  <div key={`sg-${group.id}`}>
+                    <div
+                      onClick={() => toggleGroup(group.id)}
+                      className="group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-purple-100/50 dark:hover:bg-purple-900/20 bg-purple-50/50 dark:bg-purple-950/10"
+                    >
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        {isExpanded ? (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-purple-700 dark:text-purple-300">
+                            {group.name}
+                          </div>
+                          {group.budget != null && (
+                            <div className="text-xs text-muted-foreground">
+                              Budget: {formatCents(group.budget)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditGroup(group);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteGroup(group.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    {isExpanded &&
+                      group.children.map((child) => (
+                        <div
+                          key={`child-${child.id}`}
+                          onClick={() => onSelect(child.id)}
+                          className={cn(
+                            "group flex cursor-pointer items-center justify-between rounded-md pl-8 pr-3 py-1.5 text-sm transition-colors hover:bg-muted/50",
+                            selectedId === child.id && "bg-muted",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-muted-foreground">{child.name}</div>
+                          </div>
+                          <div className="ml-2 flex shrink-0 gap-1 opacity-0 group-hover:opacity-100">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              title="Promote this scenario"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPromote(child.id);
+                              }}
+                            >
+                              <ArrowUpFromLine className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                );
+              }
+            })}
           </div>
         )}
       </div>
