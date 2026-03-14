@@ -8,15 +8,17 @@ import type { SalaryDataPointDetail, SalaryPart } from "@/lib/types";
 interface SalaryAnalyticsProps {
   detail: SalaryDataPointDetail;
   previousData: Record<number, SalaryPart[] | null>;
+  anyPresented: boolean;
 }
 
-export function SalaryAnalytics({ detail, previousData }: SalaryAnalyticsProps) {
+export function SalaryAnalytics({ detail, previousData, anyPresented }: SalaryAnalyticsProps) {
   const { total } = budgetTotals(detail.members);
+  const effectiveBudget = anyPresented ? null : detail.budget;
 
   return (
     <div className="flex flex-col gap-6">
-      <BudgetGauge totalSalary={total} budget={detail.budget} />
-      <SalaryBarChart members={detail.members} ranges={detail.ranges} budget={detail.budget} />
+      {!anyPresented && <BudgetGauge totalSalary={total} budget={detail.budget} />}
+      <SalaryBarChart members={detail.members} ranges={detail.ranges} budget={effectiveBudget} />
       <VariablePayChart members={detail.members} />
       <ComparisonChart members={detail.members} previousData={previousData} />
     </div>
