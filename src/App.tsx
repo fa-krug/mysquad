@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, lazy } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
-import { getCurrent } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LockScreen } from "./components/layout/LockScreen";
 import { UpdateDialog, useUpdateCheck } from "./components/layout/UpdateDialog";
@@ -177,7 +177,7 @@ function App() {
 
   // Check for updates after unlock (main window only)
   useEffect(() => {
-    if (unlocked && getCurrent().label === "main") {
+    if (unlocked && getCurrentWebviewWindow().label === "main") {
       checkForUpdate({ silent: true });
     }
   }, [unlocked, checkForUpdate]);
