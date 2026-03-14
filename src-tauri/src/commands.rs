@@ -1,6 +1,5 @@
-use crate::biometric;
 use crate::db::{self, AppDb};
-use crate::keychain;
+use crate::platform::{self, NativeSecurity, PlatformSecurity};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,16 +9,16 @@ use tauri::State;
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn authenticate(reason: String) -> Result<(), String> {
-    biometric::authenticate(&reason)
+    NativeSecurity::authenticate(&reason)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn unlock_db(db: State<AppDb>) -> Result<(), String> {
-    let key = match keychain::retrieve_key() {
+    let key = match NativeSecurity::retrieve_key() {
         Ok(k) => k,
         Err(_) => {
-            let new_key = keychain::generate_key();
-            keychain::store_key(&new_key)?;
+            let new_key = platform::generate_key();
+            NativeSecurity::store_key(&new_key)?;
             new_key
         }
     };
@@ -45,7 +44,7 @@ pub fn lock_db(db: State<AppDb>) -> Result<(), String> {
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_config(key: String) -> Result<Option<String>, String> {
     let config_path = get_app_data_dir()?.join("config.json");
-    let keychain_key = match crate::keychain::retrieve_key() {
+    let keychain_key = match NativeSecurity::retrieve_key() {
         Ok(k) => k,
         Err(_) => return Ok(None), // No key yet = first launch, default behavior
     };
@@ -59,7 +58,7 @@ pub fn get_config(key: String) -> Result<Option<String>, String> {
 #[tauri::command(rename_all = "snake_case")]
 pub fn set_config(key: String, value: String) -> Result<(), String> {
     let config_path = get_app_data_dir()?.join("config.json");
-    let keychain_key = crate::keychain::retrieve_key()
+    let keychain_key = NativeSecurity::retrieve_key()
         .map_err(|_| "Cannot save config: encryption key not found".to_string())?;
     crate::config::write_config(&config_path, &keychain_key, &key, &value)
 }

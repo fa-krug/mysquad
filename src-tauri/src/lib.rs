@@ -1,9 +1,8 @@
-pub mod biometric;
 pub mod commands;
 pub mod config;
 pub mod db;
 pub mod export_import;
-pub mod keychain;
+pub mod platform;
 
 use db::AppDb;
 use std::sync::atomic::{AtomicUsize, Ordering};
