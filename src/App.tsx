@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef, lazy } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { getCurrent } from "@tauri-apps/api/webviewWindow";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LockScreen } from "./components/layout/LockScreen";
+import { UpdateDialog, useUpdateCheck } from "./components/layout/UpdateDialog";
 import { useTheme } from "./hooks/useTheme";
 
 const TeamMembers = lazy(() =>
@@ -171,6 +173,15 @@ function App() {
     setShowOnboarding(false);
   }, []);
 
+  const { dialogState, setDialogState, checkForUpdate, dismiss } = useUpdateCheck();
+
+  // Check for updates after unlock (main window only)
+  useEffect(() => {
+    if (unlocked && getCurrent().label === "main") {
+      checkForUpdate({ silent: true });
+    }
+  }, [unlocked, checkForUpdate]);
+
   // Show nothing while checking config
   if (!configLoaded) return null;
 
@@ -187,32 +198,36 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <DeepLinkHandler pendingUrlRef={pendingDeepLink} />
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<TeamMembers />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/titles" element={<Titles />} />
-          <Route path="/salary" element={<SalaryPlanner />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/meeting/:meetingId" element={<Meeting />} />
-          <Route path="/team-meetings" element={<TeamMeetingsPage />} />
-          <Route
-            path="/settings"
-            element={
-              <Settings
-                theme={theme}
-                onThemeChange={setTheme}
-                requireAuth={requireAuth}
-                onRequireAuthChange={setRequireAuth}
-                onShowWelcome={handleShowWelcome}
-              />
-            }
-          />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <UpdateDialog state={dialogState} onDismiss={dismiss} onStateChange={setDialogState} />
+      <BrowserRouter>
+        <DeepLinkHandler pendingUrlRef={pendingDeepLink} />
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<TeamMembers />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/titles" element={<Titles />} />
+            <Route path="/salary" element={<SalaryPlanner />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/meeting/:meetingId" element={<Meeting />} />
+            <Route path="/team-meetings" element={<TeamMeetingsPage />} />
+            <Route
+              path="/settings"
+              element={
+                <Settings
+                  theme={theme}
+                  onThemeChange={setTheme}
+                  requireAuth={requireAuth}
+                  onRequireAuthChange={setRequireAuth}
+                  onShowWelcome={handleShowWelcome}
+                  onCheckForUpdate={checkForUpdate}
+                />
+              }
+            />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }
 
