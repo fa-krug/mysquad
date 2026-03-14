@@ -7,8 +7,11 @@ on:
 
 jobs:
   checks:
-    name: Checks
-    runs-on: macos-latest
+    name: Checks (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,6 +23,7 @@ jobs:
       - run: npm ci
 
       - name: Check formatting
+        if: runner.os == 'macOS'
         run: npm run format:check
 
       - name: Lint
@@ -34,13 +38,64 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Check Rust formatting
+        if: runner.os == 'macOS'
+        run: cd src-tauri && cargo fmt -- --check
+
+      - name: Clippy
+        run: cd src-tauri && cargo clippy -- -D warnings
+
       - name: Rust tests
         run: cd src-tauri && cargo test
 
+  build:
+    name: Build (${{ matrix.os }})
+    needs: checks
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: dmg
+          - os: windows-latest
+            artifact: nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Strawberry Perl (Windows)
+        if: runner.os == 'Windows'
+        run: choco install strawberryperl -y
+
+      - name: Build Tauri app
+        run: npx tauri build
+
+      - name: Inject macOS icon
+        if: runner.os == 'macOS'
+        run: bash src-tauri/scripts/inject-icon.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: src-tauri/target/release/bundle/${{ matrix.artifact }}/
+
   release:
     name: Release
-    needs: checks
-    runs-on: macos-latest
+    needs: build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       issues: write
@@ -58,11 +113,17 @@ jobs:
 
       - run: npm ci
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
         with:
-          workspaces: src-tauri
+          name: dmg
+          path: src-tauri/target/release/bundle/dmg/
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: nsis
+          path: src-tauri/target/release/bundle/nsis/
 
       - name: Release
         env:

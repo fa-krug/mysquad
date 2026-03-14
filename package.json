@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "tauri build && bash src-tauri/scripts/inject-icon.sh",
+    "tauri:build": "tauri build",
     "release": "bash src-tauri/scripts/release.sh",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -86,7 +86,7 @@
       [
         "@semantic-release/exec",
         {
-          "prepareCmd": "node scripts/sync-version.js ${nextRelease.version} && npm run tauri:build"
+          "prepareCmd": "node scripts/sync-version.js ${nextRelease.version}"
         }
       ],
       [
@@ -108,6 +108,10 @@
             {
               "path": "src-tauri/target/release/bundle/dmg/*.dmg",
               "label": "MySquad-${nextRelease.version}.dmg"
+            },
+            {
+              "path": "src-tauri/target/release/bundle/nsis/*.exe",
+              "label": "MySquad-${nextRelease.version}-Setup.exe"
             }
           ]
         }
