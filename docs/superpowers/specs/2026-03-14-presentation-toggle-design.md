@@ -28,6 +28,12 @@ Add `is_presented: boolean` to `SalaryDataPointMember` in `types.ts`.
 
 ## Backend
 
+### Rust struct
+
+Add `pub is_presented: bool` to the `SalaryDataPointMember` struct in `commands.rs`. Add `sdpm.is_presented` to the SELECT query that fetches data point members.
+
+### Update handler
+
 `updateSalaryDataPointMember` in `commands.rs` already handles field/value updates for `is_active`, `is_promoted`, and `promoted_title_id`. Add `is_presented` as another valid field with the same pattern.
 
 ## Frontend
@@ -55,11 +61,30 @@ Parent passes a prop (e.g., `hidden` or conditionally doesn't render) when `anyP
 
 ### Charts (SalaryAnalytics.tsx and children)
 
-All charts already receive members as props. Since the parent filters to `visibleMembers`, charts automatically show only presented members. No chart-level changes needed.
+`SalaryAnalytics` receives the full `detail` object. Construct a filtered detail copy in `SalaryPlanner.tsx`:
+
+```ts
+const filteredDetail = useMemo(() => {
+  if (!detail) return null;
+  return { ...detail, members: visibleMembers };
+}, [detail, visibleMembers]);
+```
+
+Pass `filteredDetail` to `SalaryAnalytics` and `ScenarioComparisonTable`. Also filter `previousData` to only include visible member IDs so `ComparisonChart` and `previousTotal` calculations are scoped correctly.
+
+Charts themselves need no changes — they render whatever members they receive.
 
 ### Scenario Comparison Table
 
-Hide the budget column/row when `anyPresented` is true.
+Hide the entire budget column and previousTotal row when `anyPresented` is true. The table still shows headcount and total salary comparisons across scenarios.
+
+### Scenario Member Comparisons
+
+Hide the per-member scenario comparison section in `MemberSalaryCard` when `anyPresented` is true, to avoid leaking alternative plan information during negotiations.
+
+### Clear Presentation Button
+
+When `anyPresented` is true, show a "Clear presentation" button (e.g., in the detail header area) to quickly reset all members' `is_presented` to false without toggling each individually.
 
 ## Files to Change
 
@@ -67,7 +92,7 @@ Hide the budget column/row when `anyPresented` is true.
 |------|--------|
 | `src-tauri/migrations/` | New migration: add `is_presented` column |
 | `src-tauri/src/db.rs` | Bump migration version |
-| `src-tauri/src/commands.rs` | Add `is_presented` to `update_salary_data_point_member` match |
+| `src-tauri/src/commands.rs` | Add `is_presented` to struct, SELECT query, and update match |
 | `src/lib/types.ts` | Add `is_presented` to `SalaryDataPointMember` |
 | `src/pages/SalaryPlanner.tsx` | Filter members, pass `anyPresented` flag |
 | `src/components/salary/MemberSalaryCard.tsx` | Add eye toggle icon |
@@ -77,6 +102,7 @@ Hide the budget column/row when `anyPresented` is true.
 
 ## Edge Cases
 
-- If a presented member is also inactive, they still show (presentation overrides normal filtering).
+- If a presented member is also inactive, they still show in the member list. Charts still apply their own `is_active` filters on the visible set — presentation mode controls which members are included, not whether activity filters apply within charts.
 - Toggling all members off (none presented) returns to normal view automatically.
 - Creating a new data point: all members start with `is_presented = 0` (normal view).
+- Export/import: `is_presented` is included in exports as metadata. No special handling needed.
