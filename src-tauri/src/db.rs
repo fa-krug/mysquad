@@ -101,6 +101,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 12)?;
     }
 
+    if version < 13 {
+        let migration_sql = include_str!("../migrations/013_lead_id.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 13)?;
+    }
+
     Ok(())
 }
 
@@ -144,7 +150,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
     }
 
     #[test]
@@ -208,7 +214,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
     }
 
     #[test]
@@ -224,7 +230,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
     }
 
     #[test]
@@ -508,6 +514,56 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM scenario_groups", [], |row| row.get(0))
             .unwrap();
         assert_eq!(group_count, 0);
+    }
+
+    #[test]
+    fn test_migration_v13_lead_id() {
+        let conn = open_db_with_key(":memory:", "test-key-0123456789abcdef").unwrap();
+        run_migrations(&conn).unwrap();
+
+        // Verify lead_id column exists
+        let has_col: bool = conn
+            .prepare("SELECT lead_id FROM team_members LIMIT 0")
+            .is_ok();
+        assert!(has_col);
+
+        // Verify lead_id defaults to NULL
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Test', 'User')",
+            [],
+        )
+        .unwrap();
+        let lead_id: Option<i64> = conn
+            .query_row(
+                "SELECT lead_id FROM team_members WHERE first_name = 'Test'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(lead_id.is_none());
+
+        // Verify ON DELETE SET NULL
+        conn.execute(
+            "INSERT INTO team_members (first_name, last_name) VALUES ('Lead', 'Person')",
+            [],
+        )
+        .unwrap();
+        let lead_person_id: i64 = conn.last_insert_rowid();
+        conn.execute(
+            "UPDATE team_members SET lead_id = ?1 WHERE first_name = 'Test'",
+            [lead_person_id],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM team_members WHERE id = ?1", [lead_person_id])
+            .unwrap();
+        let lead_id_after: Option<i64> = conn
+            .query_row(
+                "SELECT lead_id FROM team_members WHERE first_name = 'Test'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(lead_id_after.is_none());
     }
 
     #[test]
