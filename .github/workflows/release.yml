@@ -76,17 +76,39 @@ jobs:
           workspaces: src-tauri
 
       - name: Build Tauri app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build
 
       - name: Inject macOS icon
         if: runner.os == 'macOS'
         run: bash src-tauri/scripts/inject-icon.sh
 
+      - name: List bundle output
+        run: find src-tauri/target/release/bundle -type f | head -50
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: src-tauri/target/release/bundle/${{ matrix.artifact }}/
+
+      - name: Upload updater artifacts (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-macos
+          path: |
+            src-tauri/target/release/bundle/macos/*.sig
+            src-tauri/target/release/bundle/dmg/*.sig
+
+      - name: Upload updater artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-windows
+          path: src-tauri/target/release/bundle/nsis/*.sig
 
   release:
     name: Release
