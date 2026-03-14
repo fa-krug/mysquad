@@ -144,6 +144,21 @@ jobs:
           name: nsis
           path: src-tauri/target/release/bundle/nsis/
 
+      - name: Download macOS updater artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: updater-macos
+          path: src-tauri/target/release/bundle/macos/
+
+      - name: Download Windows updater artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: updater-windows
+          path: src-tauri/target/release/bundle/nsis/
+
+      - name: Generate latest.json
+        run: node scripts/generate-latest-json.js
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -112,6 +112,22 @@
             {
               "path": "src-tauri/target/release/bundle/nsis/*.exe",
               "label": "MySquad-${nextRelease.version}-Setup.exe"
+            },
+            {
+              "path": "src-tauri/target/release/bundle/macos/*.tar.gz",
+              "label": "MySquad-${nextRelease.version}.app.tar.gz"
+            },
+            {
+              "path": "src-tauri/target/release/bundle/macos/*.tar.gz.sig",
+              "label": "MySquad-${nextRelease.version}.app.tar.gz.sig"
+            },
+            {
+              "path": "src-tauri/target/release/bundle/nsis/*.exe.sig",
+              "label": "MySquad-${nextRelease.version}-Setup.exe.sig"
+            },
+            {
+              "path": "latest.json",
+              "label": "latest.json"
             }
           ]
         }
