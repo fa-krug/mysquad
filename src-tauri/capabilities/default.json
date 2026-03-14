@@ -8,6 +8,8 @@
     "opener:default",
     "dialog:default",
     "deep-link:default",
-    "sharekit:default"
+    "sharekit:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }
