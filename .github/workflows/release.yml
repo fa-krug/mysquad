@@ -75,10 +75,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install Strawberry Perl (Windows)
-        if: runner.os == 'Windows'
-        run: choco install strawberryperl -y
-
       - name: Build Tauri app
         run: npx tauri build
 
