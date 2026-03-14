@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { getSubtreeIds } from "@/lib/tree-utils";
 import type { TeamMember, Title } from "@/lib/types";
 
 interface InfoSectionProps {
   member: TeamMember;
+  members: TeamMember[];
   titles: Title[];
-  onMemberChange: (field: string, value: string | null, titleName?: string | null) => void;
+  onMemberChange: (field: string, value: string | null, titleName?: string | null) => Promise<void>;
 }
 
 // AutoSaveInput: renders a labeled text input with auto-save behavior
@@ -89,13 +91,40 @@ function AutoSaveDatePicker({ label, initialValue, onSave }: AutoSaveDatePickerP
   );
 }
 
-export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps) {
+export function InfoSection({ member, members, titles, onMemberChange }: InfoSectionProps) {
   const navigate = useNavigate();
   const [titleId, setTitleId] = useState<string>(
     member.title_id != null ? String(member.title_id) : "",
   );
   const [titleSaving, setTitleSaving] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
+
+  const [leadId, setLeadId] = useState<string>(
+    member.lead_id != null ? String(member.lead_id) : "",
+  );
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
+
+  const subtreeIds = useMemo(() => getSubtreeIds(members, member.id), [members, member.id]);
+
+  const leadOptions = useMemo(
+    () => members.filter((m) => m.id !== member.id && !m.left_date && !subtreeIds.has(m.id)),
+    [members, member.id, subtreeIds],
+  );
+
+  const handleLeadChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setLeadId(val);
+    setLeadSaving(true);
+    setLeadError(null);
+    try {
+      await onMemberChange("lead_id", val === "" ? null : val);
+    } catch (err) {
+      setLeadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLeadSaving(false);
+    }
+  };
 
   const handleTitleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -161,6 +190,28 @@ export function InfoSection({ member, titles, onMemberChange }: InfoSectionProps
         <div className="h-3 text-xs">
           {titleSaving && <span className="text-muted-foreground">Saving…</span>}
           {titleError && <span className="text-destructive truncate">{titleError}</span>}
+        </div>
+      </div>
+
+      {/* Lead */}
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs text-muted-foreground">Lead</Label>
+        <select
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring dark:bg-input/30"
+          value={leadId}
+          onChange={handleLeadChange}
+        >
+          <option value="">No lead</option>
+          {leadOptions.map((m) => (
+            <option key={m.id} value={String(m.id)}>
+              {m.last_name}, {m.first_name}
+              {m.current_title_name ? ` — ${m.current_title_name}` : ""}
+            </option>
+          ))}
+        </select>
+        <div className="h-3 text-xs">
+          {leadSaving && <span className="text-muted-foreground">Saving…</span>}
+          {leadError && <span className="text-destructive truncate">{leadError}</span>}
         </div>
       </div>
 

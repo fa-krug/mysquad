@@ -24,11 +24,12 @@ import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/
 
 interface MemberDetailProps {
   member: TeamMember;
-  onMemberChange: (field: string, value: string | null, titleName?: string | null) => void;
+  members: TeamMember[];
+  onMemberChange: (field: string, value: string | null, titleName?: string | null) => Promise<void>;
   picturesDir: string | null;
 }
 
-export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDetailProps) {
+export function MemberDetail({ member, members, onMemberChange, picturesDir }: MemberDetailProps) {
   const [statusItems, setStatusItems] = useState<CheckableItem[]>([]);
   const [talkTopics, setTalkTopics] = useState<CheckableItem[]>([]);
   const [titles, setTitles] = useState<Title[]>([]);
@@ -149,7 +150,12 @@ export function MemberDetail({ member, onMemberChange, picturesDir }: MemberDeta
             )}
           </div>
         </div>
-        <InfoSection member={member} titles={titles} onMemberChange={onMemberChange} />
+        <InfoSection
+          member={member}
+          members={members}
+          titles={titles}
+          onMemberChange={onMemberChange}
+        />
         <ChildrenList teamMemberId={member.id} />
         <Separator />
         <CheckableList

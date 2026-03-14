@@ -112,11 +112,23 @@ export function TeamMembers() {
             updated.current_title_name = titleName ?? null;
           }
         }
+        if (field === "lead_id") {
+          const leadMember = prev.find((lm) => String(lm.id) === value);
+          updated.lead_id = value ? Number(value) : null;
+          updated.lead_name = leadMember
+            ? `${leadMember.first_name} ${leadMember.last_name}`
+            : null;
+        }
         return updated;
       }),
     );
     if (selectedId !== null) {
-      await updateTeamMember(selectedId, field, value);
+      try {
+        await updateTeamMember(selectedId, field, value);
+      } catch (err) {
+        await loadMembers();
+        throw err;
+      }
     }
   };
 
@@ -143,6 +155,7 @@ export function TeamMembers() {
           <MemberDetail
             key={selectedMember.id}
             member={selectedMember}
+            members={visibleMembers}
             onMemberChange={handleMemberChange}
             picturesDir={picturesDir}
           />
