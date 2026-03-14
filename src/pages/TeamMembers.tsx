@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
+import { OrgChart } from "@/components/team/OrgChart";
+import { ListIcon, NetworkIcon } from "lucide-react";
 import {
   getTeamMembers,
   createTeamMember,
@@ -20,6 +22,7 @@ export function TeamMembers() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [view, setView] = useState<"list" | "chart">("list");
   const { scheduleDelete, pendingIds } = usePendingDelete();
 
   useEffect(() => {
@@ -150,20 +153,53 @@ export function TeamMembers() {
         onDelete={handleDelete}
         picturesDir={picturesDir}
       />
-      <div className="flex-1 overflow-auto">
-        {selectedMember ? (
-          <MemberDetail
-            key={selectedMember.id}
-            member={selectedMember}
-            members={visibleMembers}
-            onMemberChange={handleMemberChange}
-            picturesDir={picturesDir}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a team member to view details
-          </div>
-        )}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* View toggle header */}
+        <div className="flex items-center justify-end gap-1 px-3 h-12 border-b">
+          <button
+            type="button"
+            className={`p-1.5 rounded ${view === "list" ? "bg-muted" : "hover:bg-muted/50"}`}
+            onClick={() => setView("list")}
+            title="List view"
+          >
+            <ListIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className={`p-1.5 rounded ${view === "chart" ? "bg-muted" : "hover:bg-muted/50"}`}
+            onClick={() => setView("chart")}
+            title="Org chart"
+          >
+            <NetworkIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* View content */}
+        <div className="flex-1 overflow-auto">
+          {view === "chart" ? (
+            <OrgChart
+              members={visibleMembers}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setView("list");
+              }}
+              picturesDir={picturesDir}
+            />
+          ) : selectedMember ? (
+            <MemberDetail
+              key={selectedMember.id}
+              member={selectedMember}
+              members={visibleMembers}
+              onMemberChange={handleMemberChange}
+              picturesDir={picturesDir}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a team member to view details
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
