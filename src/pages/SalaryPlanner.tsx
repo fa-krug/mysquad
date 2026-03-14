@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { DataPointList } from "@/components/salary/DataPointList";
 import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
+import { ScenarioComparisonTable } from "@/components/salary/ScenarioComparisonTable";
 
 const SalaryAnalytics = lazy(() =>
   import("@/components/salary/SalaryAnalytics").then((m) => ({ default: m.SalaryAnalytics })),
@@ -11,19 +12,41 @@ import { usePendingDelete } from "@/hooks/usePendingDelete";
 import {
   getSalaryDataPoints,
   getSalaryDataPoint,
-  createSalaryDataPoint,
   deleteSalaryDataPoint,
   createSalaryPart,
   deleteSalaryPart as deleteSalaryPartApi,
   getPreviousMemberData,
   getTitles,
+  deleteScenarioGroup,
+  promoteScenario,
+  getScenarioSummaries,
+  getScenarioMemberComparison,
 } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import type { SalaryDataPointSummary, SalaryDataPointDetail, SalaryPart, Title } from "@/lib/types";
+import type {
+  SalaryListItem,
+  SalaryDataPointSummary,
+  SalaryDataPointDetail,
+  SalaryPart,
+  Title,
+  ScenarioGroup,
+  ScenarioSummary,
+  ScenarioMemberComparison,
+} from "@/lib/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function SalaryPlanner() {
   const location = useLocation();
-  const [dataPoints, setDataPoints] = useState<SalaryDataPointSummary[]>([]);
+  const [listItems, setListItems] = useState<SalaryListItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
   const [previousData, setPreviousData] = useState<Record<number, SalaryPart[] | null>>({});
@@ -32,14 +55,19 @@ export function SalaryPlanner() {
   const [editingDpId, setEditingDpId] = useState<number | null>(null);
   const [editingIsNew, setEditingIsNew] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [scenarioSummaries, setScenarioSummaries] = useState<ScenarioSummary[]>([]);
+  const [memberComparisons, setMemberComparisons] = useState<
+    Record<number, ScenarioMemberComparison[]>
+  >({});
+  const [editingGroup, setEditingGroup] = useState<ScenarioGroup | null>(null);
+  const [promotingId, setPromotingId] = useState<number | null>(null);
   const { scheduleDelete, pendingIds } = usePendingDelete();
 
   const loadDataPoints = useCallback(async () => {
-    const [dps, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
-    setDataPoints(dps);
+    const [items, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
+    setListItems(items);
     setTitles(t);
-    return dps;
+    return items;
   }, []);
 
   const loadDetail = useCallback(async (id: number) => {
@@ -59,12 +87,19 @@ export function SalaryPlanner() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([getSalaryDataPoints(), getTitles()])
-      .then(([dps, t]) => {
+      .then(([items, t]) => {
         if (cancelled) return;
-        setDataPoints(dps);
+        setListItems(items);
         setTitles(t);
-        if (dps.length > 0) {
-          setSelectedId(dps[0].id);
+        // Select first selectable item
+        for (const item of items) {
+          if (item.type === "data_point") {
+            setSelectedId(item.data_point.id);
+            break;
+          } else if (item.scenario_group.children.length > 0) {
+            setSelectedId(item.scenario_group.children[0].id);
+            break;
+          }
         }
         setLoading(false);
       })
@@ -100,6 +135,121 @@ export function SalaryPlanner() {
   }, [selectedId]);
 
   useEffect(() => {
+    if (!detail?.scenario_group_id) {
+      setScenarioSummaries([]);
+      setMemberComparisons({});
+      return;
+    }
+    let cancelled = false;
+    const sgId = detail.scenario_group_id;
+
+    getScenarioSummaries(sgId).then((summaries) => {
+      if (!cancelled) setScenarioSummaries(summaries);
+    });
+
+    Promise.all(
+      detail.members.map(async (m) => {
+        const comparison = await getScenarioMemberComparison(sgId, m.member_id);
+        return [m.member_id, comparison] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setMemberComparisons(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  function handleCreate() {
+    setEditingDpId(null);
+    setEditingGroup(null);
+    setEditingIsNew(true);
+    setModalOpen(true);
+  }
+
+  function handleEdit(dp: SalaryDataPointSummary) {
+    setEditingDpId(dp.id);
+    setEditingIsNew(false);
+    setModalOpen(true);
+  }
+
+  function handleEditGroup(group: ScenarioGroup) {
+    setEditingGroup(group);
+    setEditingDpId(null);
+    setEditingIsNew(false);
+    setModalOpen(true);
+  }
+
+  async function handleDeleteGroup(groupId: number) {
+    scheduleDelete({
+      id: groupId,
+      label: "Scenario group",
+      onConfirm: async () => {
+        await deleteScenarioGroup(groupId);
+        const items = await loadDataPoints();
+        setSelectedId(null);
+        setDetail(null);
+        for (const item of items) {
+          if (item.type === "data_point") {
+            setSelectedId(item.data_point.id);
+            break;
+          }
+        }
+      },
+    });
+  }
+
+  async function handlePromote(dataPointId: number) {
+    try {
+      await promoteScenario(dataPointId);
+      await loadDataPoints();
+      setSelectedId(dataPointId);
+      if (selectedId === dataPointId) {
+        await loadDetail(dataPointId);
+      }
+      showSuccess("Scenario promoted to data point");
+    } catch {
+      showError("Failed to promote scenario");
+    }
+  }
+
+  function handleDelete(id: number) {
+    let dpName = "Data point";
+    for (const item of listItems) {
+      if (item.type === "data_point" && item.data_point.id === id) {
+        dpName = item.data_point.name || dpName;
+        break;
+      }
+    }
+    const wasSelected = selectedId === id;
+    scheduleDelete({
+      id,
+      label: dpName,
+      onConfirm: async () => {
+        await deleteSalaryDataPoint(id);
+        const items = await loadDataPoints();
+        if (wasSelected) {
+          let newId: number | null = null;
+          for (const item of items) {
+            if (item.type === "data_point") {
+              newId = item.data_point.id;
+              break;
+            }
+          }
+          setSelectedId(newId);
+          setDetail(null);
+        }
+      },
+      onUndo: wasSelected ? () => setSelectedId(id) : undefined,
+    });
+    if (wasSelected) {
+      setSelectedId(null);
+      setDetail(null);
+    }
+  }
+
+  useEffect(() => {
     const state = location.state;
     if (!state) return;
     window.history.replaceState({}, "");
@@ -111,58 +261,8 @@ export function SalaryPlanner() {
     } else if (typeof state.dataPointId === "number") {
       setSelectedId(state.dataPointId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
-
-  async function handleCreate() {
-    setCreating(true);
-    try {
-      const dp = await createSalaryDataPoint();
-      await loadDataPoints();
-      setSelectedId(dp.id);
-      setEditingDpId(dp.id);
-      setEditingIsNew(true);
-      setModalOpen(true);
-      showSuccess("Data point created");
-    } catch {
-      showError("Failed to create data point");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  function handleEdit(dp: SalaryDataPointSummary) {
-    setEditingDpId(dp.id);
-    setEditingIsNew(false);
-    setModalOpen(true);
-  }
-
-  function handleDelete(id: number) {
-    const dp = dataPoints.find((d) => d.id === id);
-    if (!dp) return;
-    const wasSelected = selectedId === id;
-    scheduleDelete({
-      id,
-      label: dp.name || "Data point",
-      onConfirm: async () => {
-        await deleteSalaryDataPoint(id);
-        const dps = await loadDataPoints();
-        if (wasSelected) {
-          setSelectedId(dps.length > 0 ? dps[0].id : null);
-          setDetail(null);
-        }
-      },
-      onUndo: wasSelected
-        ? () => {
-            setSelectedId(id);
-          }
-        : undefined,
-    });
-    if (wasSelected) {
-      const remaining = dataPoints.filter((d) => d.id !== id && !pendingIds.has(d.id));
-      setSelectedId(remaining.length > 0 ? remaining[0].id : null);
-      setDetail(null);
-    }
-  }
 
   // Light refetch: only detail, no comparison data (used for part edits)
   const loadDetailOnly = useCallback(async (id: number) => {
@@ -203,24 +303,44 @@ export function SalaryPlanner() {
         .sort((a, b) => (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1)) ?? [],
     [detail],
   );
-  const visibleDataPoints = useMemo(
-    () => dataPoints.filter((d) => !pendingIds.has(d.id)),
-    [dataPoints, pendingIds],
+  const visibleItems = useMemo(
+    () =>
+      listItems.filter((item) => {
+        if (item.type === "data_point") return !pendingIds.has(item.data_point.id);
+        return !pendingIds.has(item.scenario_group.id);
+      }),
+    [listItems, pendingIds],
   );
+
+  const previousTotal = useMemo(() => {
+    if (!previousData || Object.keys(previousData).length === 0) return null;
+    let total = 0;
+    for (const parts of Object.values(previousData)) {
+      if (parts) {
+        for (const p of parts) {
+          total += p.amount * p.frequency;
+        }
+      }
+    }
+    return total;
+  }, [previousData]);
 
   return (
     <div className="flex h-full">
       {/* Left panel */}
       <div className="w-64 shrink-0">
         <DataPointList
-          dataPoints={visibleDataPoints}
+          items={visibleItems}
           selectedId={selectedId}
           loading={loading}
-          creating={creating}
+          creating={false}
           onSelect={setSelectedId}
           onCreate={handleCreate}
           onEdit={handleEdit}
+          onEditGroup={handleEditGroup}
           onDelete={handleDelete}
+          onDeleteGroup={handleDeleteGroup}
+          onPromote={setPromotingId}
         />
       </div>
 
@@ -236,6 +356,14 @@ export function SalaryPlanner() {
               <h1 className="text-2xl font-bold">{detail.name}</h1>
             </div>
             <div className="px-6 pb-6 space-y-6">
+              {detail.scenario_group_id && scenarioSummaries.length > 0 && (
+                <ScenarioComparisonTable
+                  summaries={scenarioSummaries}
+                  currentDataPointId={detail.id}
+                  budget={detail.budget}
+                  previousTotal={previousTotal}
+                />
+              )}
               <div className="flex flex-col 2xl:flex-row gap-6">
                 {/* Member salary cards */}
                 <div className="max-w-2xl min-w-0 2xl:flex-1 space-y-6">
@@ -250,6 +378,9 @@ export function SalaryPlanner() {
                         onAddPart={handleAddPart}
                         onDeletePart={handleDeletePart}
                         onChanged={handlePartChanged}
+                        scenarioComparison={
+                          detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
+                        }
                       />
                     ))
                   )}
@@ -272,13 +403,40 @@ export function SalaryPlanner() {
       {/* Edit modal */}
       <DataPointModal
         dataPointId={editingDpId}
+        editingGroup={editingGroup}
         titles={titles}
-        dataPoints={dataPoints}
+        dataPoints={listItems}
         isNew={editingIsNew}
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingGroup(null);
+        }}
         onSaved={handleModalSaved}
       />
+
+      <AlertDialog open={promotingId !== null} onOpenChange={(o) => !o && setPromotingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Promote this scenario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will convert this scenario into a normal data point and delete all other
+              scenarios in the group.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (promotingId) handlePromote(promotingId);
+                setPromotingId(null);
+              }}
+            >
+              Promote
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
