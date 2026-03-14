@@ -323,6 +323,20 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
           }}
         />
       </div>
+
+      {/* Former member with active reports warning */}
+      {member.left_date &&
+        (() => {
+          const activeReportCount = members.filter(
+            (m) => m.lead_id === member.id && !m.left_date,
+          ).length;
+          return activeReportCount > 0 ? (
+            <div className="col-span-2 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-700 dark:text-yellow-400">
+              This former member is still listed as lead for {activeReportCount} active member
+              {activeReportCount !== 1 ? "s" : ""}.
+            </div>
+          ) : null;
+        })()}
     </div>
   );
 }
