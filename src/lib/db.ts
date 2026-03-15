@@ -23,6 +23,7 @@ import type {
   MeetingDetail,
   TeamMeeting,
   TeamMeetingDetail,
+  SearchResult,
 } from "./types";
 
 // Auth
@@ -259,3 +260,6 @@ export const exportDataPointSalaries = (dataPointId: number, filePath: string) =
   invoke<void>("export_data_point_salaries", { data_point_id: dataPointId, file_path: filePath });
 export const importDataPointSalaries = (dataPointId: number, filePath: string) =>
   invoke<string>("import_data_point_salaries", { data_point_id: dataPointId, file_path: filePath });
+
+// Global Search
+export const globalSearch = (query: string) => invoke<SearchResult[]>("global_search", { query });

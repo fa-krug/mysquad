@@ -327,6 +327,14 @@ export interface EscalatedTopic {
   created_at: string;
 }
 
+export interface SearchResult {
+  id: number;
+  category: "team_member" | "project" | "title" | "report" | "talk_topic" | "status_item";
+  title: string;
+  subtitle: string | null;
+  parent_id: number | null;
+}
+
 export interface TeamMeeting {
   id: number;
   date: string;

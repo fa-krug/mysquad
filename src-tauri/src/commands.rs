@@ -3988,3 +3988,92 @@ pub fn import_data(db: State<AppDb>, file_path: String, mode: String) -> Result<
     let conn = guard.as_ref().ok_or("Database not open")?;
     crate::export_import::import_all_data(conn, data, &mode)
 }
+
+// ── Global search ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SearchResult {
+    pub id: i64,
+    pub category: String,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub parent_id: Option<i64>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    if query.trim().len() < 2 {
+        return Ok(vec![]);
+    }
+
+    let pattern = format!("%{}%", query.trim());
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, 'team_member' AS category,
+                    first_name || ' ' || last_name AS title,
+                    (SELECT name FROM titles WHERE id = m.title_id) AS subtitle,
+                    NULL AS parent_id
+             FROM team_members m
+             WHERE first_name LIKE ?1 OR last_name LIKE ?1 OR email LIKE ?1
+                   OR (first_name || ' ' || last_name) LIKE ?1 OR notes LIKE ?1
+
+             UNION ALL
+
+             SELECT id, 'project', name, SUBSTR(notes, 1, 60), NULL
+             FROM projects
+             WHERE name LIKE ?1 OR notes LIKE ?1
+
+             UNION ALL
+
+             SELECT id, 'title', name, NULL, NULL
+             FROM titles
+             WHERE name LIKE ?1
+
+             UNION ALL
+
+             SELECT id, 'report', name, NULL, NULL
+             FROM reports
+             WHERE name LIKE ?1
+
+             UNION ALL
+
+             SELECT tt.id, 'talk_topic', tt.text,
+                    m2.first_name || ' ' || m2.last_name,
+                    tt.team_member_id
+             FROM talk_topics tt
+             JOIN team_members m2 ON m2.id = tt.team_member_id
+             WHERE tt.text LIKE ?1
+
+             UNION ALL
+
+             SELECT si.id, 'status_item', si.text,
+                    m3.first_name || ' ' || m3.last_name,
+                    si.team_member_id
+             FROM status_items si
+             JOIN team_members m3 ON m3.id = si.team_member_id
+             WHERE si.text LIKE ?1
+
+             LIMIT 50",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results = stmt
+        .query_map(params![pattern], |row| {
+            Ok(SearchResult {
+                id: row.get(0)?,
+                category: row.get(1)?,
+                title: row.get(2)?,
+                subtitle: row.get(3)?,
+                parent_id: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(results)
+}

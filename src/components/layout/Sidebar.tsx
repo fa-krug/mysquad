@@ -10,6 +10,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onSearchClick: () => void;
 }
 
 const navItems = [
@@ -69,7 +71,7 @@ function NavItem({
   );
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onSearchClick }: SidebarProps) {
   return (
     <TooltipProvider delay={0}>
       <aside
@@ -82,6 +84,30 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Button variant="ghost" size="icon" onClick={onToggle}>
             {collapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </Button>
+        </div>
+
+        <div className="px-2 pb-2">
+          {collapsed ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" size="icon" className="w-full" onClick={onSearchClick}>
+                    <Search className="h-4 w-4" />
+                  </Button>
+                }
+              />
+              <TooltipContent side="right">Search (⌘K)</TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={onSearchClick}
+              className="flex w-full items-center gap-2 rounded-md border border-input/50 bg-input/30 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-input/50"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Search...</span>
+              <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
+            </button>
+          )}
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 px-2">

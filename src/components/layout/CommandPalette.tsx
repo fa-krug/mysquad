@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CommandDialog,
@@ -16,9 +16,11 @@ import {
   FileText,
   Settings,
   Plus,
+  MessageSquare,
+  ListChecks,
 } from "lucide-react";
-import { getTeamMembers, getProjects, getTitles } from "@/lib/db";
-import type { TeamMember, Project, Title } from "@/lib/types";
+import { globalSearch } from "@/lib/db";
+import type { SearchResult } from "@/lib/types";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -42,103 +44,171 @@ const actions = [
   { name: "New Data Point", path: "/salary", action: "create-datapoint", icon: Plus },
 ];
 
+const categoryConfig: Record<
+  string,
+  {
+    label: string;
+    icon: React.ElementType;
+    getRoute: (r: SearchResult) => { path: string; state: Record<string, unknown> };
+  }
+> = {
+  team_member: {
+    label: "Team Members",
+    icon: Users,
+    getRoute: (r) => ({ path: "/", state: { memberId: r.id } }),
+  },
+  project: {
+    label: "Projects",
+    icon: FolderKanban,
+    getRoute: (r) => ({ path: "/projects", state: { projectId: r.id } }),
+  },
+  title: {
+    label: "Titles",
+    icon: BadgeCheck,
+    getRoute: (r) => ({ path: "/titles", state: { titleId: r.id } }),
+  },
+  report: {
+    label: "Reports",
+    icon: FileText,
+    getRoute: () => ({ path: "/reports", state: {} }),
+  },
+  talk_topic: {
+    label: "Talk Topics",
+    icon: MessageSquare,
+    getRoute: (r) => ({ path: "/", state: { memberId: r.parent_id } }),
+  },
+  status_item: {
+    label: "Status Items",
+    icon: ListChecks,
+    getRoute: (r) => ({ path: "/", state: { memberId: r.parent_id } }),
+  },
+};
+
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [titles, setTitles] = useState<Title[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [query, setQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    if (!open) return;
-    Promise.all([getTeamMembers(), getProjects(), getTitles()]).then(([m, p, t]) => {
-      setMembers(m);
-      setProjects(p);
-      setTitles(t);
-    });
-  }, [open]);
-
-  const runCommand = useCallback(
-    (callback: () => void) => {
-      onOpenChange(false);
-      callback();
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        setQuery("");
+        setSearchResults([]);
+      }
+      onOpenChange(nextOpen);
     },
     [onOpenChange],
   );
 
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (value.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      globalSearch(value.trim()).then(setSearchResults);
+    }, 200);
+  }, []);
+
+  const runCommand = useCallback(
+    (callback: () => void) => {
+      handleOpenChange(false);
+      callback();
+    },
+    [handleOpenChange],
+  );
+
+  // Group search results by category
+  const grouped = searchResults.reduce<Record<string, SearchResult[]>>((acc, r) => {
+    if (!acc[r.category]) acc[r.category] = [];
+    acc[r.category].push(r);
+    return acc;
+  }, {});
+
+  const hasResults = searchResults.length > 0;
+  const hasQuery = query.trim().length >= 2;
+
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Type a command or search..." />
+    <CommandDialog open={open} onOpenChange={handleOpenChange}>
+      <CommandInput
+        placeholder="Type a command or search..."
+        value={query}
+        onValueChange={handleQueryChange}
+      />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
 
-        <CommandGroup heading="Team Members">
-          {members.map((m) => (
-            <CommandItem
-              key={`member-${m.id}`}
-              value={`${m.first_name} ${m.last_name}`}
-              onSelect={() => runCommand(() => navigate("/", { state: { memberId: m.id } }))}
-            >
-              <Users className="mr-2 h-4 w-4" />
-              {m.first_name} {m.last_name}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {hasQuery &&
+          Object.entries(grouped).map(([category, results]) => {
+            const config = categoryConfig[category];
+            if (!config) return null;
+            const Icon = config.icon;
 
-        <CommandGroup heading="Projects">
-          {projects.map((p) => (
-            <CommandItem
-              key={`project-${p.id}`}
-              value={p.name || "Untitled Project"}
-              onSelect={() =>
-                runCommand(() => navigate("/projects", { state: { projectId: p.id } }))
-              }
-            >
-              <FolderKanban className="mr-2 h-4 w-4" />
-              {p.name || "Untitled Project"}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+            return (
+              <CommandGroup key={category} heading={config.label}>
+                {results.map((r) => (
+                  <CommandItem
+                    key={`${category}-${r.id}`}
+                    value={`search-${category}-${r.id}`}
+                    onSelect={() =>
+                      runCommand(() => {
+                        const route = config.getRoute(r);
+                        navigate(route.path, { state: route.state });
+                      })
+                    }
+                  >
+                    <Icon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">{r.title}</span>
+                    {r.subtitle && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {r.subtitle}
+                      </span>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            );
+          })}
 
-        <CommandGroup heading="Titles">
-          {titles.map((t) => (
-            <CommandItem
-              key={`title-${t.id}`}
-              value={t.name}
-              onSelect={() => runCommand(() => navigate("/titles", { state: { titleId: t.id } }))}
-            >
-              <BadgeCheck className="mr-2 h-4 w-4" />
-              {t.name}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {hasQuery && !hasResults && null}
 
-        <CommandGroup heading="Pages">
-          {pages.map((page) => (
-            <CommandItem
-              key={page.path}
-              value={page.name}
-              onSelect={() => runCommand(() => navigate(page.path))}
-            >
-              <page.icon className="mr-2 h-4 w-4" />
-              {page.name}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {!hasQuery && (
+          <>
+            <CommandGroup heading="Pages">
+              {pages.map((page) => (
+                <CommandItem
+                  key={page.path}
+                  value={page.name}
+                  onSelect={() => runCommand(() => navigate(page.path))}
+                >
+                  <page.icon className="mr-2 h-4 w-4" />
+                  {page.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
 
-        <CommandGroup heading="Actions">
-          {actions.map((action) => (
-            <CommandItem
-              key={action.action}
-              value={action.name}
-              onSelect={() =>
-                runCommand(() => navigate(action.path, { state: { action: action.action } }))
-              }
-            >
-              <action.icon className="mr-2 h-4 w-4" />
-              {action.name}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+            <CommandGroup heading="Actions">
+              {actions.map((action) => (
+                <CommandItem
+                  key={action.action}
+                  value={action.name}
+                  onSelect={() =>
+                    runCommand(() => navigate(action.path, { state: { action: action.action } }))
+                  }
+                >
+                  <action.icon className="mr-2 h-4 w-4" />
+                  {action.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        )}
       </CommandList>
     </CommandDialog>
   );
