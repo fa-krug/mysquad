@@ -3494,6 +3494,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
         )
         .map_err(|e| e.to_string())?;
 
+    #[allow(clippy::type_complexity)]
     let topic_rows: Vec<(
         EscalatedTopic,
         i64,
@@ -3573,6 +3574,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
         )
         .map_err(|e| e.to_string())?;
 
+    #[allow(clippy::type_complexity)]
     let update_rows: Vec<(
         i64,
         ReportStatusItem,
@@ -3627,6 +3629,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
         )
         .map_err(|e| e.to_string())?;
 
+    #[allow(clippy::type_complexity)]
     let proj_rows: Vec<(i64, String, Option<i64>, Option<String>, Option<bool>)> = proj_stmt
         .query_map([], |row| {
             Ok((
