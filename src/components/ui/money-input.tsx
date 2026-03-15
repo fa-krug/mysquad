@@ -26,7 +26,16 @@ function MoneyInput({ value, onChange, className, ...props }: MoneyInputProps) {
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFocus = useCallback(() => setFocused(true), []);
+  const handleFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    setFocused(true);
+    // After switching from readOnly to editable, restore cursor to end
+    // (readOnly forces cursor to position 0 on click)
+    requestAnimationFrame(() => {
+      const input = e.target;
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
+    });
+  }, []);
   const handleBlur = useCallback(() => setFocused(false), []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {

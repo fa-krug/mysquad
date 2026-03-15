@@ -161,3 +161,38 @@ textarea,
 .animate-highlight-flash {
   animation: highlight-flash 2s ease-in-out;
 }
+
+/* Custom scrollbar: thin, theme-aware, auto-hide */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+/* WebKit scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+}

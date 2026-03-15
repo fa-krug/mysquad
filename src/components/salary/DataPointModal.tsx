@@ -469,16 +469,20 @@ export function DataPointModal({
   // Pure create mode: no pre-created data point, show simplified form
   if (isNew && !dataPointId && !editingGroup) {
     async function handleCreateSave() {
-      if (!isScenario) {
-        const nameErr = validateName(name);
-        const budgetErr = validateBudget(budget);
-        setErrors({ name: nameErr, budget: budgetErr });
-        if (nameErr || budgetErr) return;
-      }
+      const nameErr = validateName(name);
+      const budgetErr = validateBudget(budget);
+      setErrors({ name: nameErr, budget: budgetErr });
+      if (nameErr || budgetErr) return;
       setSaving(true);
       try {
         if (isScenario) {
-          await createScenarioGroup(previousDpId ? Number(previousDpId) : null, scenarioCount);
+          const group = await createScenarioGroup(
+            previousDpId ? Number(previousDpId) : null,
+            scenarioCount,
+          );
+          await updateScenarioGroup(group.id, "name", name);
+          const budgetCents = String(Math.round(parseFloat(budget) * 100));
+          await updateScenarioGroup(group.id, "budget", budgetCents);
         } else {
           const dp = await createSalaryDataPoint();
           if (name && name !== dp.name) {
@@ -512,12 +516,36 @@ export function DataPointModal({
             </div>
             {isScenario ? (
               <>
+                <div className="flex flex-col gap-1">
+                  <Label>Name</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
+                    }}
+                    placeholder="Scenario group name"
+                    aria-invalid={!!errors.name || undefined}
+                  />
+                  <div className="h-3 text-xs">
+                    {errors.name && <span className="text-destructive">{errors.name}</span>}
+                  </div>
+                </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Branch from</Label>
+                  <Label>Compare to</Label>
                   <select
                     className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
                     value={previousDpId}
-                    onChange={(e) => setPreviousDpId(e.target.value)}
+                    onChange={async (e) => {
+                      const newPrevId = e.target.value;
+                      setPreviousDpId(newPrevId);
+                      if (newPrevId) {
+                        const prevDetail = await getSalaryDataPoint(Number(newPrevId));
+                        if (prevDetail.budget != null) {
+                          setBudget(String(Math.round(prevDetail.budget / 100)));
+                        }
+                      }
+                    }}
                   >
                     <option value="">None (empty scenarios)</option>
                     {otherDataPoints.map((dp) => (
@@ -526,6 +554,22 @@ export function DataPointModal({
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Budget</Label>
+                  <MoneyInput
+                    min="0"
+                    value={budget}
+                    onChange={(e) => {
+                      setBudget(e.target.value);
+                      setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
+                    }}
+                    placeholder="Annual budget"
+                    aria-invalid={!!errors.budget || undefined}
+                  />
+                  <div className="h-3 text-xs">
+                    {errors.budget && <span className="text-destructive">{errors.budget}</span>}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Number of Scenarios</Label>
@@ -536,9 +580,6 @@ export function DataPointModal({
                     onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Name and budget are auto-generated. You can edit them after creation.
-                </p>
               </>
             ) : (
               <>

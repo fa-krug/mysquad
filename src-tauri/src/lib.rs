@@ -31,7 +31,20 @@ pub fn run() {
 
             let file_menu = SubmenuBuilder::new(app, "File").item(&new_window).build()?;
 
-            let menu = MenuBuilder::new(app).item(&file_menu).build()?;
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&file_menu)
+                .item(&edit_menu)
+                .build()?;
 
             app.set_menu(menu)?;
 
