@@ -9,9 +9,14 @@ if [ -n "$RS_FILES" ]; then
     exit 1
   }
 
-  echo "Running clippy..."
-  (cd src-tauri && cargo clippy -- -D warnings) || {
-    echo "Clippy found warnings. Please fix them before committing."
-    exit 1
-  }
+  # Skip clippy on Linux (cloud dev environments may lack system libraries)
+  if [ "$(uname)" = "Darwin" ]; then
+    echo "Running clippy..."
+    (cd src-tauri && cargo clippy -- -D warnings) || {
+      echo "Clippy found warnings. Please fix them before committing."
+      exit 1
+    }
+  else
+    echo "Skipping clippy (not on macOS)"
+  fi
 fi

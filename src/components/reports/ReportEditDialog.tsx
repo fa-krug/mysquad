@@ -83,10 +83,8 @@ export function ReportEditDialog({
 
           <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
             <div>
-              <Label className="text-sm">Team Member Statuses</Label>
-              <p className="text-xs text-muted-foreground">
-                Include status items from team members
-              </p>
+              <Label className="text-sm">Team Member Updates</Label>
+              <p className="text-xs text-muted-foreground">Include updates from team members</p>
             </div>
             <Switch
               checked={local.collect_statuses}
@@ -107,9 +105,9 @@ export function ReportEditDialog({
 
           <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
             <div>
-              <Label className="text-sm">Project Statuses</Label>
+              <Label className="text-sm">Project Updates</Label>
               <p className="text-xs text-muted-foreground">
-                Include latest status from active projects
+                Include latest updates from active projects
               </p>
             </div>
             <Switch

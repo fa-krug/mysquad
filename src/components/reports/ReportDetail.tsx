@@ -15,7 +15,7 @@ interface ReportDetailProps {
   report: Report;
 }
 
-function StatusItem({ text, checked }: { text: string; checked: boolean }) {
+function UpdateItem({ text, checked }: { text: string; checked: boolean }) {
   return (
     <li className="flex items-start gap-2 text-sm">
       {checked ? (
@@ -40,11 +40,11 @@ function MemberStatusSection({ member }: { member: ReportMemberStatus }) {
         )}
       </div>
       {member.statuses.length === 0 ? (
-        <p className="text-xs text-muted-foreground pl-2">No status items</p>
+        <p className="text-xs text-muted-foreground pl-2">No updates</p>
       ) : (
         <ul className="space-y-0.5 pl-2">
           {member.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} />
+            <UpdateItem key={s.id} text={s.text} checked={s.checked} />
           ))}
         </ul>
       )}
@@ -57,11 +57,11 @@ function ProjectStatusSection({ project }: { project: ReportProjectStatus }) {
     <div className="space-y-1">
       <span className="text-sm font-medium">{project.project_name}</span>
       {project.statuses.length === 0 ? (
-        <p className="text-xs text-muted-foreground pl-2">No status items</p>
+        <p className="text-xs text-muted-foreground pl-2">No updates</p>
       ) : (
         <ul className="space-y-0.5 pl-2">
           {project.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} />
+            <UpdateItem key={s.id} text={s.text} checked={s.checked} />
           ))}
         </ul>
       )}
@@ -102,7 +102,7 @@ async function generatePdf(detail: ReportDetailType) {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(9);
       doc.setTextColor(150);
-      doc.text("No status items", margin + indent, y);
+      doc.text("No updates", margin + indent, y);
       doc.setTextColor(0);
       y += 5;
     } else {
