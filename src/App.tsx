@@ -153,6 +153,15 @@ function App() {
       });
   }, [unlocked]);
 
+  const handleShowWelcome = useCallback(async () => {
+    try {
+      await setSetting("onboarding_completed", "false");
+    } catch {
+      // Best effort
+    }
+    setShowOnboarding(true);
+  }, []);
+
   const handleOnboardingComplete = useCallback(async () => {
     try {
       await setSetting("onboarding_completed", "true");
@@ -197,6 +206,7 @@ function App() {
                 onThemeChange={setTheme}
                 requireAuth={requireAuth}
                 onRequireAuthChange={setRequireAuth}
+                onShowWelcome={handleShowWelcome}
               />
             }
           />

@@ -7,6 +7,7 @@ interface SettingsPageProps {
   onThemeChange?: (theme: "light" | "dark" | "system") => void;
   requireAuth: boolean;
   onRequireAuthChange: (value: boolean) => void;
+  onShowWelcome?: () => void;
 }
 
 const AUTO_LOCK_OPTIONS = [
@@ -21,6 +22,7 @@ export function SettingsPage({
   onThemeChange,
   requireAuth,
   onRequireAuthChange,
+  onShowWelcome,
 }: SettingsPageProps) {
   const [autoLockTimeout, setAutoLockTimeout] = useState<string>("60");
   const [autoLockError, setAutoLockError] = useState<string | null>(null);
@@ -223,6 +225,18 @@ export function SettingsPage({
           )}
           {autoLockError && <p className="text-sm text-destructive">{autoLockError}</p>}
           {autoLockSaved && <p className="text-sm text-green-600">Saved</p>}
+        </div>
+
+        {/* Welcome Screen */}
+        <div className="space-y-1.5">
+          <h2 className="text-sm font-medium">Welcome Screen</h2>
+          <p className="text-xs text-muted-foreground">Show the introductory walkthrough again.</p>
+          <button
+            onClick={onShowWelcome}
+            className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+          >
+            Show Welcome Screen
+          </button>
         </div>
 
         {/* Data Management */}
