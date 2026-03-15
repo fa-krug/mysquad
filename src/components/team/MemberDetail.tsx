@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Separator } from "@/components/ui/separator";
 import { InfoSection } from "./InfoSection";
@@ -17,8 +18,11 @@ import {
   getTitles,
   uploadMemberPicture,
   deleteMemberPicture,
+  createMeeting,
 } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Video } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
 import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/types";
 
@@ -30,6 +34,7 @@ interface MemberDetailProps {
 }
 
 export function MemberDetail({ member, members, onMemberChange, picturesDir }: MemberDetailProps) {
+  const navigate = useNavigate();
   const [statusItems, setStatusItems] = useState<CheckableItem[]>([]);
   const [talkTopics, setTalkTopics] = useState<CheckableItem[]>([]);
   const [titles, setTitles] = useState<Title[]>([]);
@@ -40,7 +45,7 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
   useEffect(() => {
     getStatusItems(member.id)
       .then(setStatusItems)
-      .catch(() => showError("Failed to load status items"));
+      .catch(() => showError("Failed to load updates"));
     getTalkTopics(member.id)
       .then(setTalkTopics)
       .catch(() => showError("Failed to load talk topics"));
@@ -123,6 +128,15 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
     [],
   );
 
+  const handleStartMeeting = useCallback(async () => {
+    try {
+      const meeting = await createMeeting(member.id);
+      navigate(`/meeting/${meeting.id}`);
+    } catch {
+      showError("Failed to create meeting");
+    }
+  }, [member.id, navigate]);
+
   return (
     <div className="h-full overflow-auto">
       <div className="max-w-2xl space-y-6 p-6">
@@ -138,7 +152,7 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
             onUpload={handleUploadPicture}
             onDelete={handleDeletePicture}
           />
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold">
                 {member.first_name} {member.last_name}
@@ -149,6 +163,17 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
               <p className="text-sm text-muted-foreground">{member.current_title_name}</p>
             )}
           </div>
+          {!member.left_date && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={handleStartMeeting}
+            >
+              <Video className="size-4" />
+              Start Meeting
+            </Button>
+          )}
         </div>
         <InfoSection
           member={member}
@@ -159,7 +184,7 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
         <ChildrenList teamMemberId={member.id} />
         <Separator />
         <CheckableList
-          title="Status"
+          title="Updates"
           items={statusItems}
           onAdd={handleStatusAdd}
           onUpdate={handleStatusUpdate}

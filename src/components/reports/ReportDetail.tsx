@@ -16,7 +16,7 @@ interface ReportDetailProps {
   report: Report;
 }
 
-function StatusItem({
+function UpdateItem({
   text,
   checked,
   onToggle,
@@ -58,11 +58,11 @@ function MemberStatusSection({
         )}
       </div>
       {member.statuses.length === 0 ? (
-        <p className="text-xs text-muted-foreground pl-2">No status items</p>
+        <p className="text-xs text-muted-foreground pl-2">No updates</p>
       ) : (
         <ul className="space-y-0.5 pl-2">
           {member.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
+            <UpdateItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
           ))}
         </ul>
       )}
@@ -81,11 +81,11 @@ function ProjectStatusSection({
     <div className="space-y-1">
       <span className="text-sm font-medium">{project.project_name}</span>
       {project.statuses.length === 0 ? (
-        <p className="text-xs text-muted-foreground pl-2">No status items</p>
+        <p className="text-xs text-muted-foreground pl-2">No updates</p>
       ) : (
         <ul className="space-y-0.5 pl-2">
           {project.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
+            <UpdateItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
           ))}
         </ul>
       )}
@@ -126,7 +126,7 @@ async function generatePdf(detail: ReportDetailType) {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(9);
       doc.setTextColor(150);
-      doc.text("No status items", margin + indent, y);
+      doc.text("No updates", margin + indent, y);
       doc.setTextColor(0);
       y += 5;
     } else {
@@ -228,7 +228,9 @@ export function ReportDetail({ report }: ReportDetailProps) {
         const revert = (members: ReportMemberStatus[]) =>
           members.map((m) => ({
             ...m,
-            statuses: m.statuses.map((s) => (s.id === item.id ? { ...s, checked: !newChecked } : s)),
+            statuses: m.statuses.map((s) =>
+              s.id === item.id ? { ...s, checked: !newChecked } : s,
+            ),
           }));
         return { ...prev, stakeholders: revert(prev.stakeholders), members: revert(prev.members) };
       });
@@ -255,7 +257,9 @@ export function ReportDetail({ report }: ReportDetailProps) {
           ...prev,
           projects: prev.projects.map((p) => ({
             ...p,
-            statuses: p.statuses.map((s) => (s.id === item.id ? { ...s, checked: !newChecked } : s)),
+            statuses: p.statuses.map((s) =>
+              s.id === item.id ? { ...s, checked: !newChecked } : s,
+            ),
           })),
         };
       });

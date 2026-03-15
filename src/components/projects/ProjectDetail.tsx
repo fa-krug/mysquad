@@ -172,9 +172,9 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
 
         <Separator />
 
-        {/* Status Items */}
+        {/* Updates */}
         <CheckableList
-          title="Status"
+          title="Updates"
           items={statusItems as BaseCheckableItem[]}
           onAdd={(text) => addProjectStatusItem(project.id, text) as Promise<BaseCheckableItem>}
           onUpdate={(id, text, checked) => updateProjectStatusItem(id, text, checked)}

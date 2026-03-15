@@ -17,6 +17,8 @@ import type {
   SalaryListItem,
   ScenarioSummary,
   ScenarioMemberComparison,
+  Meeting,
+  MeetingDetail,
 } from "./types";
 
 // Auth
@@ -186,6 +188,26 @@ export const updateProjectStatusItem = (id: number, text?: string, checked?: boo
   invoke<void>("update_project_status_item", { id, text: text ?? null, checked: checked ?? null });
 export const deleteProjectStatusItem = (id: number) =>
   invoke<void>("delete_project_status_item", { id });
+
+// Meetings
+export const createMeeting = (teamMemberId: number) =>
+  invoke<Meeting>("create_meeting", { team_member_id: teamMemberId });
+export const getMeetings = (teamMemberId: number) =>
+  invoke<Meeting[]>("get_meetings", { team_member_id: teamMemberId });
+export const getMeetingDetail = (id: number) => invoke<MeetingDetail>("get_meeting_detail", { id });
+export const addMeetingUpdate = (meetingId: number, teamMemberId: number, text: string) =>
+  invoke<CheckableItem>("add_meeting_update", {
+    meeting_id: meetingId,
+    team_member_id: teamMemberId,
+    text,
+  });
+export const checkTalkTopicInMeeting = (topicId: number, meetingId: number, checked: boolean) =>
+  invoke<void>("check_talk_topic_in_meeting", {
+    topic_id: topicId,
+    meeting_id: meetingId,
+    checked,
+  });
+export const deleteMeeting = (id: number) => invoke<void>("delete_meeting", { id });
 
 // Settings
 export const getSetting = (key: string) => invoke<string | null>("get_setting", { key });

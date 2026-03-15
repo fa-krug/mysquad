@@ -194,6 +194,35 @@ export interface ScenarioSummary {
   headcount: number;
 }
 
+export interface Meeting {
+  id: number;
+  team_member_id: number;
+  date: string;
+  created_at: string;
+  update_count: number;
+}
+
+export interface MeetingMemberInfo {
+  first_name: string;
+  last_name: string;
+  title_name: string | null;
+  start_date: string | null;
+  email: string | null;
+  picture_path: string | null;
+  lead_name: string | null;
+}
+
+export interface MeetingDetail {
+  id: number;
+  team_member_id: number;
+  date: string;
+  member: MeetingMemberInfo;
+  previous_updates: CheckableItem[];
+  talk_topics: CheckableItem[];
+  meeting_updates: CheckableItem[];
+  meeting_talk_topics: CheckableItem[];
+}
+
 export interface ScenarioMemberComparison {
   data_point_id: number;
   data_point_name: string;

@@ -2532,6 +2532,315 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
     })
 }
 
+// ── Meeting commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Meeting {
+    pub id: i64,
+    pub team_member_id: i64,
+    pub date: String,
+    pub created_at: String,
+    pub update_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MeetingDetail {
+    pub id: i64,
+    pub team_member_id: i64,
+    pub date: String,
+    pub member: MeetingMemberInfo,
+    pub previous_updates: Vec<CheckableItem>,
+    pub talk_topics: Vec<CheckableItem>,
+    pub meeting_updates: Vec<CheckableItem>,
+    pub meeting_talk_topics: Vec<CheckableItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MeetingMemberInfo {
+    pub first_name: String,
+    pub last_name: String,
+    pub title_name: Option<String>,
+    pub start_date: Option<String>,
+    pub email: Option<String>,
+    pub picture_path: Option<String>,
+    pub lead_name: Option<String>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_meeting(db: State<AppDb>, team_member_id: i64) -> Result<Meeting, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "INSERT INTO meetings (team_member_id) VALUES (?1)",
+        params![team_member_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let (date, created_at): (String, String) = conn
+        .query_row(
+            "SELECT date, created_at FROM meetings WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(Meeting {
+        id,
+        team_member_id,
+        date,
+        created_at,
+        update_count: 0,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_meetings(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Meeting>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT m.id, m.team_member_id, m.date, m.created_at,
+                    (SELECT COUNT(*) FROM status_items si WHERE si.meeting_id = m.id) as update_count
+             FROM meetings m
+             WHERE m.team_member_id = ?1
+             ORDER BY m.date DESC, m.created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let meetings = stmt
+        .query_map(params![team_member_id], |row| {
+            Ok(Meeting {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                date: row.get(2)?,
+                created_at: row.get(3)?,
+                update_count: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(meetings)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_meeting_detail(db: State<AppDb>, id: i64) -> Result<MeetingDetail, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let (meeting_id, team_member_id, date): (i64, i64, String) = conn
+        .query_row(
+            "SELECT id, team_member_id, date FROM meetings WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Member info
+    let member: MeetingMemberInfo = conn
+        .query_row(
+            "SELECT m.first_name, m.last_name,
+                    COALESCE(pt.name, t.name) as current_title,
+                    m.start_date, m.email, m.picture_path,
+                    lead.first_name || ' ' || lead.last_name as lead_name
+             FROM team_members m
+             LEFT JOIN titles t ON t.id = m.title_id
+             LEFT JOIN (
+                 SELECT sdpm.member_id, sdpm.promoted_title_id
+                 FROM salary_data_point_members sdpm
+                 INNER JOIN (
+                     SELECT member_id, MAX(data_point_id) as max_dp_id
+                     FROM salary_data_point_members
+                     WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                     GROUP BY member_id
+                 ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+             ) promo ON promo.member_id = m.id
+             LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             LEFT JOIN team_members lead ON lead.id = m.lead_id
+             WHERE m.id = ?1",
+            params![team_member_id],
+            |row| {
+                Ok(MeetingMemberInfo {
+                    first_name: row.get(0)?,
+                    last_name: row.get(1)?,
+                    title_name: row.get(2)?,
+                    start_date: row.get(3)?,
+                    email: row.get(4)?,
+                    picture_path: row.get(5)?,
+                    lead_name: row.get(6)?,
+                })
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Previous updates: unchecked status_items NOT from this meeting (recent first, limit 20)
+    let mut prev_stmt = conn
+        .prepare(
+            "SELECT id, team_member_id, text, checked, created_at
+             FROM status_items
+             WHERE team_member_id = ?1 AND (meeting_id IS NULL OR meeting_id != ?2)
+             ORDER BY created_at DESC
+             LIMIT 20",
+        )
+        .map_err(|e| e.to_string())?;
+    let previous_updates: Vec<CheckableItem> = prev_stmt
+        .query_map(params![team_member_id, meeting_id], |row| {
+            Ok(CheckableItem {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Open talk topics (unchecked, not yet linked to this meeting)
+    let mut topic_stmt = conn
+        .prepare(
+            "SELECT id, team_member_id, text, checked, created_at
+             FROM talk_topics
+             WHERE team_member_id = ?1 AND checked = 0 AND (meeting_id IS NULL OR meeting_id != ?2)
+             ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let talk_topics: Vec<CheckableItem> = topic_stmt
+        .query_map(params![team_member_id, meeting_id], |row| {
+            Ok(CheckableItem {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Updates created during this meeting
+    let mut meeting_updates_stmt = conn
+        .prepare(
+            "SELECT id, team_member_id, text, checked, created_at
+             FROM status_items
+             WHERE meeting_id = ?1
+             ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let meeting_updates: Vec<CheckableItem> = meeting_updates_stmt
+        .query_map(params![meeting_id], |row| {
+            Ok(CheckableItem {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Talk topics checked off during this meeting
+    let mut meeting_topics_stmt = conn
+        .prepare(
+            "SELECT id, team_member_id, text, checked, created_at
+             FROM talk_topics
+             WHERE meeting_id = ?1
+             ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let meeting_talk_topics: Vec<CheckableItem> = meeting_topics_stmt
+        .query_map(params![meeting_id], |row| {
+            Ok(CheckableItem {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(MeetingDetail {
+        id: meeting_id,
+        team_member_id,
+        date,
+        member,
+        previous_updates,
+        talk_topics,
+        meeting_updates,
+        meeting_talk_topics,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn add_meeting_update(
+    db: State<AppDb>,
+    meeting_id: i64,
+    team_member_id: i64,
+    text: String,
+) -> Result<CheckableItem, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "INSERT INTO status_items (team_member_id, text, meeting_id) VALUES (?1, ?2, ?3)",
+        params![team_member_id, text, meeting_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let created_at: String = conn
+        .query_row(
+            "SELECT created_at FROM status_items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(CheckableItem {
+        id,
+        team_member_id,
+        text,
+        checked: false,
+        created_at,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn check_talk_topic_in_meeting(
+    db: State<AppDb>,
+    topic_id: i64,
+    meeting_id: i64,
+    checked: bool,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    if checked {
+        conn.execute(
+            "UPDATE talk_topics SET checked = 1, meeting_id = ?1 WHERE id = ?2",
+            params![meeting_id, topic_id],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE talk_topics SET checked = 0, meeting_id = NULL WHERE id = ?1",
+            params![topic_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM meetings WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Helpers ──
 
 pub(crate) fn get_app_data_dir() -> Result<std::path::PathBuf, String> {
