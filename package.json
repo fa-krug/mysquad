@@ -119,7 +119,6 @@
             },
             {
               "path": "src-tauri/target/release/bundle/macos/*.tar.gz",
-<<<<<<< HEAD
               "label": "MySquad-${nextRelease.version}.app.tar.gz"
             },
             {
