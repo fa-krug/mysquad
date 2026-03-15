@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const tauriConf = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-const version = tauriConf.version;
+const version = process.argv[2] || tauriConf.version;
 const repo = 'https://github.com/fa-krug/mysquad/releases/download';
 
 const macosDir = 'src-tauri/target/release/bundle/macos';

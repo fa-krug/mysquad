@@ -90,7 +90,8 @@
       [
         "@semantic-release/exec",
         {
-          "prepareCmd": "node scripts/sync-version.js ${nextRelease.version}"
+          "verifyReleaseCmd": "echo ${nextRelease.version} > .next-version",
+          "prepareCmd": "node scripts/sync-version.js ${nextRelease.version} && node scripts/generate-latest-json.js ${nextRelease.version}"
         }
       ],
       [

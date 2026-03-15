@@ -49,9 +49,48 @@ jobs:
       - name: Rust tests
         run: cd src-tauri && cargo test
 
+  determine-version:
+    name: Determine version
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should-release: ${{ steps.version.outputs.should-release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Determine next version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx semantic-release --dry-run || true
+          if [ -f .next-version ]; then
+            echo "version=$(cat .next-version)" >> $GITHUB_OUTPUT
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "Next version: $(cat .next-version)"
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "No new release needed"
+          fi
+
   build:
     name: Build (${{ matrix.os }})
-    needs: checks
+    needs: determine-version
+    if: needs.determine-version.outputs.should-release == 'true'
     strategy:
       matrix:
         include:
@@ -75,6 +114,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: Sync version
+        run: node scripts/sync-version.js ${{ needs.determine-version.outputs.version }}
 
       - name: Build Tauri app
         env:
@@ -156,9 +198,6 @@ jobs:
         with:
           name: updater-windows
           path: src-tauri/target/release/bundle/nsis/
-
-      - name: Generate latest.json
-        run: node scripts/generate-latest-json.js
 
       - name: Release
         env:
