@@ -1,7 +1,7 @@
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -15,7 +15,7 @@ fn compute_hmac(key: &str, data: &str) -> String {
 
 /// Read a value from the config file, verifying HMAC integrity.
 /// Returns None if file missing, corrupt, or HMAC invalid.
-pub fn read_config(config_path: &PathBuf, keychain_key: &str, key: &str) -> Option<String> {
+pub fn read_config(config_path: &Path, keychain_key: &str, key: &str) -> Option<String> {
     let content = std::fs::read_to_string(config_path).ok()?;
     let parsed: BTreeMap<String, String> = serde_json::from_str(&content).ok()?;
 
@@ -40,7 +40,7 @@ pub fn read_config(config_path: &PathBuf, keychain_key: &str, key: &str) -> Opti
 
 /// Write a key-value pair to the config file with HMAC signature.
 pub fn write_config(
-    config_path: &PathBuf,
+    config_path: &Path,
     keychain_key: &str,
     key: &str,
     value: &str,
@@ -79,7 +79,7 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    fn config_path(dir: &std::path::Path) -> PathBuf {
+    fn config_path(dir: &std::path::Path) -> std::path::PathBuf {
         dir.join("config.json")
     }
 
