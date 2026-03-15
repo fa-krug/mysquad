@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { updateReport } from "@/lib/db";
+import { required } from "@/lib/validators";
 import type { Report } from "@/lib/types";
 
 interface ReportEditDialogProps {
@@ -22,18 +23,14 @@ export function ReportEditDialog({
   const nameRef = useRef<HTMLInputElement>(null);
   const [local, setLocal] = useState(report);
 
-  const {
-    save: saveName,
-    saving,
-    saved,
-    error,
-  } = useAutoSave({
+  const { save: saveName, error } = useAutoSave({
     onSave: async (val) => {
       await updateReport(report.id, "name", val);
       const updated = { ...local, name: val ?? "" };
       setLocal(updated);
       onReportChange(updated);
     },
+    validate: required("Report name"),
   });
 
   useEffect(() => {
@@ -65,10 +62,13 @@ export function ReportEditDialog({
         <div className="space-y-4">
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Report Name</Label>
-            <Input ref={nameRef} value={local.name} onChange={handleNameChange} />
+            <Input
+              ref={nameRef}
+              value={local.name}
+              onChange={handleNameChange}
+              aria-invalid={!!error || undefined}
+            />
             <div className="h-3 text-xs">
-              {saving && <span className="text-muted-foreground">Saving…</span>}
-              {saved && !saving && <span className="text-green-600">Saved</span>}
               {error && <span className="text-destructive truncate">{error}</span>}
             </div>
           </div>

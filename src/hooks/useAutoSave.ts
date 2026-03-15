@@ -7,36 +7,48 @@ export const flushRegistry: Set<() => Promise<void>> = new Set();
 interface UseAutoSaveOptions {
   delay?: number;
   onSave: (value: string | null) => Promise<void>;
+  validate?: (value: string | null) => string | null;
 }
 
-export function useAutoSave({ delay = 500, onSave }: UseAutoSaveOptions) {
+export function useAutoSave({ delay = 500, onSave, validate }: UseAutoSaveOptions) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  });
+  const validateRef = useRef(validate);
+  useEffect(() => {
+    validateRef.current = validate;
+  });
 
   // Track the latest pending value so flush can execute it
   const pendingValueRef = useRef<string | null | undefined>(undefined);
 
   const save = useCallback(
     (value: string | null) => {
-      setError(null);
-      setSaved(false);
+      // Run validation immediately
+      if (validateRef.current) {
+        const validationError = validateRef.current(value);
+        setError(validationError);
+        if (validationError) {
+          // Cancel any pending save
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          pendingValueRef.current = undefined;
+          return;
+        }
+      } else {
+        setError(null);
+      }
+
       pendingValueRef.current = value;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(async () => {
         pendingValueRef.current = undefined;
-        setSaving(true);
         try {
           await onSaveRef.current(value);
-          setSaved(true);
-          setTimeout(() => setSaved(false), 1500);
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
-        } finally {
-          setSaving(false);
         }
       }, delay);
     },
@@ -73,5 +85,5 @@ export function useAutoSave({ delay = 500, onSave }: UseAutoSaveOptions) {
     };
   }, []);
 
-  return { save, flush, saving, saved, error };
+  return { save, flush, error };
 }
