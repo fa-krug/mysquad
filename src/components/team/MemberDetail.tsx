@@ -35,7 +35,13 @@ interface MemberDetailProps {
   highlightTalkTopicId?: number;
 }
 
-export function MemberDetail({ member, members, onMemberChange, picturesDir, highlightTalkTopicId }: MemberDetailProps) {
+export function MemberDetail({
+  member,
+  members,
+  onMemberChange,
+  picturesDir,
+  highlightTalkTopicId,
+}: MemberDetailProps) {
   const navigate = useNavigate();
   const [statusItems, setStatusItems] = useState<CheckableItem[]>([]);
   const [talkTopics, setTalkTopics] = useState<CheckableItem[]>([]);
@@ -130,14 +136,11 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir, hig
     [],
   );
 
-  const handleShareTalkTopic = useCallback(
-    (item: { id: number }) => {
-      shareText(`mysquad://talktopic/${item.id}`).catch((err) =>
-        showError(`Share failed: ${err instanceof Error ? err.message : String(err)}`),
-      );
-    },
-    [],
-  );
+  const handleShareTalkTopic = useCallback((item: { id: number }) => {
+    shareText(`mysquad://talktopic/${item.id}`).catch((err) =>
+      showError(`Share failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }, []);
 
   const handleStartMeeting = useCallback(async () => {
     try {
