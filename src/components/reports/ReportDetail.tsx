@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { getReportDetail } from "@/lib/db";
+import { getReportDetail, updateStatusItem, updateProjectStatusItem } from "@/lib/db";
 import type {
   Report,
   ReportDetail as ReportDetailType,
   ReportMemberStatus,
   ReportProjectStatus,
+  ReportStatusItem as ReportStatusItemType,
 } from "@/lib/types";
 import { CheckIcon, Download } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
@@ -15,20 +16,37 @@ interface ReportDetailProps {
   report: Report;
 }
 
-function StatusItem({ text, checked }: { text: string; checked: boolean }) {
+function StatusItem({
+  text,
+  checked,
+  onToggle,
+}: {
+  text: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <li className="flex items-start gap-2 text-sm">
+    <li
+      className="flex items-start gap-2 text-sm cursor-pointer select-none group"
+      onClick={onToggle}
+    >
       {checked ? (
-        <CheckIcon className="size-3.5 mt-0.5 shrink-0 text-green-600" />
+        <CheckIcon className="size-3.5 mt-0.5 shrink-0 text-green-600 group-hover:opacity-70" />
       ) : (
-        <span className="size-3.5 mt-0.5 shrink-0 rounded-sm border border-muted-foreground/40" />
+        <span className="size-3.5 mt-0.5 shrink-0 rounded-sm border border-muted-foreground/40 group-hover:border-foreground" />
       )}
       <span className={checked ? "line-through text-muted-foreground" : ""}>{text}</span>
     </li>
   );
 }
 
-function MemberStatusSection({ member }: { member: ReportMemberStatus }) {
+function MemberStatusSection({
+  member,
+  onToggle,
+}: {
+  member: ReportMemberStatus;
+  onToggle: (item: ReportStatusItemType) => void;
+}) {
   return (
     <div className="space-y-1">
       <div className="flex items-baseline gap-2">
@@ -44,7 +62,7 @@ function MemberStatusSection({ member }: { member: ReportMemberStatus }) {
       ) : (
         <ul className="space-y-0.5 pl-2">
           {member.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} />
+            <StatusItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
           ))}
         </ul>
       )}
@@ -52,7 +70,13 @@ function MemberStatusSection({ member }: { member: ReportMemberStatus }) {
   );
 }
 
-function ProjectStatusSection({ project }: { project: ReportProjectStatus }) {
+function ProjectStatusSection({
+  project,
+  onToggle,
+}: {
+  project: ReportProjectStatus;
+  onToggle: (item: ReportStatusItemType) => void;
+}) {
   return (
     <div className="space-y-1">
       <span className="text-sm font-medium">{project.project_name}</span>
@@ -61,7 +85,7 @@ function ProjectStatusSection({ project }: { project: ReportProjectStatus }) {
       ) : (
         <ul className="space-y-0.5 pl-2">
           {project.statuses.map((s) => (
-            <StatusItem key={s.id} text={s.text} checked={s.checked} />
+            <StatusItem key={s.id} text={s.text} checked={s.checked} onToggle={() => onToggle(s)} />
           ))}
         </ul>
       )}
@@ -186,6 +210,58 @@ export function ReportDetail({ report }: ReportDetailProps) {
       .catch(() => showError("Failed to load report details"));
   }, [report.id, report.collect_statuses, report.include_stakeholders, report.include_projects]);
 
+  const toggleMemberStatus = (item: ReportStatusItemType) => {
+    const newChecked = !item.checked;
+    setDetail((prev) => {
+      if (!prev) return prev;
+      const toggle = (members: ReportMemberStatus[]) =>
+        members.map((m) => ({
+          ...m,
+          statuses: m.statuses.map((s) => (s.id === item.id ? { ...s, checked: newChecked } : s)),
+        }));
+      return { ...prev, stakeholders: toggle(prev.stakeholders), members: toggle(prev.members) };
+    });
+    updateStatusItem(item.id, undefined, newChecked).catch(() => {
+      showError("Failed to update status");
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const revert = (members: ReportMemberStatus[]) =>
+          members.map((m) => ({
+            ...m,
+            statuses: m.statuses.map((s) => (s.id === item.id ? { ...s, checked: !newChecked } : s)),
+          }));
+        return { ...prev, stakeholders: revert(prev.stakeholders), members: revert(prev.members) };
+      });
+    });
+  };
+
+  const toggleProjectStatus = (item: ReportStatusItemType) => {
+    const newChecked = !item.checked;
+    setDetail((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        projects: prev.projects.map((p) => ({
+          ...p,
+          statuses: p.statuses.map((s) => (s.id === item.id ? { ...s, checked: newChecked } : s)),
+        })),
+      };
+    });
+    updateProjectStatusItem(item.id, undefined, newChecked).catch(() => {
+      showError("Failed to update status");
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          projects: prev.projects.map((p) => ({
+            ...p,
+            statuses: p.statuses.map((s) => (s.id === item.id ? { ...s, checked: !newChecked } : s)),
+          })),
+        };
+      });
+    });
+  };
+
   if (!detail) return null;
 
   const hasContent =
@@ -227,7 +303,7 @@ export function ReportDetail({ report }: ReportDetailProps) {
               Stakeholders
             </h3>
             {detail.stakeholders.map((m) => (
-              <MemberStatusSection key={m.member_id} member={m} />
+              <MemberStatusSection key={m.member_id} member={m} onToggle={toggleMemberStatus} />
             ))}
           </div>
         </>
@@ -241,7 +317,7 @@ export function ReportDetail({ report }: ReportDetailProps) {
               Team Members
             </h3>
             {detail.members.map((m) => (
-              <MemberStatusSection key={m.member_id} member={m} />
+              <MemberStatusSection key={m.member_id} member={m} onToggle={toggleMemberStatus} />
             ))}
           </div>
         </>
@@ -255,7 +331,7 @@ export function ReportDetail({ report }: ReportDetailProps) {
               Projects
             </h3>
             {detail.projects.map((p) => (
-              <ProjectStatusSection key={p.project_id} project={p} />
+              <ProjectStatusSection key={p.project_id} project={p} onToggle={toggleProjectStatus} />
             ))}
           </div>
         </>
