@@ -21,7 +21,16 @@ const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
 import { pendingDeleteRegistry } from "./hooks/usePendingDelete";
-import { authenticate, unlockDb, lockDb, getConfig, getTalkTopicById } from "./lib/db";
+import {
+  authenticate,
+  unlockDb,
+  lockDb,
+  getConfig,
+  getTalkTopicById,
+  getSetting,
+  setSetting,
+} from "./lib/db";
+import { Onboarding } from "./components/onboarding/Onboarding";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 function parseDeepLink(url: string): { topicId: number } | null {
@@ -30,7 +39,11 @@ function parseDeepLink(url: string): { topicId: number } | null {
   return { topicId: Number(match[1]) };
 }
 
-function DeepLinkHandler({ pendingUrl }: { pendingUrl: React.MutableRefObject<string | null> }) {
+function DeepLinkHandler({
+  pendingUrlRef,
+}: {
+  pendingUrlRef: React.MutableRefObject<string | null>;
+}) {
   const navigate = useNavigate();
 
   const handleDeepLink = useCallback(
@@ -51,12 +64,12 @@ function DeepLinkHandler({ pendingUrl }: { pendingUrl: React.MutableRefObject<st
 
   useEffect(() => {
     // Process any URL that arrived while locked
-    if (pendingUrl.current) {
-      const url = pendingUrl.current;
-      pendingUrl.current = null;
+    if (pendingUrlRef.current) {
+      const url = pendingUrlRef.current;
+      pendingUrlRef.current = null;
       handleDeepLink(url);
     }
-  }, [handleDeepLink]);
+  }, [handleDeepLink, pendingUrlRef]);
 
   useEffect(() => {
     const unlisten = onOpenUrl((urls) => {
@@ -74,6 +87,8 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [requireAuth, setRequireAuth] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const { theme, setTheme } = useTheme(unlocked);
   const pendingDeepLink = useRef<string | null>(null);
 
@@ -124,6 +139,29 @@ function App() {
 
   useAutoLock({ onLock: handleLock, enabled: unlocked, requireAuth });
 
+  // Check onboarding status after DB unlock
+  useEffect(() => {
+    if (!unlocked) return;
+    getSetting("onboarding_completed")
+      .then((value) => {
+        setShowOnboarding(value !== "true");
+        setOnboardingChecked(true);
+      })
+      .catch(() => {
+        setShowOnboarding(true);
+        setOnboardingChecked(true);
+      });
+  }, [unlocked]);
+
+  const handleOnboardingComplete = useCallback(async () => {
+    try {
+      await setSetting("onboarding_completed", "true");
+    } catch {
+      // Best effort — continue to the app
+    }
+    setShowOnboarding(false);
+  }, []);
+
   // Show nothing while checking config
   if (!configLoaded) return null;
 
@@ -132,9 +170,16 @@ function App() {
     return <LockScreen onUnlock={handleUnlock} />;
   }
 
+  // Show nothing while checking onboarding status
+  if (!onboardingChecked) return null;
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+
   return (
     <BrowserRouter>
-      <DeepLinkHandler pendingUrl={pendingDeepLink} />
+      <DeepLinkHandler pendingUrlRef={pendingDeepLink} />
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<TeamMembers />} />
