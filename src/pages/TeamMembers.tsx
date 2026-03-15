@@ -22,6 +22,7 @@ export function TeamMembers() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [highlightTalkTopicId, setHighlightTalkTopicId] = useState<number | undefined>(undefined);
   const [view, setView] = useState<"list" | "chart">("list");
   const { scheduleDelete, pendingIds } = usePendingDelete();
 
@@ -64,6 +65,9 @@ export function TeamMembers() {
       handleDelete(selectedId);
     } else if (typeof state.memberId === "number") {
       setSelectedId(state.memberId);
+      if (typeof state.highlightTalkTopicId === "number") {
+        setHighlightTalkTopicId(state.highlightTalkTopicId);
+      }
     }
   }, [location.state]);
 
@@ -193,6 +197,7 @@ export function TeamMembers() {
               members={visibleMembers}
               onMemberChange={handleMemberChange}
               picturesDir={picturesDir}
+              highlightTalkTopicId={highlightTalkTopicId}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-muted-foreground">

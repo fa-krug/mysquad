@@ -1,5 +1,5 @@
-import { memo, useCallback, useRef, useState } from "react";
-import { ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRightIcon, PlusIcon, SearchIcon, ShareIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -15,6 +15,8 @@ interface CheckableListProps {
   onItemsChange: (
     itemsOrUpdater: BaseCheckableItem[] | ((prev: BaseCheckableItem[]) => BaseCheckableItem[]),
   ) => void;
+  onShareItem?: (item: BaseCheckableItem) => void;
+  highlightItemId?: number;
 }
 
 interface ItemRowProps {
@@ -22,11 +24,21 @@ interface ItemRowProps {
   onUpdate: (id: number, text?: string, checked?: boolean) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onItemsChange: (updater: (prev: BaseCheckableItem[]) => BaseCheckableItem[]) => void;
+  onShareItem?: (item: BaseCheckableItem) => void;
+  highlight?: boolean;
 }
 
-const ItemRow = memo(function ItemRow({ item, onUpdate, onDelete, onItemsChange }: ItemRowProps) {
+const ItemRow = memo(function ItemRow({
+  item,
+  onUpdate,
+  onDelete,
+  onItemsChange,
+  onShareItem,
+  highlight,
+}: ItemRowProps) {
   const [text, setText] = useState(item.text);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const { save } = useAutoSave({
     onSave: async (val) => {
@@ -52,8 +64,17 @@ const ItemRow = memo(function ItemRow({ item, onUpdate, onDelete, onItemsChange 
     onItemsChange((prev) => prev.filter((i) => i.id !== item.id));
   };
 
+  useEffect(() => {
+    if (highlight && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlight]);
+
   return (
-    <div className={`flex items-center gap-2 py-1 group ${item.checked ? "opacity-50" : ""}`}>
+    <div
+      ref={rowRef}
+      className={`flex items-center gap-2 py-1 group ${item.checked ? "opacity-50" : ""} ${highlight ? "animate-highlight-flash rounded" : ""}`}
+    >
       <Checkbox
         checked={item.checked}
         onCheckedChange={(checked) => {
@@ -71,6 +92,15 @@ const ItemRow = memo(function ItemRow({ item, onUpdate, onDelete, onItemsChange 
           value={text}
           onChange={handleTextChange}
         />
+      )}
+      {onShareItem && (
+        <button
+          className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          onClick={() => onShareItem(item)}
+          title="Share"
+        >
+          <ShareIcon className="size-3.5" />
+        </button>
       )}
       <button
         className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
@@ -90,6 +120,8 @@ export function CheckableList({
   onUpdate,
   onDelete,
   onItemsChange,
+  onShareItem,
+  highlightItemId,
 }: CheckableListProps) {
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState("");
@@ -261,6 +293,8 @@ export function CheckableList({
                     onUpdate={onUpdate}
                     onDelete={onDelete}
                     onItemsChange={handleItemsUpdater}
+                    onShareItem={onShareItem}
+                    highlight={item.id === highlightItemId}
                   />
                 </div>
               );
@@ -275,6 +309,8 @@ export function CheckableList({
             onUpdate={onUpdate}
             onDelete={onDelete}
             onItemsChange={handleItemsUpdater}
+            onShareItem={onShareItem}
+            highlight={item.id === highlightItemId}
           />
         ))
       )}
@@ -302,6 +338,8 @@ export function CheckableList({
                   onUpdate={onUpdate}
                   onDelete={onDelete}
                   onItemsChange={handleItemsUpdater}
+                  onShareItem={onShareItem}
+                  highlight={item.id === highlightItemId}
                 />
               ))}
             </div>

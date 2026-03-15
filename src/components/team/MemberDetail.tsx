@@ -20,6 +20,7 @@ import {
   deleteMemberPicture,
   createMeeting,
 } from "@/lib/db";
+import { shareText } from "@choochmeque/tauri-plugin-sharekit-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Video } from "lucide-react";
@@ -31,9 +32,10 @@ interface MemberDetailProps {
   members: TeamMember[];
   onMemberChange: (field: string, value: string | null, titleName?: string | null) => Promise<void>;
   picturesDir: string | null;
+  highlightTalkTopicId?: number;
 }
 
-export function MemberDetail({ member, members, onMemberChange, picturesDir }: MemberDetailProps) {
+export function MemberDetail({ member, members, onMemberChange, picturesDir, highlightTalkTopicId }: MemberDetailProps) {
   const navigate = useNavigate();
   const [statusItems, setStatusItems] = useState<CheckableItem[]>([]);
   const [talkTopics, setTalkTopics] = useState<CheckableItem[]>([]);
@@ -128,6 +130,15 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
     [],
   );
 
+  const handleShareTalkTopic = useCallback(
+    (item: { id: number }) => {
+      shareText(`mysquad://talktopic/${item.id}`).catch((err) =>
+        showError(`Share failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
+    },
+    [],
+  );
+
   const handleStartMeeting = useCallback(async () => {
     try {
       const meeting = await createMeeting(member.id);
@@ -199,6 +210,8 @@ export function MemberDetail({ member, members, onMemberChange, picturesDir }: M
           onUpdate={handleTopicUpdate}
           onDelete={deleteTalkTopic}
           onItemsChange={handleTopicItemsChange}
+          onShareItem={handleShareTalkTopic}
+          highlightItemId={highlightTalkTopicId}
         />
       </div>
     </div>

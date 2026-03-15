@@ -69,6 +69,8 @@ export const addTalkTopic = (teamMemberId: number, text: string) =>
 export const updateTalkTopic = (id: number, text?: string, checked?: boolean) =>
   invoke<void>("update_talk_topic", { id, text: text ?? null, checked: checked ?? null });
 export const deleteTalkTopic = (id: number) => invoke<void>("delete_talk_topic", { id });
+export const getTalkTopicById = (id: number) =>
+  invoke<CheckableItem>("get_talk_topic_by_id", { id });
 
 // Reports
 export const getReports = () => invoke<Report[]>("get_reports");

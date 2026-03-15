@@ -15,6 +15,8 @@ static WINDOW_COUNTER: AtomicUsize = AtomicUsize::new(1);
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_sharekit::init())
         .manage(AppDb::new())
         .setup(|app| {
             let new_window = MenuItemBuilder::new("New Window")
@@ -128,6 +130,7 @@ pub fn run() {
             commands::import_data,
             commands::export_data_point_salaries,
             commands::import_data_point_salaries,
+            commands::get_talk_topic_by_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
