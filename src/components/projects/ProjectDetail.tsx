@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CheckableList } from "@/components/team/CheckableList";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { required } from "@/lib/validators";
 import {
   updateProject,
   getProjectMembers,
@@ -46,13 +47,14 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
     getTeamMembers().then(setAllTeamMembers);
   }, [project.id]);
 
-  const { save: saveName } = useAutoSave({
+  const { save: saveName, error: nameError } = useAutoSave({
     onSave: async (val) => {
       if (val != null && val !== project.name) {
         await updateProject(project.id, "name", val);
         onProjectChange("name", val);
       }
     },
+    validate: required("Project name"),
   });
 
   const { save: saveEndDate } = useAutoSave({
@@ -107,14 +109,18 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
     <div className="h-full overflow-auto">
       <div className="max-w-2xl space-y-6 p-6">
         {/* Name */}
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="project-name">Name</Label>
           <Input
             id="project-name"
             value={name}
             onChange={handleNameChange}
             placeholder="Project name"
+            aria-invalid={!!nameError || undefined}
           />
+          <div className="h-3 text-xs">
+            {nameError && <span className="text-destructive truncate">{nameError}</span>}
+          </div>
         </div>
 
         {/* Dates */}

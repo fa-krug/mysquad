@@ -4,6 +4,7 @@ import type { Title, TeamMember } from "@/lib/types";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { required } from "@/lib/validators";
 
 interface TitleDetailProps {
   title: Title;
@@ -16,15 +17,11 @@ export function TitleDetail({ title, members, onTitleChange, focusName }: TitleD
   const navigate = useNavigate();
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(title.name);
-  const {
-    save: saveName,
-    saving,
-    saved,
-    error,
-  } = useAutoSave({
+  const { save: saveName, error } = useAutoSave({
     onSave: async (val) => {
       onTitleChange("name", val ?? "");
     },
+    validate: required("Title name"),
   });
 
   useEffect(() => {
@@ -48,10 +45,13 @@ export function TitleDetail({ title, members, onTitleChange, focusName }: TitleD
     <div className="max-w-2xl p-6 space-y-6">
       <div className="flex flex-col gap-1">
         <Label className="text-xs text-muted-foreground">Title Name</Label>
-        <Input ref={nameRef} value={name} onChange={handleNameChange} />
+        <Input
+          ref={nameRef}
+          value={name}
+          onChange={handleNameChange}
+          aria-invalid={!!error || undefined}
+        />
         <div className="h-3 text-xs">
-          {saving && <span className="text-muted-foreground">Saving…</span>}
-          {saved && !saving && <span className="text-green-600">Saved</span>}
           {error && <span className="text-destructive truncate">{error}</span>}
         </div>
       </div>

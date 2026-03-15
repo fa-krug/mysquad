@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { getSubtreeIds } from "@/lib/tree-utils";
+import { required, email, phone, zip } from "@/lib/validators";
 import type { TeamMember, Title } from "@/lib/types";
 
 interface InfoSectionProps {
@@ -15,11 +16,12 @@ interface InfoSectionProps {
   onMemberChange: (field: string, value: string | null, titleName?: string | null) => Promise<void>;
 }
 
-// AutoSaveInput: renders a labeled text input with auto-save behavior
+// AutoSaveInput: renders a labeled text input with auto-save behavior and validation
 interface AutoSaveInputProps {
   label: string;
   initialValue: string | null;
   onSave: (value: string | null) => Promise<void>;
+  validate?: (value: string | null) => string | null;
   type?: string;
   multiline?: boolean;
   className?: string;
@@ -29,12 +31,13 @@ function AutoSaveInput({
   label,
   initialValue,
   onSave,
+  validate,
   type = "text",
   multiline = false,
   className = "",
 }: AutoSaveInputProps) {
   const [value, setValue] = useState(initialValue ?? "");
-  const { save, saving, saved, error } = useAutoSave({ onSave });
+  const { save, error } = useAutoSave({ onSave, validate });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const newVal = e.target.value;
@@ -47,16 +50,20 @@ function AutoSaveInput({
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {multiline ? (
         <textarea
-          className="min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
+          className="min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
           value={value}
           onChange={handleChange}
+          aria-invalid={!!error || undefined}
         />
       ) : (
-        <Input type={type} value={value} onChange={handleChange} />
+        <Input
+          type={type}
+          value={value}
+          onChange={handleChange}
+          aria-invalid={!!error || undefined}
+        />
       )}
       <div className="h-3 text-xs">
-        {saving && <span className="text-muted-foreground">Saving…</span>}
-        {saved && !saving && <span className="text-green-600">Saved</span>}
         {error && <span className="text-destructive truncate">{error}</span>}
       </div>
     </div>
@@ -71,7 +78,7 @@ interface AutoSaveDatePickerProps {
 
 function AutoSaveDatePicker({ label, initialValue, onSave }: AutoSaveDatePickerProps) {
   const [value, setValue] = useState(initialValue);
-  const { save, saving, saved, error } = useAutoSave({ onSave });
+  const { save } = useAutoSave({ onSave });
 
   const handleChange = (newVal: string | null) => {
     setValue(newVal);
@@ -82,11 +89,6 @@ function AutoSaveDatePicker({ label, initialValue, onSave }: AutoSaveDatePickerP
     <div className="flex flex-col gap-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <DatePicker value={value} onChange={handleChange} clearable />
-      <div className="h-3 text-xs">
-        {saving && <span className="text-muted-foreground">Saving…</span>}
-        {saved && !saving && <span className="text-green-600">Saved</span>}
-        {error && <span className="text-destructive truncate">{error}</span>}
-      </div>
     </div>
   );
 }
@@ -96,14 +98,10 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
   const [titleId, setTitleId] = useState<string>(
     member.title_id != null ? String(member.title_id) : "",
   );
-  const [titleSaving, setTitleSaving] = useState(false);
-  const [titleError, setTitleError] = useState<string | null>(null);
 
   const [leadId, setLeadId] = useState<string>(
     member.lead_id != null ? String(member.lead_id) : "",
   );
-  const [leadSaving, setLeadSaving] = useState(false);
-  const [leadError, setLeadError] = useState<string | null>(null);
 
   const subtreeIds = useMemo(() => getSubtreeIds(members, member.id), [members, member.id]);
 
@@ -115,29 +113,21 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
   const handleLeadChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setLeadId(val);
-    setLeadSaving(true);
-    setLeadError(null);
     try {
       await onMemberChange("lead_id", val === "" ? null : val);
-    } catch (err) {
-      setLeadError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLeadSaving(false);
+    } catch {
+      // silently handled
     }
   };
 
   const handleTitleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setTitleId(val);
-    setTitleSaving(true);
-    setTitleError(null);
     try {
       const selectedTitle = titles.find((t) => String(t.id) === val);
       await onMemberChange("title_id", val === "" ? null : val, selectedTitle?.name ?? null);
-    } catch (err) {
-      setTitleError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setTitleSaving(false);
+    } catch {
+      // silently handled
     }
   };
 
@@ -153,6 +143,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         label="First Name"
         initialValue={member.first_name}
         onSave={makeOnSave("first_name")}
+        validate={required("First name")}
       />
 
       {/* Last name */}
@@ -161,6 +152,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         label="Last Name"
         initialValue={member.last_name}
         onSave={makeOnSave("last_name")}
+        validate={required("Last name")}
       />
 
       {/* Work email */}
@@ -170,6 +162,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         initialValue={member.email}
         onSave={makeOnSave("email")}
         type="email"
+        validate={email}
       />
 
       {/* Original title dropdown */}
@@ -187,10 +180,6 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
             </option>
           ))}
         </select>
-        <div className="h-3 text-xs">
-          {titleSaving && <span className="text-muted-foreground">Saving…</span>}
-          {titleError && <span className="text-destructive truncate">{titleError}</span>}
-        </div>
       </div>
 
       {/* Lead */}
@@ -209,10 +198,6 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
             </option>
           ))}
         </select>
-        <div className="h-3 text-xs">
-          {leadSaving && <span className="text-muted-foreground">Saving…</span>}
-          {leadError && <span className="text-destructive truncate">{leadError}</span>}
-        </div>
       </div>
 
       {/* Current title (read-only, derived from data points) */}
@@ -235,7 +220,6 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
               </button>
             )}
           </div>
-          <div className="h-3" />
         </div>
       )}
 
@@ -262,6 +246,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         initialValue={member.personal_email}
         onSave={makeOnSave("personal_email")}
         type="email"
+        validate={email}
       />
 
       {/* Personal phone */}
@@ -271,6 +256,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         initialValue={member.personal_phone}
         onSave={makeOnSave("personal_phone")}
         type="tel"
+        validate={phone}
       />
 
       {/* Street address */}
@@ -295,6 +281,7 @@ export function InfoSection({ member, members, titles, onMemberChange }: InfoSec
         label="ZIP Code"
         initialValue={member.address_zip}
         onSave={makeOnSave("address_zip")}
+        validate={zip}
       />
 
       {/* Notes - spans full width */}

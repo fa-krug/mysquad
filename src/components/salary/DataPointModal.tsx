@@ -29,6 +29,7 @@ import {
   removeScenario,
 } from "@/lib/db";
 import { save, open as openFile } from "@tauri-apps/plugin-dialog";
+import { required, positiveNumber } from "@/lib/validators";
 import type {
   SalaryDataPointDetail,
   SalaryDataPointSummary,
@@ -71,6 +72,7 @@ export function DataPointModal({
   const [salaryError, setSalaryError] = useState(false);
   const [isScenario, setIsScenario] = useState(false);
   const [scenarioCount, setScenarioCount] = useState(2);
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   // Extract normal data points from SalaryListItem[] for the "Compare to" dropdown
   const normalDataPoints = dataPoints
@@ -106,11 +108,12 @@ export function DataPointModal({
     setMemberStates(mStates);
   }
 
-  // Reset scenario state when modal opens
+  // Reset scenario state and errors when modal opens
   useEffect(() => {
     if (open) {
       setIsScenario(false);
       setScenarioCount(2);
+      setErrors({});
     }
   }, [open]);
 
@@ -136,7 +139,7 @@ export function DataPointModal({
         applyDetail(d);
       }
     });
-  }, [open, dataPointId]);
+  }, [open, dataPointId, isNew]);
 
   useEffect(() => {
     if (!open || !editingGroup) return;
@@ -237,8 +240,20 @@ export function DataPointModal({
     }
   }
 
+  function validateName(val: string): string | null {
+    return required("Name")(val || null);
+  }
+
+  function validateBudget(val: string): string | null {
+    return positiveNumber(val || null);
+  }
+
   async function handleGroupSave() {
     if (!editingGroup) return;
+    const nameErr = validateName(name);
+    const budgetErr = validateBudget(budget);
+    setErrors({ name: nameErr, budget: budgetErr });
+    if (nameErr || budgetErr) return;
     setSaving(true);
     try {
       if (name !== editingGroup.name) {
@@ -267,6 +282,10 @@ export function DataPointModal({
 
   async function handleSave() {
     if (!detail) return;
+    const nameErr = validateName(name);
+    const budgetErr = validateBudget(budget);
+    setErrors({ name: nameErr, budget: budgetErr });
+    if (nameErr || budgetErr) return;
     setSaving(true);
     try {
       if (name !== detail.name) {
@@ -328,18 +347,35 @@ export function DataPointModal({
           </DialogHeader>
           <ScrollArea className="flex-1 pr-4">
             <div className="flex flex-col gap-4 py-2">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <Label>Name</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
+                  }}
+                  aria-invalid={!!errors.name || undefined}
+                />
+                <div className="h-3 text-xs">
+                  {errors.name && <span className="text-destructive">{errors.name}</span>}
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <Label>Budget</Label>
                 <MoneyInput
                   min="0"
                   value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
+                  onChange={(e) => {
+                    setBudget(e.target.value);
+                    setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
+                  }}
                   placeholder="Annual budget"
+                  aria-invalid={!!errors.budget || undefined}
                 />
+                <div className="h-3 text-xs">
+                  {errors.budget && <span className="text-destructive">{errors.budget}</span>}
+                </div>
               </div>
               <Separator />
               <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
@@ -433,6 +469,12 @@ export function DataPointModal({
   // Pure create mode: no pre-created data point, show simplified form
   if (isNew && !dataPointId && !editingGroup) {
     async function handleCreateSave() {
+      if (!isScenario) {
+        const nameErr = validateName(name);
+        const budgetErr = validateBudget(budget);
+        setErrors({ name: nameErr, budget: budgetErr });
+        if (nameErr || budgetErr) return;
+      }
       setSaving(true);
       try {
         if (isScenario) {
@@ -500,13 +542,20 @@ export function DataPointModal({
               </>
             ) : (
               <>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <Label>Name</Label>
                   <Input
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
+                    }}
                     placeholder="Data point name"
+                    aria-invalid={!!errors.name || undefined}
                   />
+                  <div className="h-3 text-xs">
+                    {errors.name && <span className="text-destructive">{errors.name}</span>}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Compare to</Label>
@@ -523,14 +572,21 @@ export function DataPointModal({
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <Label>Budget</Label>
                   <MoneyInput
                     min="0"
                     value={budget}
-                    onChange={(e) => setBudget(e.target.value)}
+                    onChange={(e) => {
+                      setBudget(e.target.value);
+                      setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
+                    }}
                     placeholder="Annual budget"
+                    aria-invalid={!!errors.budget || undefined}
                   />
+                  <div className="h-3 text-xs">
+                    {errors.budget && <span className="text-destructive">{errors.budget}</span>}
+                  </div>
                 </div>
               </>
             )}
@@ -558,9 +614,19 @@ export function DataPointModal({
         </DialogHeader>
         <ScrollArea className="flex-1 pr-4">
           <div className="flex flex-col gap-4 py-2">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
+                }}
+                aria-invalid={!!errors.name || undefined}
+              />
+              <div className="h-3 text-xs">
+                {errors.name && <span className="text-destructive">{errors.name}</span>}
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Compare to</Label>
@@ -577,14 +643,21 @@ export function DataPointModal({
                 ))}
               </select>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <Label>Budget</Label>
               <MoneyInput
                 min="0"
                 value={budget}
-                onChange={(e) => setBudget(e.target.value)}
+                onChange={(e) => {
+                  setBudget(e.target.value);
+                  setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
+                }}
                 placeholder="Annual budget"
+                aria-invalid={!!errors.budget || undefined}
               />
+              <div className="h-3 text-xs">
+                {errors.budget && <span className="text-destructive">{errors.budget}</span>}
+              </div>
             </div>
 
             <Separator />

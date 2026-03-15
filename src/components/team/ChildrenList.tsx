@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { getChildren, addChild, updateChild, deleteChild } from "@/lib/db";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { required } from "@/lib/validators";
 import type { Child } from "@/lib/types";
 
 interface ChildrenListProps {
@@ -21,10 +22,11 @@ const ChildRow = memo(function ChildRow({ child, onDelete, onUpdate }: ChildRowP
   const [name, setName] = useState(child.name);
   const [dob, setDob] = useState(child.date_of_birth ?? "");
 
-  const { save: saveName } = useAutoSave({
+  const { save: saveName, error: nameError } = useAutoSave({
     onSave: async (val) => {
       await onUpdate(child.id, val ?? "", child.date_of_birth);
     },
+    validate: required("Name"),
   });
 
   const { save: saveDob } = useAutoSave({
@@ -50,6 +52,8 @@ const ChildRow = memo(function ChildRow({ child, onDelete, onUpdate }: ChildRowP
         placeholder="Child's name"
         value={name}
         onChange={handleNameChange}
+        aria-invalid={!!nameError || undefined}
+        title={nameError ?? undefined}
       />
       <DatePicker
         value={dob || null}
