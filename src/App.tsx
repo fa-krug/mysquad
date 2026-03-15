@@ -14,6 +14,9 @@ const SalaryPlanner = lazy(() =>
 const Projects = lazy(() => import("@/pages/Projects").then((m) => ({ default: m.Projects })));
 const Reports = lazy(() => import("@/pages/Reports").then((m) => ({ default: m.Reports })));
 const Meeting = lazy(() => import("@/pages/Meeting").then((m) => ({ default: m.Meeting })));
+const TeamMeetingsPage = lazy(() =>
+  import("@/pages/TeamMeetings").then((m) => ({ default: m.TeamMeetings })),
+);
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
@@ -81,6 +84,7 @@ function App() {
           <Route path="/salary" element={<SalaryPlanner />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/meeting/:meetingId" element={<Meeting />} />
+          <Route path="/team-meetings" element={<TeamMeetingsPage />} />
           <Route
             path="/settings"
             element={

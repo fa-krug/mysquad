@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { updateReport } from "@/lib/db";
 import type { Report } from "@/lib/types";
@@ -56,13 +55,6 @@ export function ReportEditDialog({
     saveName(newVal === "" ? null : newVal);
   };
 
-  const handleToggle = async (field: keyof Report, checked: boolean) => {
-    await updateReport(report.id, field, checked ? "1" : "0");
-    const updated = { ...local, [field]: checked };
-    setLocal(updated);
-    onReportChange(updated);
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -79,41 +71,6 @@ export function ReportEditDialog({
               {saved && !saving && <span className="text-green-600">Saved</span>}
               {error && <span className="text-destructive truncate">{error}</span>}
             </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <div>
-              <Label className="text-sm">Team Member Updates</Label>
-              <p className="text-xs text-muted-foreground">Include updates from team members</p>
-            </div>
-            <Switch
-              checked={local.collect_statuses}
-              onCheckedChange={(c) => handleToggle("collect_statuses", c)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <div>
-              <Label className="text-sm">Include Stakeholders</Label>
-              <p className="text-xs text-muted-foreground">Show stakeholders above team members</p>
-            </div>
-            <Switch
-              checked={local.include_stakeholders}
-              onCheckedChange={(c) => handleToggle("include_stakeholders", c)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <div>
-              <Label className="text-sm">Project Updates</Label>
-              <p className="text-xs text-muted-foreground">
-                Include latest updates from active projects
-              </p>
-            </div>
-            <Switch
-              checked={local.include_projects}
-              onCheckedChange={(c) => handleToggle("include_projects", c)}
-            />
           </div>
         </div>
       </DialogContent>

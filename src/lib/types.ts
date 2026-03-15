@@ -218,13 +218,60 @@ export interface MeetingDetail {
   date: string;
   member: MeetingMemberInfo;
   previous_updates: CheckableItem[];
-  talk_topics: CheckableItem[];
+  talk_topics: MeetingTalkTopic[];
   meeting_updates: CheckableItem[];
-  meeting_talk_topics: CheckableItem[];
+  meeting_talk_topics: MeetingTalkTopic[];
+  escalated_with_response: EscalatedTopic[];
+}
+
+export interface MeetingTalkTopic extends CheckableItem {
+  escalated: boolean;
 }
 
 export interface ScenarioMemberComparison {
   data_point_id: number;
   data_point_name: string;
   annual_total: number;
+}
+
+export interface EscalatedTopic {
+  id: number;
+  team_member_id: number;
+  text: string;
+  checked: boolean;
+  escalated: boolean;
+  escalated_at: string | null;
+  resolved: boolean;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface TeamMeeting {
+  id: number;
+  date: string;
+  created_at: string;
+  escalated_topic_count: number;
+}
+
+export interface TeamMeetingMemberGroup {
+  member_id: number;
+  first_name: string;
+  last_name: string;
+  title_name: string | null;
+  picture_path: string | null;
+  escalated_topics: EscalatedTopic[];
+  updates: ReportStatusItem[];
+}
+
+export interface TeamMeetingProjectGroup {
+  project_id: number;
+  project_name: string;
+  updates: ReportStatusItem[];
+}
+
+export interface TeamMeetingDetail {
+  id: number;
+  date: string;
+  member_groups: TeamMeetingMemberGroup[];
+  project_groups: TeamMeetingProjectGroup[];
 }
