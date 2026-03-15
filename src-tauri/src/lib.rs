@@ -136,6 +136,7 @@ pub fn run() {
             commands::export_data_point_salaries,
             commands::import_data_point_salaries,
             commands::get_talk_topic_by_id,
+            commands::global_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

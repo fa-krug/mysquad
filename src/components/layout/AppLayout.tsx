@@ -67,6 +67,7 @@ export function AppLayout() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onSearchClick={() => setPaletteOpen(true)}
       />
       <main className="flex-1 overflow-auto">
         <Suspense fallback={<DetailSkeleton />}>
