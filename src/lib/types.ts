@@ -109,6 +109,87 @@ export interface ReportDetail {
   projects: ReportProjectStatus[];
 }
 
+export interface ReportBlock {
+  id: number;
+  report_id: number;
+  block_type: string;
+  sort_order: number;
+}
+
+export interface TeamOverviewData {
+  active_count: number;
+  left_count: number;
+  title_breakdown: { title_name: string; count: number }[];
+}
+
+export interface MemberStatusesData {
+  members: {
+    member_id: number;
+    first_name: string;
+    last_name: string;
+    statuses: { id: number; text: string }[];
+  }[];
+}
+
+export interface OpenEscalationsData {
+  escalations: {
+    id: number;
+    text: string;
+    member_name: string;
+    escalated_at: string | null;
+  }[];
+}
+
+export interface ProjectStatusData {
+  projects: {
+    project_id: number;
+    name: string;
+    total: number;
+    done: number;
+  }[];
+}
+
+export interface SalarySummaryData {
+  data_point_name: string | null;
+  total_salary: number;
+  budget: number | null;
+  headcount: number;
+}
+
+export interface OneOnOneCoverageData {
+  members: {
+    member_id: number;
+    first_name: string;
+    last_name: string;
+    last_meeting_date: string | null;
+  }[];
+}
+
+export interface UpcomingBirthdaysData {
+  birthdays: {
+    child_name: string;
+    date_of_birth: string;
+    parent_name: string;
+    days_until: number;
+  }[];
+}
+
+export type ReportBlockDataPayload =
+  | TeamOverviewData
+  | MemberStatusesData
+  | OpenEscalationsData
+  | ProjectStatusData
+  | SalarySummaryData
+  | OneOnOneCoverageData
+  | UpcomingBirthdaysData;
+
+export interface ReportBlockData {
+  id: number;
+  block_type: string;
+  sort_order: number;
+  data: ReportBlockDataPayload;
+}
+
 export interface SalaryDataPointSummary {
   id: number;
   name: string;

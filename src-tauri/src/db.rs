@@ -119,6 +119,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 15)?;
     }
 
+    if version < 16 {
+        let migration_sql = include_str!("../migrations/016_report_blocks.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 16)?;
+    }
+
     Ok(())
 }
 
@@ -162,7 +168,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
     }
 
     #[test]
@@ -262,7 +268,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
     }
 
     #[test]
@@ -278,7 +284,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
     }
 
     #[test]

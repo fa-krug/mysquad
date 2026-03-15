@@ -12,6 +12,8 @@ import type {
   ProjectStatusItem,
   Report,
   ReportDetail,
+  ReportBlock,
+  ReportBlockData,
   SalaryOverTimePoint,
   ScenarioGroup,
   SalaryListItem,
@@ -77,6 +79,17 @@ export const updateReport = (id: number, field: string, value: string | null) =>
   invoke<void>("update_report", { id, field, value });
 export const deleteReport = (id: number) => invoke<void>("delete_report", { id });
 export const getReportDetail = (id: number) => invoke<ReportDetail>("get_report_detail", { id });
+
+// Report Blocks
+export const getReportBlocks = (reportId: number) =>
+  invoke<ReportBlock[]>("get_report_blocks", { report_id: reportId });
+export const addReportBlock = (reportId: number, blockType: string) =>
+  invoke<ReportBlock>("add_report_block", { report_id: reportId, block_type: blockType });
+export const removeReportBlock = (id: number) => invoke<void>("remove_report_block", { id });
+export const reorderReportBlocks = (reportId: number, blockIds: number[]) =>
+  invoke<void>("reorder_report_blocks", { report_id: reportId, block_ids: blockIds });
+export const getReportBlockData = (reportId: number) =>
+  invoke<ReportBlockData[]>("get_report_block_data", { report_id: reportId });
 
 // Titles
 export const getTitles = () => invoke<Title[]>("get_titles");
