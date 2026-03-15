@@ -2544,15 +2544,26 @@ pub struct Meeting {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MeetingTalkTopic {
+    pub id: i64,
+    pub team_member_id: i64,
+    pub text: String,
+    pub checked: bool,
+    pub created_at: String,
+    pub escalated: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MeetingDetail {
     pub id: i64,
     pub team_member_id: i64,
     pub date: String,
     pub member: MeetingMemberInfo,
     pub previous_updates: Vec<CheckableItem>,
-    pub talk_topics: Vec<CheckableItem>,
+    pub talk_topics: Vec<MeetingTalkTopic>,
     pub meeting_updates: Vec<CheckableItem>,
-    pub meeting_talk_topics: Vec<CheckableItem>,
+    pub meeting_talk_topics: Vec<MeetingTalkTopic>,
+    pub escalated_with_response: Vec<EscalatedTopic>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2698,20 +2709,21 @@ pub fn get_meeting_detail(db: State<AppDb>, id: i64) -> Result<MeetingDetail, St
     // Open talk topics (unchecked, not yet linked to this meeting)
     let mut topic_stmt = conn
         .prepare(
-            "SELECT id, team_member_id, text, checked, created_at
+            "SELECT id, team_member_id, text, checked, created_at, escalated
              FROM talk_topics
              WHERE team_member_id = ?1 AND checked = 0 AND (meeting_id IS NULL OR meeting_id != ?2)
              ORDER BY created_at ASC",
         )
         .map_err(|e| e.to_string())?;
-    let talk_topics: Vec<CheckableItem> = topic_stmt
+    let talk_topics: Vec<MeetingTalkTopic> = topic_stmt
         .query_map(params![team_member_id, meeting_id], |row| {
-            Ok(CheckableItem {
+            Ok(MeetingTalkTopic {
                 id: row.get(0)?,
                 team_member_id: row.get(1)?,
                 text: row.get(2)?,
                 checked: row.get(3)?,
                 created_at: row.get(4)?,
+                escalated: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -2744,20 +2756,50 @@ pub fn get_meeting_detail(db: State<AppDb>, id: i64) -> Result<MeetingDetail, St
     // Talk topics checked off during this meeting
     let mut meeting_topics_stmt = conn
         .prepare(
-            "SELECT id, team_member_id, text, checked, created_at
+            "SELECT id, team_member_id, text, checked, created_at, escalated
              FROM talk_topics
              WHERE meeting_id = ?1
              ORDER BY created_at ASC",
         )
         .map_err(|e| e.to_string())?;
-    let meeting_talk_topics: Vec<CheckableItem> = meeting_topics_stmt
+    let meeting_talk_topics: Vec<MeetingTalkTopic> = meeting_topics_stmt
         .query_map(params![meeting_id], |row| {
-            Ok(CheckableItem {
+            Ok(MeetingTalkTopic {
                 id: row.get(0)?,
                 team_member_id: row.get(1)?,
                 text: row.get(2)?,
                 checked: row.get(3)?,
                 created_at: row.get(4)?,
+                escalated: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Escalated topics that have been discussed (escalated=1, resolved=0) for this member
+    let mut escalated_stmt = conn
+        .prepare(
+            "SELECT id, team_member_id, text, checked, escalated, escalated_at,
+                    resolved, resolved_at, created_at
+             FROM talk_topics
+             WHERE team_member_id = ?1 AND escalated = 1 AND resolved = 0
+                   AND team_meeting_id IS NOT NULL
+             ORDER BY escalated_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let escalated_with_response: Vec<EscalatedTopic> = escalated_stmt
+        .query_map(params![team_member_id], |row| {
+            Ok(EscalatedTopic {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                escalated: row.get(4)?,
+                escalated_at: row.get(5)?,
+                resolved: row.get(6)?,
+                resolved_at: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -2773,6 +2815,7 @@ pub fn get_meeting_detail(db: State<AppDb>, id: i64) -> Result<MeetingDetail, St
         talk_topics,
         meeting_updates,
         meeting_talk_topics,
+        escalated_with_response,
     })
 }
 
@@ -2838,6 +2881,381 @@ pub fn delete_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM meetings WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ── Team Meeting commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeamMeeting {
+    pub id: i64,
+    pub date: String,
+    pub created_at: String,
+    pub escalated_topic_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EscalatedTopic {
+    pub id: i64,
+    pub team_member_id: i64,
+    pub text: String,
+    pub checked: bool,
+    pub escalated: bool,
+    pub escalated_at: Option<String>,
+    pub resolved: bool,
+    pub resolved_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeamMeetingMemberGroup {
+    pub member_id: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub title_name: Option<String>,
+    pub picture_path: Option<String>,
+    pub escalated_topics: Vec<EscalatedTopic>,
+    pub updates: Vec<ReportStatusItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeamMeetingProjectGroup {
+    pub project_id: i64,
+    pub project_name: String,
+    pub updates: Vec<ReportStatusItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeamMeetingDetail {
+    pub id: i64,
+    pub date: String,
+    pub member_groups: Vec<TeamMeetingMemberGroup>,
+    pub project_groups: Vec<TeamMeetingProjectGroup>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_team_meeting(db: State<AppDb>) -> Result<TeamMeeting, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("INSERT INTO team_meetings DEFAULT VALUES", [])
+        .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let (date, created_at): (String, String) = conn
+        .query_row(
+            "SELECT date, created_at FROM team_meetings WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(TeamMeeting {
+        id,
+        date,
+        created_at,
+        escalated_topic_count: 0,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_team_meetings(db: State<AppDb>) -> Result<Vec<TeamMeeting>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT tm.id, tm.date, tm.created_at,
+                    (SELECT COUNT(*) FROM talk_topics tt WHERE tt.team_meeting_id = tm.id) as topic_count
+             FROM team_meetings tm
+             ORDER BY tm.date DESC, tm.created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let meetings = stmt
+        .query_map([], |row| {
+            Ok(TeamMeeting {
+                id: row.get(0)?,
+                date: row.get(1)?,
+                created_at: row.get(2)?,
+                escalated_topic_count: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(meetings)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingDetail, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let date: String = conn
+        .query_row(
+            "SELECT date FROM team_meetings WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Get all escalated + unresolved topics, grouped by member
+    let mut topic_stmt = conn
+        .prepare(
+            "SELECT tt.id, tt.team_member_id, tt.text, tt.checked, tt.escalated,
+                    tt.escalated_at, tt.resolved, tt.resolved_at, tt.created_at,
+                    m.first_name, m.last_name,
+                    COALESCE(pt.name, t.name) as current_title,
+                    m.picture_path
+             FROM talk_topics tt
+             INNER JOIN team_members m ON m.id = tt.team_member_id
+             LEFT JOIN titles t ON t.id = m.title_id
+             LEFT JOIN (
+                 SELECT sdpm.member_id, sdpm.promoted_title_id
+                 FROM salary_data_point_members sdpm
+                 INNER JOIN (
+                     SELECT member_id, MAX(data_point_id) as max_dp_id
+                     FROM salary_data_point_members
+                     WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                     GROUP BY member_id
+                 ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+             ) promo ON promo.member_id = m.id
+             LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             WHERE tt.escalated = 1 AND tt.resolved = 0
+             ORDER BY m.last_name ASC, m.first_name ASC, tt.created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let topic_rows: Vec<(
+        EscalatedTopic,
+        i64,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+    )> = topic_stmt
+        .query_map([], |row| {
+            Ok((
+                EscalatedTopic {
+                    id: row.get(0)?,
+                    team_member_id: row.get(1)?,
+                    text: row.get(2)?,
+                    checked: row.get(3)?,
+                    escalated: row.get(4)?,
+                    escalated_at: row.get(5)?,
+                    resolved: row.get(6)?,
+                    resolved_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                },
+                row.get::<_, i64>(1)?,             // member_id
+                row.get::<_, String>(9)?,          // first_name
+                row.get::<_, String>(10)?,         // last_name
+                row.get::<_, Option<String>>(11)?, // title_name
+                row.get::<_, Option<String>>(12)?, // picture_path
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Group topics by member, preserving order
+    let mut member_groups: Vec<TeamMeetingMemberGroup> = Vec::new();
+    let mut seen_members: HashMap<i64, usize> = HashMap::new();
+
+    for (topic, member_id, first_name, last_name, title_name, picture_path) in topic_rows {
+        if let Some(&idx) = seen_members.get(&member_id) {
+            member_groups[idx].escalated_topics.push(topic);
+        } else {
+            seen_members.insert(member_id, member_groups.len());
+            member_groups.push(TeamMeetingMemberGroup {
+                member_id,
+                first_name,
+                last_name,
+                title_name,
+                picture_path,
+                escalated_topics: vec![topic],
+                updates: Vec::new(),
+            });
+        }
+    }
+
+    // Get member updates (status_items) for all members who have escalated topics,
+    // plus all other members with unchecked updates
+    let mut update_stmt = conn
+        .prepare(
+            "SELECT si.team_member_id, si.id, si.text, si.checked,
+                    m.first_name, m.last_name,
+                    COALESCE(pt.name, t.name) as current_title,
+                    m.picture_path
+             FROM status_items si
+             INNER JOIN team_members m ON m.id = si.team_member_id
+             LEFT JOIN titles t ON t.id = m.title_id
+             LEFT JOIN (
+                 SELECT sdpm.member_id, sdpm.promoted_title_id
+                 FROM salary_data_point_members sdpm
+                 INNER JOIN (
+                     SELECT member_id, MAX(data_point_id) as max_dp_id
+                     FROM salary_data_point_members
+                     WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                     GROUP BY member_id
+                 ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+             ) promo ON promo.member_id = m.id
+             LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             ORDER BY m.last_name ASC, m.first_name ASC, si.created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let update_rows: Vec<(
+        i64,
+        ReportStatusItem,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+    )> = update_stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?, // member_id
+                ReportStatusItem {
+                    id: row.get(1)?,
+                    text: row.get(2)?,
+                    checked: row.get(3)?,
+                },
+                row.get::<_, String>(4)?,         // first_name
+                row.get::<_, String>(5)?,         // last_name
+                row.get::<_, Option<String>>(6)?, // title_name
+                row.get::<_, Option<String>>(7)?, // picture_path
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    for (member_id, update, first_name, last_name, title_name, picture_path) in update_rows {
+        if let Some(&idx) = seen_members.get(&member_id) {
+            member_groups[idx].updates.push(update);
+        } else {
+            seen_members.insert(member_id, member_groups.len());
+            member_groups.push(TeamMeetingMemberGroup {
+                member_id,
+                first_name,
+                last_name,
+                title_name,
+                picture_path,
+                escalated_topics: Vec::new(),
+                updates: vec![update],
+            });
+        }
+    }
+
+    // Get active project updates
+    let mut proj_stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, psi.id, psi.text, psi.checked
+             FROM projects p
+             LEFT JOIN project_status_items psi ON psi.project_id = p.id
+             WHERE p.end_date IS NULL OR p.end_date >= date('now')
+             ORDER BY p.name ASC, psi.created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let proj_rows: Vec<(i64, String, Option<i64>, Option<String>, Option<bool>)> = proj_stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut project_groups: Vec<TeamMeetingProjectGroup> = Vec::new();
+    let mut seen_projects: HashMap<i64, usize> = HashMap::new();
+
+    for (project_id, project_name, status_id, status_text, status_checked) in proj_rows {
+        let idx = if let Some(&idx) = seen_projects.get(&project_id) {
+            idx
+        } else {
+            seen_projects.insert(project_id, project_groups.len());
+            project_groups.push(TeamMeetingProjectGroup {
+                project_id,
+                project_name,
+                updates: Vec::new(),
+            });
+            project_groups.len() - 1
+        };
+
+        if let (Some(sid), Some(stext), Some(schecked)) = (status_id, status_text, status_checked) {
+            project_groups[idx].updates.push(ReportStatusItem {
+                id: sid,
+                text: stext,
+                checked: schecked,
+            });
+        }
+    }
+
+    Ok(TeamMeetingDetail {
+        id,
+        date,
+        member_groups,
+        project_groups,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_team_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM team_meetings WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn escalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE talk_topics SET escalated = 1, escalated_at = datetime('now') WHERE id = ?1",
+        params![topic_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn unescalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE talk_topics SET escalated = 0, escalated_at = NULL, team_meeting_id = NULL WHERE id = ?1",
+        params![topic_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn resolve_escalated_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE talk_topics SET resolved = 1, resolved_at = datetime('now') WHERE id = ?1",
+        params![topic_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn unresolve_escalated_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE talk_topics SET resolved = 0, resolved_at = NULL WHERE id = ?1",
+        params![topic_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

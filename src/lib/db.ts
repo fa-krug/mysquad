@@ -19,6 +19,8 @@ import type {
   ScenarioMemberComparison,
   Meeting,
   MeetingDetail,
+  TeamMeeting,
+  TeamMeetingDetail,
 } from "./types";
 
 // Auth
@@ -208,6 +210,23 @@ export const checkTalkTopicInMeeting = (topicId: number, meetingId: number, chec
     checked,
   });
 export const deleteMeeting = (id: number) => invoke<void>("delete_meeting", { id });
+
+// Team Meetings
+export const createTeamMeeting = () => invoke<TeamMeeting>("create_team_meeting");
+export const getTeamMeetings = () => invoke<TeamMeeting[]>("get_team_meetings");
+export const getTeamMeetingDetail = (id: number) =>
+  invoke<TeamMeetingDetail>("get_team_meeting_detail", { id });
+export const deleteTeamMeeting = (id: number) => invoke<void>("delete_team_meeting", { id });
+
+// Escalation
+export const escalateTalkTopic = (topicId: number) =>
+  invoke<void>("escalate_talk_topic", { topic_id: topicId });
+export const unescalateTalkTopic = (topicId: number) =>
+  invoke<void>("unescalate_talk_topic", { topic_id: topicId });
+export const resolveEscalatedTopic = (topicId: number) =>
+  invoke<void>("resolve_escalated_topic", { topic_id: topicId });
+export const unresolveEscalatedTopic = (topicId: number) =>
+  invoke<void>("unresolve_escalated_topic", { topic_id: topicId });
 
 // Settings
 export const getSetting = (key: string) => invoke<string | null>("get_setting", { key });

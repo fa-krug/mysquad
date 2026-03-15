@@ -7,6 +7,8 @@ import {
   CheckIcon,
   CalendarIcon,
   MessageSquareIcon,
+  ArrowUpRight,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +23,10 @@ import {
   deleteStatusItem,
   deleteMeeting,
   getPicturesDirPath,
+  escalateTalkTopic,
+  unescalateTalkTopic,
+  resolveEscalatedTopic,
+  unresolveEscalatedTopic,
 } from "@/lib/db";
 import { showError } from "@/lib/toast";
 import type { MeetingDetail } from "@/lib/types";
@@ -34,6 +40,11 @@ export function Meeting() {
   const [newText, setNewText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const id = Number(meetingId);
+
+  const reload = useCallback(async () => {
+    const updated = await getMeetingDetail(id);
+    setDetail(updated);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -49,14 +60,52 @@ export function Meeting() {
     async (topicId: number, checked: boolean) => {
       try {
         await checkTalkTopicInMeeting(topicId, id, checked);
-        // Refresh to get updated topic lists
-        const updated = await getMeetingDetail(id);
-        setDetail(updated);
+        await reload();
       } catch {
         showError("Failed to update topic");
       }
     },
-    [id],
+    [id, reload],
+  );
+
+  const handleEscalate = useCallback(
+    async (topicId: number) => {
+      try {
+        await escalateTalkTopic(topicId);
+        await reload();
+      } catch {
+        showError("Failed to escalate topic");
+      }
+    },
+    [reload],
+  );
+
+  const handleUnescalate = useCallback(
+    async (topicId: number) => {
+      try {
+        await unescalateTalkTopic(topicId);
+        await reload();
+      } catch {
+        showError("Failed to unescalate topic");
+      }
+    },
+    [reload],
+  );
+
+  const handleResolve = useCallback(
+    async (topicId: number, resolved: boolean) => {
+      try {
+        if (resolved) {
+          await resolveEscalatedTopic(topicId);
+        } else {
+          await unresolveEscalatedTopic(topicId);
+        }
+        await reload();
+      } catch {
+        showError("Failed to update topic");
+      }
+    },
+    [reload],
   );
 
   const handleStartAdd = () => {
@@ -152,6 +201,18 @@ export function Meeting() {
   const { member } = detail;
   const hasUpdates = detail.meeting_updates.length > 0;
 
+  // Separate escalated from non-escalated open topics
+  const escalatedTopics = detail.talk_topics.filter((t) => "escalated" in t && t.escalated);
+  const normalTopics = detail.talk_topics.filter((t) => !("escalated" in t && t.escalated));
+
+  // Escalated topics that have been resolved (to show in this meeting for discussion)
+  const resolvedEscalated = detail.meeting_talk_topics.filter(
+    (t) => "escalated" in t && t.escalated,
+  );
+  const normalCheckedTopics = detail.meeting_talk_topics.filter(
+    (t) => !("escalated" in t && t.escalated),
+  );
+
   return (
     <div className="h-full overflow-auto">
       <div className="max-w-2xl p-6 space-y-6">
@@ -237,22 +298,87 @@ export function Meeting() {
             )}
           </div>
 
-          {/* Topics checked off in this meeting */}
-          {detail.meeting_talk_topics.map((topic) => (
+          {/* Topics checked off in this meeting (non-escalated) */}
+          {normalCheckedTopics.map((topic) => (
             <div key={topic.id} className="flex items-center gap-2 py-1">
               <Checkbox checked={true} onCheckedChange={() => handleCheckTopic(topic.id, false)} />
               <span className="text-sm opacity-50 line-through">{topic.text}</span>
             </div>
           ))}
 
-          {/* Open topics */}
-          {detail.talk_topics.map((topic) => (
+          {/* Resolved escalated topics checked off in this meeting */}
+          {resolvedEscalated.map((topic) => (
             <div key={topic.id} className="flex items-center gap-2 py-1">
+              <Checkbox checked={true} onCheckedChange={() => handleCheckTopic(topic.id, false)} />
+              <span className="text-sm opacity-50 line-through">{topic.text}</span>
+              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                Escalated
+              </Badge>
+            </div>
+          ))}
+
+          {/* Open topics (non-escalated) — can be checked or escalated */}
+          {normalTopics.map((topic) => (
+            <div key={topic.id} className="flex items-center gap-2 py-1 group">
               <Checkbox checked={false} onCheckedChange={() => handleCheckTopic(topic.id, true)} />
-              <span className="text-sm">{topic.text}</span>
+              <span className="flex-1 text-sm">{topic.text}</span>
+              <button
+                className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-opacity"
+                onClick={() => handleEscalate(topic.id)}
+                title="Escalate to team meeting"
+              >
+                <ArrowUpRight className="size-3.5" />
+              </button>
+            </div>
+          ))}
+
+          {/* Escalated topics (shown with badge, can be unescalated) */}
+          {escalatedTopics.map((topic) => (
+            <div key={topic.id} className="flex items-center gap-2 py-1 group">
+              <Checkbox checked={false} onCheckedChange={() => handleCheckTopic(topic.id, true)} />
+              <span className="flex-1 text-sm">{topic.text}</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                Escalated
+              </Badge>
+              <button
+                className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-opacity"
+                onClick={() => handleUnescalate(topic.id)}
+                title="Remove escalation"
+              >
+                <Undo2 className="size-3.5" />
+              </button>
             </div>
           ))}
         </div>
+
+        {/* Escalated topics with updates to relay back */}
+        {detail.escalated_with_response && detail.escalated_with_response.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <ArrowUpRight className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Escalated Topics</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Topics discussed with your superior — resolve after relaying the outcome.
+              </p>
+              {detail.escalated_with_response.map((topic) => (
+                <div key={topic.id} className="flex items-center gap-2 py-1">
+                  <Checkbox
+                    checked={topic.resolved}
+                    onCheckedChange={(checked) => handleResolve(topic.id, checked as boolean)}
+                  />
+                  <span
+                    className={`flex-1 text-sm ${topic.resolved ? "line-through opacity-50" : ""}`}
+                  >
+                    {topic.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <Separator />
 

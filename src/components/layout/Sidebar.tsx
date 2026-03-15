@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   DollarSign,
   FileText,
+  Presentation,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -24,6 +25,7 @@ const navItems = [
   { to: "/projects", icon: FolderKanban, label: "Projects" },
   { to: "/titles", icon: BadgeCheck, label: "Titles" },
   { to: "/salary", icon: DollarSign, label: "Salary Planner" },
+  { to: "/team-meetings", icon: Presentation, label: "Team Meetings" },
   { to: "/reports", icon: FileText, label: "Reports" },
 ];
 
