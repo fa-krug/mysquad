@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, lazy } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useState, useCallback, useEffect, useRef, lazy } from "react";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LockScreen } from "./components/layout/LockScreen";
 import { useTheme } from "./hooks/useTheme";
@@ -21,13 +21,71 @@ const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
 import { pendingDeleteRegistry } from "./hooks/usePendingDelete";
-import { authenticate, unlockDb, lockDb, getConfig } from "./lib/db";
+import { authenticate, unlockDb, lockDb, getConfig, getTalkTopicById } from "./lib/db";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+
+function parseDeepLink(url: string): { topicId: number } | null {
+  const match = url.match(/^mysquad:\/\/talktopic\/(\d+)/);
+  if (!match) return null;
+  return { topicId: Number(match[1]) };
+}
+
+function DeepLinkHandler({ pendingUrl }: { pendingUrl: React.MutableRefObject<string | null> }) {
+  const navigate = useNavigate();
+
+  const handleDeepLink = useCallback(
+    async (url: string) => {
+      const parsed = parseDeepLink(url);
+      if (!parsed) return;
+      try {
+        const topic = await getTalkTopicById(parsed.topicId);
+        navigate("/", {
+          state: { memberId: topic.team_member_id, highlightTalkTopicId: topic.id },
+        });
+      } catch {
+        // Topic may have been deleted — ignore
+      }
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    // Process any URL that arrived while locked
+    if (pendingUrl.current) {
+      const url = pendingUrl.current;
+      pendingUrl.current = null;
+      handleDeepLink(url);
+    }
+  }, [handleDeepLink]);
+
+  useEffect(() => {
+    const unlisten = onOpenUrl((urls) => {
+      if (urls.length > 0) handleDeepLink(urls[0]);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [handleDeepLink]);
+
+  return null;
+}
 
 function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [requireAuth, setRequireAuth] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const { theme, setTheme } = useTheme(unlocked);
+  const pendingDeepLink = useRef<string | null>(null);
+
+  // Listen for deep links before unlock so we can queue them
+  useEffect(() => {
+    const unlisten = onOpenUrl((urls) => {
+      if (urls.length > 0) pendingDeepLink.current = urls[0];
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // Check config on mount to decide auth flow
   useEffect(() => {
@@ -76,6 +134,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <DeepLinkHandler pendingUrl={pendingDeepLink} />
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<TeamMembers />} />

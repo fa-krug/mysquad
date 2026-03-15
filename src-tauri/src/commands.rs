@@ -490,6 +490,26 @@ pub fn get_talk_topics(
     get_items(&db, "talk_topics", team_member_id)
 }
 
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_talk_topic_by_id(db: State<AppDb>, id: i64) -> Result<CheckableItem, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.query_row(
+        "SELECT id, team_member_id, text, checked, created_at FROM talk_topics WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(CheckableItem {
+                id: row.get(0)?,
+                team_member_id: row.get(1)?,
+                text: row.get(2)?,
+                checked: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
 fn add_item(
     db: &AppDb,
     table: &str,

@@ -146,3 +146,18 @@ textarea,
     @apply font-sans;
   }
 }
+
+@keyframes highlight-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  20%,
+  60% {
+    background-color: var(--accent);
+  }
+}
+
+.animate-highlight-flash {
+  animation: highlight-flash 2s ease-in-out;
+}
