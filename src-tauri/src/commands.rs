@@ -1,5 +1,6 @@
 use crate::db::{self, AppDb};
 use crate::platform::{self, NativeSecurity, PlatformSecurity};
+use chrono::Datelike;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -2530,6 +2531,457 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
         members,
         projects,
     })
+}
+
+// ── Report Block commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportBlock {
+    pub id: i64,
+    pub report_id: i64,
+    pub block_type: String,
+    pub sort_order: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReportBlockData {
+    pub id: i64,
+    pub block_type: String,
+    pub sort_order: i64,
+    pub data: serde_json::Value,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_report_blocks(db: State<AppDb>, report_id: i64) -> Result<Vec<ReportBlock>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, report_id, block_type, sort_order
+             FROM report_blocks WHERE report_id = ?1
+             ORDER BY sort_order ASC, id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let blocks = stmt
+        .query_map(params![report_id], |row| {
+            Ok(ReportBlock {
+                id: row.get(0)?,
+                report_id: row.get(1)?,
+                block_type: row.get(2)?,
+                sort_order: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(blocks)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn add_report_block(
+    db: State<AppDb>,
+    report_id: i64,
+    block_type: String,
+) -> Result<ReportBlock, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let next_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM report_blocks WHERE report_id = ?1",
+            params![report_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO report_blocks (report_id, block_type, sort_order) VALUES (?1, ?2, ?3)",
+        params![report_id, block_type, next_order],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    Ok(ReportBlock {
+        id,
+        report_id,
+        block_type,
+        sort_order: next_order,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn remove_report_block(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM report_blocks WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn reorder_report_blocks(
+    db: State<AppDb>,
+    report_id: i64,
+    block_ids: Vec<i64>,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    for (i, bid) in block_ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE report_blocks SET sort_order = ?1 WHERE id = ?2 AND report_id = ?3",
+            params![i as i64, bid, report_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_report_block_data(
+    db: State<AppDb>,
+    report_id: i64,
+) -> Result<Vec<ReportBlockData>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, block_type, sort_order FROM report_blocks
+             WHERE report_id = ?1 ORDER BY sort_order ASC, id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let blocks: Vec<(i64, String, i64)> = stmt
+        .query_map(params![report_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for (block_id, block_type, sort_order) in blocks {
+        let data = match block_type.as_str() {
+            "team_overview" => build_team_overview(conn)?,
+            "member_statuses" => build_member_statuses(conn)?,
+            "open_escalations" => build_open_escalations(conn)?,
+            "project_status" => build_project_status(conn)?,
+            "salary_summary" => build_salary_summary(conn)?,
+            "one_on_one_coverage" => build_one_on_one_coverage(conn)?,
+            "upcoming_birthdays" => build_upcoming_birthdays(conn)?,
+            _ => serde_json::json!({}),
+        };
+        result.push(ReportBlockData {
+            id: block_id,
+            block_type,
+            sort_order,
+            data,
+        });
+    }
+    Ok(result)
+}
+
+fn build_team_overview(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let active_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM team_members WHERE left_date IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let left_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM team_members WHERE left_date IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT COALESCE(t.name, 'No Title') as title_name, COUNT(*) as cnt
+             FROM team_members m
+             LEFT JOIN titles t ON t.id = m.title_id
+             WHERE m.left_date IS NULL
+             GROUP BY title_name
+             ORDER BY cnt DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let title_breakdown: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "title_name": row.get::<_, String>(0)?,
+                "count": row.get::<_, i64>(1)?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "active_count": active_count,
+        "left_count": left_count,
+        "title_breakdown": title_breakdown
+    }))
+}
+
+fn build_member_statuses(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let mut member_stmt = conn
+        .prepare(
+            "SELECT m.id, m.first_name, m.last_name
+             FROM team_members m
+             WHERE m.left_date IS NULL
+             ORDER BY m.last_name ASC, m.first_name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let members: Vec<(i64, String, String)> = member_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let member_ids: Vec<i64> = members.iter().map(|(id, ..)| *id).collect();
+    let mut status_map: HashMap<i64, Vec<serde_json::Value>> = HashMap::new();
+
+    if !member_ids.is_empty() {
+        let placeholders: Vec<String> = (1..=member_ids.len()).map(|i| format!("?{}", i)).collect();
+        let sql = format!(
+            "SELECT team_member_id, id, text FROM status_items
+             WHERE team_member_id IN ({}) AND checked = 0
+             ORDER BY created_at DESC",
+            placeholders.join(", ")
+        );
+        let params: Vec<&dyn rusqlite::types::ToSql> = member_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    serde_json::json!({
+                        "id": row.get::<_, i64>(1)?,
+                        "text": row.get::<_, String>(2)?
+                    }),
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (mid, item) = row.map_err(|e| e.to_string())?;
+            status_map.entry(mid).or_default().push(item);
+        }
+    }
+
+    let result: Vec<serde_json::Value> = members
+        .into_iter()
+        .filter_map(|(id, first, last)| {
+            let statuses = status_map.remove(&id).unwrap_or_default();
+            if statuses.is_empty() {
+                return None;
+            }
+            Some(serde_json::json!({
+                "member_id": id,
+                "first_name": first,
+                "last_name": last,
+                "statuses": statuses
+            }))
+        })
+        .collect();
+
+    Ok(serde_json::json!({ "members": result }))
+}
+
+fn build_open_escalations(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT tt.id, tt.text, m.first_name || ' ' || m.last_name as member_name, tt.escalated_at
+             FROM talk_topics tt
+             JOIN team_members m ON m.id = tt.team_member_id
+             WHERE tt.escalated = 1 AND tt.resolved = 0
+             ORDER BY tt.escalated_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let escalations: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "text": row.get::<_, String>(1)?,
+                "member_name": row.get::<_, String>(2)?,
+                "escalated_at": row.get::<_, Option<String>>(3)?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({ "escalations": escalations }))
+}
+
+fn build_project_status(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name,
+                    COUNT(psi.id) as total,
+                    SUM(CASE WHEN psi.checked = 1 THEN 1 ELSE 0 END) as done
+             FROM projects p
+             LEFT JOIN project_status_items psi ON psi.project_id = p.id
+             WHERE p.end_date IS NULL OR p.end_date >= date('now')
+             GROUP BY p.id
+             ORDER BY p.name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let projects: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "project_id": row.get::<_, i64>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "total": row.get::<_, i64>(2)?,
+                "done": row.get::<_, i64>(3)?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({ "projects": projects }))
+}
+
+fn build_salary_summary(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    // Get the latest non-scenario data point
+    let dp: Option<(i64, String, Option<f64>)> = conn
+        .query_row(
+            "SELECT id, name, budget FROM salary_data_points
+             WHERE scenario_group_id IS NULL
+             ORDER BY id DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok();
+
+    if let Some((dp_id, dp_name, budget)) = dp {
+        let mut stmt = conn
+            .prepare(
+                "SELECT sdpm.id, sdpm.is_active
+                 FROM salary_data_point_members sdpm
+                 WHERE sdpm.data_point_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let dp_members: Vec<(i64, bool)> = stmt
+            .query_map(params![dp_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        let active_member_ids: Vec<i64> = dp_members
+            .iter()
+            .filter(|(_, active)| *active)
+            .map(|(id, _)| *id)
+            .collect();
+        let headcount = active_member_ids.len() as i64;
+
+        let mut total_salary: f64 = 0.0;
+        if !active_member_ids.is_empty() {
+            let placeholders: Vec<String> = (1..=active_member_ids.len())
+                .map(|i| format!("?{}", i))
+                .collect();
+            let sql = format!(
+                "SELECT COALESCE(SUM(amount * frequency), 0)
+                 FROM salary_parts
+                 WHERE data_point_member_id IN ({})",
+                placeholders.join(", ")
+            );
+            let params: Vec<&dyn rusqlite::types::ToSql> = active_member_ids
+                .iter()
+                .map(|id| id as &dyn rusqlite::types::ToSql)
+                .collect();
+            total_salary = conn
+                .query_row(&sql, params.as_slice(), |row| row.get(0))
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(serde_json::json!({
+            "data_point_name": dp_name,
+            "total_salary": total_salary,
+            "budget": budget,
+            "headcount": headcount
+        }))
+    } else {
+        let none_str: Option<String> = None;
+        let none_f64: Option<f64> = None;
+        Ok(serde_json::json!({
+            "data_point_name": none_str,
+            "total_salary": 0,
+            "budget": none_f64,
+            "headcount": 0
+        }))
+    }
+}
+
+fn build_one_on_one_coverage(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT m.id, m.first_name, m.last_name,
+                    (SELECT MAX(mt.date) FROM meetings mt WHERE mt.team_member_id = m.id) as last_meeting_date
+             FROM team_members m
+             WHERE m.left_date IS NULL
+             ORDER BY last_meeting_date ASC NULLS FIRST",
+        )
+        .map_err(|e| e.to_string())?;
+    let members: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "member_id": row.get::<_, i64>(0)?,
+                "first_name": row.get::<_, String>(1)?,
+                "last_name": row.get::<_, String>(2)?,
+                "last_meeting_date": row.get::<_, Option<String>>(3)?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({ "members": members }))
+}
+
+fn build_upcoming_birthdays(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    // Get children with birthdays, calculate days until next birthday
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.name, c.date_of_birth, m.first_name || ' ' || m.last_name as parent_name
+             FROM children c
+             JOIN team_members m ON m.id = c.team_member_id
+             WHERE c.date_of_birth IS NOT NULL AND m.left_date IS NULL
+             ORDER BY c.date_of_birth",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(String, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let today = chrono::Local::now().date_naive();
+    let mut birthdays: Vec<serde_json::Value> = Vec::new();
+
+    for (child_name, dob_str, parent_name) in rows {
+        if let Ok(dob) = chrono::NaiveDate::parse_from_str(&dob_str, "%Y-%m-%d") {
+            // Calculate next birthday
+            let mut next_bday = dob.with_year(today.year()).unwrap_or(dob);
+            if next_bday < today {
+                next_bday = dob.with_year(today.year() + 1).unwrap_or(next_bday);
+            }
+            let days_until = (next_bday - today).num_days();
+            if days_until <= 90 {
+                birthdays.push(serde_json::json!({
+                    "child_name": child_name,
+                    "date_of_birth": dob_str,
+                    "parent_name": parent_name,
+                    "days_until": days_until
+                }));
+            }
+        }
+    }
+
+    birthdays.sort_by_key(|b| b["days_until"].as_i64().unwrap_or(999));
+
+    Ok(serde_json::json!({ "birthdays": birthdays }))
 }
 
 // ── Meeting commands ──

@@ -1,24 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { getReportDetail } from "@/lib/db";
-import type { Report, ReportDetail as ReportDetailType } from "@/lib/types";
+import { getReportBlockData, addReportBlock, removeReportBlock } from "@/lib/db";
+import type { Report, ReportBlockData } from "@/lib/types";
 import { Download } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
+import { BlockRenderer } from "./blocks/BlockRenderer";
+import { AddBlockMenu } from "./AddBlockMenu";
 
 interface ReportDetailProps {
   report: Report;
 }
 
-async function generatePdf(detail: ReportDetailType) {
+async function generatePdf(name: string, blocks: ReportBlockData[]) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
   const margin = 20;
   let y = 20;
 
-  // Title
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text(detail.name, margin, y);
+  doc.text(name, margin, y);
   y += 6;
 
   doc.setFontSize(9);
@@ -28,41 +29,93 @@ async function generatePdf(detail: ReportDetailType) {
   doc.setTextColor(0);
   y += 10;
 
-  doc.save(`${detail.name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+  if (blocks.length === 0) {
+    doc.setFontSize(11);
+    doc.text("No blocks added to this report.", margin, y);
+  }
+
+  doc.save(`${name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
   showSuccess("PDF exported");
 }
 
 export function ReportDetail({ report }: ReportDetailProps) {
-  const [detail, setDetail] = useState<ReportDetailType | null>(null);
+  const [blocks, setBlocks] = useState<ReportBlockData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    getReportDetail(report.id)
-      .then(setDetail)
-      .catch(() => showError("Failed to load report details"));
+  const loadBlocks = useCallback(async () => {
+    try {
+      const data = await getReportBlockData(report.id);
+      setBlocks(data);
+    } catch {
+      showError("Failed to load report blocks");
+    } finally {
+      setLoading(false);
+    }
   }, [report.id]);
 
-  if (!detail) return null;
+  useEffect(() => {
+    loadBlocks();
+  }, [loadBlocks]);
+
+  const handleAdd = async (blockType: string) => {
+    try {
+      await addReportBlock(report.id, blockType);
+      await loadBlocks();
+    } catch {
+      showError("Failed to add block");
+    }
+  };
+
+  const handleRemove = async (blockId: number) => {
+    try {
+      await removeReportBlock(blockId);
+      setBlocks((prev) => prev.filter((b) => b.id !== blockId));
+    } catch {
+      showError("Failed to remove block");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl p-6 space-y-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-32 animate-pulse rounded-lg bg-muted" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{detail.name}</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => {
-            generatePdf(detail).catch(() => showError("Export failed"));
-          }}
-        >
-          <Download className="size-4" />
-          Download PDF
-        </Button>
+        <h2 className="text-lg font-semibold">{report.name}</h2>
+        <div className="flex items-center gap-2">
+          <AddBlockMenu existingBlockTypes={blocks.map((b) => b.block_type)} onAdd={handleAdd} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              generatePdf(report.name, blocks).catch(() => showError("Export failed"));
+            }}
+          >
+            <Download className="size-4" />
+            Download PDF
+          </Button>
+        </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Report content will be available here in future updates.
-      </p>
+      {blocks.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No blocks added yet. Use the "Add Block" button to build your report.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {blocks.map((block) => (
+            <BlockRenderer key={block.id} block={block} onRemove={handleRemove} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
