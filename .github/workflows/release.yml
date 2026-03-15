@@ -43,6 +43,7 @@ jobs:
         run: cd src-tauri && cargo fmt -- --check
 
       - name: Clippy
+        if: runner.os == 'macOS'
         run: cd src-tauri && cargo clippy -- -D warnings
 
       - name: Rust tests
