@@ -54,9 +54,9 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      issues: read
-      pull-requests: read
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       version: ${{ steps.version.outputs.version }}
       should-release: ${{ steps.version.outputs.should-release }}
