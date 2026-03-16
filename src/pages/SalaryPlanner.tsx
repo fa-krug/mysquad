@@ -33,7 +33,7 @@ import {
   permanentDeleteScenarioGroup,
 } from "@/lib/db";
 import { open as openFile, save } from "@tauri-apps/plugin-dialog";
-import { EyeOff, Upload, FileDown, Trash2, FileText } from "lucide-react";
+import { EyeOff, Upload, FileDown, Trash2, FileText, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/lib/toast";
 import type {
@@ -475,6 +475,17 @@ export function SalaryPlanner() {
     return total;
   }, [filteredPreviousData, promotedMemberIds]);
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!detail) return;
+    try {
+      const { generateSalaryPdf } = await import("@/lib/salary-pdf");
+      await generateSalaryPdf(detail, previousData, previousTotal);
+      showSuccess("PDF exported");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+    }
+  }, [detail, previousData, previousTotal]);
+
   const previousHeadcount = useMemo(() => {
     if (!filteredPreviousData) return null;
     let count = 0;
@@ -546,40 +557,52 @@ export function SalaryPlanner() {
                 <div className="flex items-center justify-between">
                   <h1 className="text-2xl font-bold">{detail.name}</h1>
                   <div className="flex items-center gap-2">
-                    {!anyPresented &&
-                      (detail.template_path ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportAllDocx}
-                            title="Export salary overview for all members"
-                          >
-                            <FileDown className="h-4 w-4 mr-1" />
-                            Export All
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleDeleteTemplate}
-                            title="Remove template"
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Template
-                          </Button>
-                        </>
-                      ) : (
+                    {!anyPresented && (
+                      <>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={handleUploadTemplate}
-                          title="Upload a .docx template for salary overviews"
+                          onClick={handleDownloadPdf}
+                          title="Download data point as PDF"
                         >
-                          <Upload className="h-4 w-4 mr-1" />
-                          Upload Template
+                          <Download className="h-4 w-4 mr-1" />
+                          Download PDF
                         </Button>
-                      ))}
+                        {detail.template_path ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleExportAllDocx}
+                              title="Export salary overview for all members"
+                            >
+                              <FileDown className="h-4 w-4 mr-1" />
+                              Export All
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleDeleteTemplate}
+                              title="Remove template"
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Template
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleUploadTemplate}
+                            title="Upload a .docx template for salary overviews"
+                          >
+                            <Upload className="h-4 w-4 mr-1" />
+                            Upload Template
+                          </Button>
+                        )}
+                      </>
+                    )}
                     {anyPresented && (
                       <Button
                         variant="outline"
