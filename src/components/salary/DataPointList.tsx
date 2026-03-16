@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ArrowUpFromLine,
   RotateCcw,
+  List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
@@ -109,7 +110,7 @@ export function DataPointList({
               title={showTrash ? "Back to list" : "View trash"}
               className={showTrash ? "bg-muted" : ""}
             >
-              <Trash2 className="h-4 w-4" />
+              {showTrash ? <List className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
             </Button>
             {!showTrash && (trashCount ?? 0) > 0 && (
               <span className="absolute -top-0.5 -right-0.5 bg-muted-foreground text-background text-[10px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">

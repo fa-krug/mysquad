@@ -30,8 +30,12 @@ MySquad is a **Tauri v2 desktop app** for team management — tracking team memb
 ### Frontend structure
 - `src/lib/db.ts` — all `invoke()` calls in one place; the only file that talks to Rust
 - `src/lib/types.ts` — shared TypeScript interfaces (TeamMember, Child, CheckableItem, Title)
-- `src/pages/` — route-level page components (TeamMembers, Titles, SalaryPlanner, Settings)
+- `src/lib/salary-pdf.ts` — client-side PDF generation for salary data points
+- `src/pages/` — route-level page components (TeamMembers, Titles, SalaryPlanner, Projects, Reports, TeamMeetings, Meeting, Settings)
 - `src/components/team/` — team member detail UI (MemberDetail, MemberList, CheckableList, ChildrenList)
+- `src/components/salary/` — salary planner charts and forms
+- `src/components/projects/` — project management UI
+- `src/components/reports/` — report views
 - `src/components/layout/` — app shell (AppLayout, Sidebar, LockScreen)
 - `src/components/ui/` — shadcn/ui primitives
 - `src/hooks/` — useAutoSave (debounced save with flush registry), useAutoLock, useTheme
@@ -54,6 +58,7 @@ MySquad is a **Tauri v2 desktop app** for team management — tracking team memb
   - Selection: `bg-muted` selected, `hover:bg-muted/50` hover
   - Detail panel: `flex-1 overflow-auto` wrapper, `max-w-2xl p-6 space-y-6` content
   - Empty state: centered `text-muted-foreground` message
-  - Top-level delete: `AlertDialog` confirmation; sub-item delete: immediate
+  - Top-level delete: soft-delete into trash view with restore and permanent-delete (permanent delete uses `AlertDialog`); sub-item delete: immediate
   - Settings is the only single-page view (`max-w-lg p-6`)
+- **Soft-delete / trash**: Team members, titles, and salary data points use soft-delete (`deleted_at` column). Each list page has a trash toggle showing trashed items with restore and permanent-delete actions. Backend read queries filter out soft-deleted rows by default; separate `get_trashed_*` commands return only trashed items.
 - **Scenario groups**: All scenarios within a group share identical member attributes (active, promoted, promoted title). These are stored in `scenario_group_members` (the single source of truth) and edited via the "Edit Scenario Group" modal. The backend command `update_scenario_group_member` updates the group table and propagates to all child `salary_data_point_members` rows. `get_salary_data_point` reads member attributes from `scenario_group_members` via COALESCE for scenario children. Individual scenarios only differ in salary parts — they have no separate edit modal for member attributes.

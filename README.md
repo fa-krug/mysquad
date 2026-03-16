@@ -46,6 +46,11 @@ Create salary data points (snapshots) to plan and compare compensation over time
 - Set salary ranges per title and see at a glance who's in range
 - View charts: budget gauge, salary bar chart, variable pay breakdown, and year-over-year comparison
 - Mark members as promoted or inactive within a data point
+- Download a PDF summary of any data point for sharing or printing
+
+### Trash & Restore
+
+Deleted team members, titles, and salary data points are soft-deleted and moved to a trash view. You can restore them or permanently delete them from each page's trash toggle.
 
 ### Settings
 

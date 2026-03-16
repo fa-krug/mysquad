@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw } from "lucide-react";
+import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List } from "lucide-react";
 import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -261,7 +261,7 @@ export function MemberList({
               title={showTrash ? "Back to list" : "View trash"}
               className={showTrash ? "bg-muted" : ""}
             >
-              <Trash2 className="h-4 w-4" />
+              {showTrash ? <List className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
             </Button>
             {!showTrash && (trashCount ?? 0) > 0 && (
               <span className="absolute -top-0.5 -right-0.5 bg-muted-foreground text-background text-[10px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">

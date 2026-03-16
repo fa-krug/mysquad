@@ -39,10 +39,13 @@ src/                        # Frontend (React 19 + TypeScript + Vite)
   components/
     team/                   # Team member detail UI
     salary/                 # Salary planner charts and forms
+    projects/               # Project management UI
+    reports/                # Report views
     titles/                 # Title management UI
     layout/                 # App shell, sidebar, lock screen
     ui/                     # shadcn/ui primitives
   hooks/                    # useAutoSave, useAutoLock, useTheme
+  lib/salary-pdf.ts         # Client-side PDF generation for salary data points
 
 src-tauri/                  # Backend (Rust)
   src/
@@ -110,7 +113,7 @@ Team Members, Titles, and Salary Planner all follow the same split-view pattern:
 - **Selection**: `bg-muted` for selected item, `hover:bg-muted/50` for hover
 - **Detail panel**: `flex-1 overflow-auto` wrapper, `max-w-2xl p-6 space-y-6` content
 - **Empty state**: centered `text-muted-foreground` message
-- **Delete behavior**: Top-level items use `AlertDialog` confirmation; sub-items delete immediately
+- **Delete behavior**: Top-level items (team members, titles, data points) are soft-deleted into a trash view with restore and permanent-delete options. Permanent delete uses `AlertDialog` confirmation. Sub-items delete immediately.
 
 Settings is the only single-page view (`max-w-lg p-6`).
 
