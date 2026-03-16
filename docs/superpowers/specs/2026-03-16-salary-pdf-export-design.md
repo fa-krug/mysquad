@@ -46,9 +46,27 @@ One card per member, sorted active-first (matching UI sort). Each card:
 
 - **Library:** jsPDF (already installed, lazy-imported pattern in `ReportDetail.tsx`)
 - **Location:** New utility function `generateSalaryPdf()` in `src/lib/salary-pdf.ts`
-- **Data:** Receives `SalaryDataPointDetail`, `previousData` record, `budgetTotals` from existing state — no new backend calls needed
-- **Currency formatting:** Reuse existing `formatMoney` patterns from the codebase
+- **Currency formatting:** Use `formatCents()` from `src/lib/salary-utils.ts` (all amounts are stored in cents)
+- **File save:** Use `doc.save()` (browser-style download, already proven in Tauri via `ReportDetail.tsx`)
 - **Page setup:** A4, portrait orientation
+- **Page breaks:** Pre-calculate card height (header + parts rows + footer ≈ fixed per-part height), check remaining page space, call `doc.addPage()` if card won't fit
+- **Colors:** Green `rgb(22, 163, 74)` for under-budget/positive, red `rgb(220, 38, 38)` for over-budget/negative. Inactive members drawn at lighter gray `rgb(160, 160, 160)`
+
+### Function Signature
+
+```ts
+function generateSalaryPdf(
+  detail: SalaryDataPointDetail,
+  previousData: Record<number, SalaryPart[] | null>,
+  previousTotal: number | null,
+): void
+```
+
+- `detail` — full data point including members, parts, budget
+- `previousData` — per-member previous salary parts (keyed by `member_id`)
+- `previousTotal` — previous data point total cost (already computed in `SalaryPlanner.tsx`)
+- Budget totals computed internally via `budgetTotals()` from `salary-utils.ts`
+- Members sorted active-first using same logic as `SalaryPlanner.tsx` (sort by `is_active` descending, preserve order within group)
 
 ## Button Placement
 
