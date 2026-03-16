@@ -101,8 +101,13 @@ export async function generateSalaryPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
 
-  // Space metrics evenly
-  const metricText = metrics.join("    ");
+  // Space metrics evenly, shrink separator if text is too wide
+  let sep = "    ";
+  let metricText = metrics.join(sep);
+  if (doc.getTextWidth(metricText) > CONTENT_WIDTH - 8) {
+    sep = "  ";
+    metricText = metrics.join(sep);
+  }
   doc.text(metricText, MARGIN + 4, y + 2);
 
   y += 14;
