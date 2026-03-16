@@ -261,5 +261,17 @@ export const exportDataPointSalaries = (dataPointId: number, filePath: string) =
 export const importDataPointSalaries = (dataPointId: number, filePath: string) =>
   invoke<string>("import_data_point_salaries", { data_point_id: dataPointId, file_path: filePath });
 
+// Salary Templates
+export const uploadSalaryTemplate = (dataPointId: number, filePath: string) =>
+  invoke<void>("upload_salary_template", { data_point_id: dataPointId, file_path: filePath });
+export const deleteSalaryTemplate = (dataPointId: number) =>
+  invoke<void>("delete_salary_template", { data_point_id: dataPointId });
+export const exportMemberSalaryDocx = (dataPointId: number, memberId: number, outputPath: string) =>
+  invoke<void>("export_member_salary_docx", {
+    data_point_id: dataPointId,
+    member_id: memberId,
+    output_path: outputPath,
+  });
+
 // Global Search
 export const globalSearch = (query: string) => invoke<SearchResult[]>("global_search", { query });

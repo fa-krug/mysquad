@@ -125,6 +125,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 16)?;
     }
 
+    if version < 17 {
+        let migration_sql = include_str!("../migrations/017_salary_template.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 17)?;
+    }
+
     Ok(())
 }
 

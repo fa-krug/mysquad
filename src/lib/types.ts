@@ -205,6 +205,7 @@ export interface SalaryDataPointDetail {
   budget: number | null;
   previous_data_point_id: number | null;
   scenario_group_id: number | null;
+  template_path: string | null;
   members: SalaryDataPointMember[];
   ranges: SalaryRange[];
 }
