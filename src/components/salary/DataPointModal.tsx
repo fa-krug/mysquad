@@ -12,7 +12,7 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { showError } from "@/lib/toast";
 import { Switch } from "@/components/ui/switch";
 import {
   updateSalaryDataPoint,
@@ -25,8 +25,12 @@ import {
   createScenarioGroup,
   updateScenarioGroup,
   updateScenarioGroupRange,
+  updateScenarioGroupMember,
   addScenario,
   removeScenario,
+  addMemberToDataPoint,
+  removeMemberFromDataPoint,
+  getTeamMembers,
 } from "@/lib/db";
 import { save, open as openFile } from "@tauri-apps/plugin-dialog";
 import { required, positiveNumber } from "@/lib/validators";
@@ -35,6 +39,7 @@ import type {
   SalaryDataPointSummary,
   SalaryListItem,
   ScenarioGroup,
+  TeamMember,
   Title,
 } from "@/lib/types";
 
@@ -46,6 +51,7 @@ interface DataPointModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onGroupRefresh?: (groupId: number) => Promise<void>;
   editingGroup: ScenarioGroup | null;
 }
 
@@ -57,6 +63,7 @@ export function DataPointModal({
   open,
   onClose,
   onSaved,
+  onGroupRefresh,
   editingGroup,
 }: DataPointModalProps) {
   const [detail, setDetail] = useState<SalaryDataPointDetail | null>(null);
@@ -72,7 +79,9 @@ export function DataPointModal({
   const [salaryError, setSalaryError] = useState(false);
   const [isScenario, setIsScenario] = useState(false);
   const [scenarioCount, setScenarioCount] = useState(2);
+  const [scenarioNames, setScenarioNames] = useState<Record<number, string>>({});
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [allMembers, setAllMembers] = useState<TeamMember[]>([]);
 
   // Extract normal data points from SalaryListItem[] for the "Compare to" dropdown
   const normalDataPoints = dataPoints
@@ -108,12 +117,13 @@ export function DataPointModal({
     setMemberStates(mStates);
   }
 
-  // Reset scenario state and errors when modal opens
+  // Reset scenario state and errors when modal opens; load all team members
   useEffect(() => {
     if (open) {
       setIsScenario(false);
       setScenarioCount(2);
       setErrors({});
+      getTeamMembers().then(setAllMembers);
     }
   }, [open]);
 
@@ -145,9 +155,20 @@ export function DataPointModal({
     if (!open || !editingGroup) return;
     setName(editingGroup.name);
     setBudget(editingGroup.budget != null ? String(Math.round(editingGroup.budget / 100)) : "");
-    // Load group ranges from first child's detail (get_salary_data_point returns group ranges for scenario children)
+    setPreviousDpId(
+      editingGroup.previous_data_point_id != null
+        ? String(editingGroup.previous_data_point_id)
+        : "",
+    );
+    const names: Record<number, string> = {};
+    editingGroup.children.forEach((c) => {
+      names[c.id] = c.name;
+    });
+    setScenarioNames(names);
+    // Load group ranges and member states from first child's detail
     if (editingGroup.children.length > 0) {
       getSalaryDataPoint(editingGroup.children[0].id).then((d) => {
+        setDetail(d);
         const rangeMap: Record<number, { min: string; max: string }> = {};
         d.ranges.forEach((r) => {
           rangeMap[r.title_id] = {
@@ -156,9 +177,23 @@ export function DataPointModal({
           };
         });
         setRanges(rangeMap);
+        const mStates: Record<
+          number,
+          { active: boolean; promoted: boolean; promotedTitleId: string }
+        > = {};
+        d.members.forEach((m) => {
+          mStates[m.id] = {
+            active: m.is_active,
+            promoted: m.is_promoted,
+            promotedTitleId: m.promoted_title_id != null ? String(m.promoted_title_id) : "",
+          };
+        });
+        setMemberStates(mStates);
       });
     } else {
       setRanges({});
+      setDetail(null);
+      setMemberStates({});
     }
   }, [open, editingGroup]);
 
@@ -264,6 +299,14 @@ export function DataPointModal({
       if (budgetCents !== oldBudget) {
         await updateScenarioGroup(editingGroup.id, "budget", budgetCents);
       }
+      const newPrevId = previousDpId === "" ? null : previousDpId;
+      const oldPrevId =
+        editingGroup.previous_data_point_id != null
+          ? String(editingGroup.previous_data_point_id)
+          : null;
+      if (newPrevId !== oldPrevId) {
+        await updateScenarioGroup(editingGroup.id, "previous_data_point_id", newPrevId);
+      }
       for (const title of titles) {
         const r = ranges[title.id];
         if (!r) continue;
@@ -273,8 +316,51 @@ export function DataPointModal({
           await updateScenarioGroupRange(editingGroup.id, title.id, minCents, maxCents);
         }
       }
-      onSaved();
+      // Save scenario child names
+      for (const child of editingGroup.children) {
+        const newName = scenarioNames[child.id];
+        if (newName !== undefined && newName !== child.name) {
+          await updateSalaryDataPoint(child.id, "name", newName);
+        }
+      }
+      // Save member active/promoted states at the group level (propagates to all children)
+      if (detail) {
+        for (const member of detail.members) {
+          const state = memberStates[member.id];
+          if (!state) continue;
+          if (state.active !== member.is_active) {
+            await updateScenarioGroupMember(
+              editingGroup.id,
+              member.member_id,
+              "is_active",
+              state.active ? "1" : "0",
+            );
+          }
+          if (state.promoted !== member.is_promoted) {
+            await updateScenarioGroupMember(
+              editingGroup.id,
+              member.member_id,
+              "is_promoted",
+              state.promoted ? "1" : "0",
+            );
+          }
+          const oldPromotedTitleId =
+            member.promoted_title_id != null ? String(member.promoted_title_id) : "";
+          if (state.promotedTitleId !== oldPromotedTitleId) {
+            await updateScenarioGroupMember(
+              editingGroup.id,
+              member.member_id,
+              "promoted_title_id",
+              state.promotedTitleId === "" ? null : state.promotedTitleId,
+            );
+          }
+        }
+      }
+      await onSaved();
       onClose();
+    } catch (err) {
+      console.error("Failed to save scenario group:", err);
+      showError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -341,11 +427,11 @@ export function DataPointModal({
   if (editingGroup) {
     return (
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-x-hidden">
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Edit Scenario Group</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="flex-1 pr-4">
+          <div className="flex-1 min-h-0 overflow-y-auto pr-4">
             <div className="flex flex-col gap-4 py-2">
               <div className="flex flex-col gap-1">
                 <Label>Name</Label>
@@ -376,6 +462,21 @@ export function DataPointModal({
                 <div className="h-3 text-xs">
                   {errors.budget && <span className="text-destructive">{errors.budget}</span>}
                 </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Compare to</Label>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                  value={previousDpId}
+                  onChange={(e) => setPreviousDpId(e.target.value)}
+                >
+                  <option value="">None</option>
+                  {otherDataPoints.map((dp) => (
+                    <option key={dp.id} value={String(dp.id)}>
+                      {dp.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <Separator />
               <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
@@ -415,6 +516,127 @@ export function DataPointModal({
                   />
                 </div>
               ))}
+              {detail && (
+                <>
+                  <Separator />
+                  <h3 className="text-sm font-semibold">Team Members</h3>
+                  {detail.members.map((member) => {
+                    const state = memberStates[member.id] ?? {
+                      active: member.is_active,
+                      promoted: member.is_promoted,
+                      promotedTitleId:
+                        member.promoted_title_id != null ? String(member.promoted_title_id) : "",
+                    };
+                    return (
+                      <div key={member.id} className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                          <span className="w-36 sm:w-48 shrink-0 truncate">
+                            {member.last_name}, {member.first_name}
+                          </span>
+                          <label className="flex items-center gap-1.5">
+                            <Checkbox
+                              checked={state.active}
+                              onCheckedChange={(checked) =>
+                                setMemberStates((prev) => ({
+                                  ...prev,
+                                  [member.id]: { ...prev[member.id], active: !!checked },
+                                }))
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <Checkbox
+                              checked={state.promoted}
+                              onCheckedChange={(checked) =>
+                                setMemberStates((prev) => ({
+                                  ...prev,
+                                  [member.id]: {
+                                    ...prev[member.id],
+                                    promoted: !!checked,
+                                    promotedTitleId: checked
+                                      ? (prev[member.id]?.promotedTitleId ?? "")
+                                      : "",
+                                  },
+                                }))
+                              }
+                            />
+                            <span>Promoted</span>
+                          </label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={async () => {
+                              await removeMemberFromDataPoint(
+                                editingGroup.children[0].id,
+                                member.member_id,
+                              );
+                              if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                        {state.promoted && (
+                          <div className="sm:ml-48 sm:pl-4 pl-6">
+                            <select
+                              className="h-7 w-48 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                              value={state.promotedTitleId}
+                              onChange={(e) =>
+                                setMemberStates((prev) => ({
+                                  ...prev,
+                                  [member.id]: {
+                                    ...prev[member.id],
+                                    promotedTitleId: e.target.value,
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="">Select new title…</option>
+                              {titles.map((t) => (
+                                <option key={t.id} value={String(t.id)}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(() => {
+                    const existingMemberIds = new Set(detail.members.map((m) => m.member_id));
+                    const available = allMembers.filter((m) => !existingMemberIds.has(m.id));
+                    if (available.length === 0) return null;
+                    return (
+                      <select
+                        className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                        value=""
+                        onChange={async (e) => {
+                          const memberId = Number(e.target.value);
+                          if (!memberId) return;
+                          await addMemberToDataPoint(editingGroup.children[0].id, memberId);
+                          if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
+                        }}
+                      >
+                        <option value="">Add team member…</option>
+                        {available
+                          .sort(
+                            (a, b) =>
+                              a.last_name.localeCompare(b.last_name) ||
+                              a.first_name.localeCompare(b.first_name),
+                          )
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.last_name}, {m.first_name}
+                            </option>
+                          ))}
+                      </select>
+                    );
+                  })()}
+                </>
+              )}
               <Separator />
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">
@@ -429,8 +651,7 @@ export function DataPointModal({
                       if (editingGroup.children.length <= 2) return;
                       const lastChild = editingGroup.children[editingGroup.children.length - 1];
                       await removeScenario(lastChild.id);
-                      onSaved();
-                      onClose();
+                      if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
                     }}
                   >
                     −
@@ -440,19 +661,27 @@ export function DataPointModal({
                     size="sm"
                     onClick={async () => {
                       await addScenario(editingGroup.id);
-                      onSaved();
-                      onClose();
+                      if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
                     }}
                   >
                     +
                   </Button>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {editingGroup.children.map((c) => c.name).join(", ")}
+              <div className="flex flex-col gap-2">
+                {editingGroup.children.map((c) => (
+                  <Input
+                    key={c.id}
+                    value={scenarioNames[c.id] ?? c.name}
+                    onChange={(e) =>
+                      setScenarioNames((prev) => ({ ...prev, [c.id]: e.target.value }))
+                    }
+                    className="h-8 text-sm"
+                  />
+                ))}
               </div>
             </div>
-          </ScrollArea>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>
               Cancel
@@ -649,11 +878,11 @@ export function DataPointModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-x-hidden">
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{isNew ? "New Data Point" : "Edit Data Point"}</DialogTitle>
         </DialogHeader>
-        <ScrollArea className="flex-1 pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="flex flex-col gap-4 py-2">
             <div className="flex flex-col gap-1">
               <Label>Name</Label>
@@ -807,6 +1036,18 @@ export function DataPointModal({
                       />
                       <span>Promoted</span>
                     </label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={async () => {
+                        await removeMemberFromDataPoint(detail.id, member.member_id);
+                        const d = await getSalaryDataPoint(detail.id);
+                        applyDetail(d);
+                      }}
+                    >
+                      Remove
+                    </Button>
                   </div>
                   {state.promoted && (
                     <div className="sm:ml-48 sm:pl-4 pl-6">
@@ -832,8 +1073,39 @@ export function DataPointModal({
                 </div>
               );
             })}
+            {(() => {
+              const existingMemberIds = new Set(detail.members.map((m) => m.member_id));
+              const available = allMembers.filter((m) => !existingMemberIds.has(m.id));
+              if (available.length === 0) return null;
+              return (
+                <select
+                  className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                  value=""
+                  onChange={async (e) => {
+                    const memberId = Number(e.target.value);
+                    if (!memberId) return;
+                    await addMemberToDataPoint(detail.id, memberId);
+                    const d = await getSalaryDataPoint(detail.id);
+                    applyDetail(d);
+                  }}
+                >
+                  <option value="">Add team member…</option>
+                  {available
+                    .sort(
+                      (a, b) =>
+                        a.last_name.localeCompare(b.last_name) ||
+                        a.first_name.localeCompare(b.first_name),
+                    )
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.last_name}, {m.first_name}
+                      </option>
+                    ))}
+                </select>
+              );
+            })()}
           </div>
-        </ScrollArea>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel

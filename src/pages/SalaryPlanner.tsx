@@ -4,6 +4,7 @@ import { DataPointList } from "@/components/salary/DataPointList";
 import { DataPointModal } from "@/components/salary/DataPointModal";
 import { MemberSalaryCard } from "@/components/salary/MemberSalaryCard";
 import { ScenarioComparisonTable } from "@/components/salary/ScenarioComparisonTable";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const SalaryAnalytics = lazy(() =>
   import("@/components/salary/SalaryAnalytics").then((m) => ({ default: m.SalaryAnalytics })),
@@ -25,6 +26,7 @@ import {
   uploadSalaryTemplate,
   deleteSalaryTemplate,
   exportMemberSalaryDocx,
+  getSetting,
 } from "@/lib/db";
 import { open as openFile, save } from "@tauri-apps/plugin-dialog";
 import { EyeOff, Upload, FileDown, Trash2, FileText } from "lucide-react";
@@ -68,6 +70,7 @@ export function SalaryPlanner() {
   >({});
   const [editingGroup, setEditingGroup] = useState<ScenarioGroup | null>(null);
   const [promotingId, setPromotingId] = useState<number | null>(null);
+  const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
   const { scheduleDelete, pendingIds } = usePendingDelete();
 
   const loadDataPoints = useCallback(async () => {
@@ -89,6 +92,12 @@ export function SalaryPlanner() {
       }),
     );
     setPreviousData(prev);
+  }, []);
+
+  useEffect(() => {
+    getSetting("show_ranges_in_presentation").then((value) => {
+      if (value !== null) setShowRangesInPresentation(value === "true");
+    });
   }, []);
 
   useEffect(() => {
@@ -186,6 +195,18 @@ export function SalaryPlanner() {
     setEditingDpId(null);
     setEditingIsNew(false);
     setModalOpen(true);
+  }
+
+  async function handleGroupRefresh(groupId: number) {
+    const items = await loadDataPoints();
+    const found = items.find(
+      (item): item is { type: "scenario_group"; scenario_group: ScenarioGroup } =>
+        item.type === "scenario_group" && item.scenario_group.id === groupId,
+    );
+    if (found) {
+      setEditingGroup(found.scenario_group);
+    }
+    if (selectedId) await loadDetail(selectedId);
   }
 
   async function handleDeleteGroup(groupId: number) {
@@ -425,18 +446,44 @@ export function SalaryPlanner() {
     [listItems, pendingIds],
   );
 
+  // Exclude promoted members to match budgetTotals logic
+  const promotedMemberIds = useMemo(
+    () => new Set(detail?.members.filter((m) => m.is_promoted).map((m) => m.member_id) ?? []),
+    [detail],
+  );
+
   const previousTotal = useMemo(() => {
     if (!filteredPreviousData || Object.keys(filteredPreviousData).length === 0) return null;
     let total = 0;
-    for (const parts of Object.values(filteredPreviousData)) {
-      if (parts) {
+    for (const [id, parts] of Object.entries(filteredPreviousData)) {
+      if (parts && !promotedMemberIds.has(Number(id))) {
         for (const p of parts) {
           total += p.amount * p.frequency;
         }
       }
     }
     return total;
-  }, [filteredPreviousData]);
+  }, [filteredPreviousData, promotedMemberIds]);
+
+  const previousHeadcount = useMemo(() => {
+    if (!filteredPreviousData) return null;
+    let count = 0;
+    for (const [id, parts] of Object.entries(filteredPreviousData)) {
+      if (parts && !promotedMemberIds.has(Number(id))) count++;
+    }
+    return count > 0 ? count : null;
+  }, [filteredPreviousData, promotedMemberIds]);
+
+  const previousBudget = useMemo(() => {
+    if (!detail?.previous_data_point_id) return null;
+    const prevId = detail.previous_data_point_id;
+    for (const item of listItems) {
+      if (item.type === "data_point" && item.data_point.id === prevId) {
+        return item.data_point.budget;
+      }
+    }
+    return null;
+  }, [detail, listItems]);
 
   return (
     <div className="flex h-full">
@@ -459,126 +506,139 @@ export function SalaryPlanner() {
 
       {/* Right panel */}
       <div className="flex-1 overflow-auto">
-        {!detail ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a data point to view details
-          </div>
-        ) : (
-          <>
-            <div className="sticky top-0 z-10 bg-background px-6 pt-6 pb-2">
-              <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">{detail.name}</h1>
-                <div className="flex items-center gap-2">
-                  {detail.template_path ? (
-                    <>
+        <ErrorBoundary>
+          {!detail ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a data point to view details
+            </div>
+          ) : (
+            <>
+              <div className="sticky top-0 z-10 bg-background px-6 pt-6 pb-2">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold">{detail.name}</h1>
+                  <div className="flex items-center gap-2">
+                    {detail.template_path ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleExportAllDocx}
+                          title="Export salary overview for all members"
+                        >
+                          <FileDown className="h-4 w-4 mr-1" />
+                          Export All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleDeleteTemplate}
+                          title="Remove template"
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Template
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleExportAllDocx}
-                        title="Export salary overview for all members"
+                        onClick={handleUploadTemplate}
+                        title="Upload a .docx template for salary overviews"
                       >
-                        <FileDown className="h-4 w-4 mr-1" />
-                        Export All
+                        <Upload className="h-4 w-4 mr-1" />
+                        Upload Template
                       </Button>
+                    )}
+                    {anyPresented && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={handleDeleteTemplate}
-                        title="Remove template"
-                        className="text-destructive"
+                        onClick={async () => {
+                          await Promise.all(
+                            detail.members
+                              .filter((m) => m.is_presented)
+                              .map((m) => updateSalaryDataPointMember(m.id, "is_presented", "0")),
+                          );
+                          await loadDetailOnly(selectedId!);
+                        }}
                       >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Template
+                        <EyeOff className="h-4 w-4 mr-1" />
+                        Clear presentation
                       </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleUploadTemplate}
-                      title="Upload a .docx template for salary overviews"
-                    >
-                      <Upload className="h-4 w-4 mr-1" />
-                      Upload Template
-                    </Button>
-                  )}
-                  {anyPresented && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        await Promise.all(
-                          detail.members
-                            .filter((m) => m.is_presented)
-                            .map((m) => updateSalaryDataPointMember(m.id, "is_presented", "0")),
-                        );
-                        await loadDetailOnly(selectedId!);
-                      }}
-                    >
-                      <EyeOff className="h-4 w-4 mr-1" />
-                      Clear presentation
-                    </Button>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-              {detail.template_path && (
-                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                  <FileText className="h-3 w-3" />
-                  Template uploaded
-                </div>
-              )}
-            </div>
-            <div className="px-6 pb-6 space-y-6">
-              {!anyPresented && detail.scenario_group_id && scenarioSummaries.length > 0 && (
-                <ScenarioComparisonTable
-                  summaries={scenarioSummaries}
-                  currentDataPointId={detail.id}
-                  budget={detail.budget}
-                  previousTotal={previousTotal}
-                  anyPresented={anyPresented}
-                />
-              )}
-              <div className="flex flex-col 2xl:flex-row gap-6">
-                {/* Member salary cards */}
-                <div className="max-w-2xl min-w-0 2xl:flex-1 space-y-6">
-                  {presentedMembers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No members in this data point.</p>
-                  ) : (
-                    presentedMembers.map((member) => (
-                      <MemberSalaryCard
-                        key={member.id}
-                        member={member}
-                        ranges={detail.ranges}
-                        onAddPart={handleAddPart}
-                        onDeletePart={handleDeletePart}
-                        onChanged={handlePartChanged}
-                        anyPresented={anyPresented}
-                        onTogglePresented={handleTogglePresented}
-                        scenarioComparison={
-                          detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
-                        }
-                        onExportDocx={detail.template_path ? handleExportMemberDocx : undefined}
-                      />
-                    ))
-                  )}
-                </div>
-
-                {/* Analytics */}
-                {activeMembers.length > 0 && (
-                  <div className="max-w-2xl min-w-0 2xl:flex-1 2xl:sticky 2xl:top-0 2xl:self-start space-y-6">
-                    <Suspense fallback={<div className="h-64 animate-pulse rounded bg-muted" />}>
-                      <SalaryAnalytics
-                        detail={filteredDetail!}
-                        previousData={filteredPreviousData}
-                        anyPresented={anyPresented}
-                      />
-                    </Suspense>
+                {detail.template_path && (
+                  <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                    <FileText className="h-3 w-3" />
+                    Template uploaded
                   </div>
                 )}
               </div>
-            </div>
-          </>
-        )}
+              <div className="px-6 pb-6 space-y-6">
+                {!anyPresented && detail.scenario_group_id && scenarioSummaries.length > 0 && (
+                  <ScenarioComparisonTable
+                    summaries={scenarioSummaries}
+                    currentDataPointId={detail.id}
+                    budget={detail.budget}
+                    previousTotal={previousTotal}
+                    previousBudget={previousBudget}
+                    previousHeadcount={previousHeadcount}
+                    anyPresented={anyPresented}
+                  />
+                )}
+                <div className="flex flex-col 2xl:flex-row gap-6">
+                  {/* Member salary cards */}
+                  <div className="max-w-2xl min-w-0 2xl:flex-1 space-y-6">
+                    {presentedMembers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No members in this data point.
+                      </p>
+                    ) : (
+                      presentedMembers.map((member) => (
+                        <MemberSalaryCard
+                          key={member.id}
+                          member={member}
+                          ranges={detail.ranges}
+                          onAddPart={handleAddPart}
+                          onDeletePart={handleDeletePart}
+                          onChanged={handlePartChanged}
+                          anyPresented={anyPresented}
+                          showRangesInPresentation={showRangesInPresentation}
+                          onTogglePresented={handleTogglePresented}
+                          scenarioComparison={
+                            detail.scenario_group_id
+                              ? memberComparisons[member.member_id]
+                              : undefined
+                          }
+                          onExportDocx={detail.template_path ? handleExportMemberDocx : undefined}
+                        />
+                      ))
+                    )}
+                  </div>
+
+                  {/* Analytics */}
+                  {activeMembers.length > 0 && (
+                    <div className="max-w-2xl min-w-0 2xl:flex-1 2xl:sticky 2xl:top-0 2xl:self-start space-y-6">
+                      <ErrorBoundary>
+                        <Suspense
+                          fallback={<div className="h-64 animate-pulse rounded bg-muted" />}
+                        >
+                          <SalaryAnalytics
+                            detail={filteredDetail!}
+                            previousData={filteredPreviousData}
+                            anyPresented={anyPresented}
+                          />
+                        </Suspense>
+                      </ErrorBoundary>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </ErrorBoundary>
       </div>
 
       {/* Edit modal */}
@@ -594,6 +654,7 @@ export function SalaryPlanner() {
           setEditingGroup(null);
         }}
         onSaved={handleModalSaved}
+        onGroupRefresh={handleGroupRefresh}
       />
 
       <AlertDialog open={promotingId !== null} onOpenChange={(o) => !o && setPromotingId(null)}>

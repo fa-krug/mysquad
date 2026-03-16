@@ -28,19 +28,82 @@ impl PlatformSecurity for MacSecurity {
     }
 
     fn store_key(key: &str) -> Result<(), String> {
-        set_generic_password(SERVICE_NAME, ACCOUNT_NAME, key.as_bytes())
-            .map_err(|e| format!("Failed to store key in Keychain: {}", e))
+        // In dev builds, use the `security` CLI to avoid Keychain permission prompts.
+        // The dev binary's code signature changes on every rebuild, but `security` is
+        // signed by Apple and has permanent Keychain access.
+        if cfg!(debug_assertions) {
+            let status = Command::new("security")
+                .args([
+                    "add-generic-password",
+                    "-U",
+                    "-s",
+                    SERVICE_NAME,
+                    "-a",
+                    ACCOUNT_NAME,
+                    "-w",
+                    key,
+                ])
+                .status()
+                .map_err(|e| format!("Failed to run security CLI: {}", e))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Failed to store key via security CLI".into())
+            }
+        } else {
+            set_generic_password(SERVICE_NAME, ACCOUNT_NAME, key.as_bytes())
+                .map_err(|e| format!("Failed to store key in Keychain: {}", e))
+        }
     }
 
     fn retrieve_key() -> Result<String, String> {
-        let bytes = get_generic_password(SERVICE_NAME, ACCOUNT_NAME)
-            .map_err(|e| format!("Failed to retrieve key from Keychain: {}", e))?;
-        String::from_utf8(bytes).map_err(|e| format!("Key is not valid UTF-8: {}", e))
+        if cfg!(debug_assertions) {
+            let output = Command::new("security")
+                .args([
+                    "find-generic-password",
+                    "-s",
+                    SERVICE_NAME,
+                    "-a",
+                    ACCOUNT_NAME,
+                    "-w",
+                ])
+                .output()
+                .map_err(|e| format!("Failed to run security CLI: {}", e))?;
+            if output.status.success() {
+                let key = String::from_utf8(output.stdout)
+                    .map_err(|e| format!("Key is not valid UTF-8: {}", e))?;
+                Ok(key.trim().to_string())
+            } else {
+                Err("Key not found in Keychain".into())
+            }
+        } else {
+            let bytes = get_generic_password(SERVICE_NAME, ACCOUNT_NAME)
+                .map_err(|e| format!("Failed to retrieve key from Keychain: {}", e))?;
+            String::from_utf8(bytes).map_err(|e| format!("Key is not valid UTF-8: {}", e))
+        }
     }
 
     fn delete_key() -> Result<(), String> {
-        delete_generic_password(SERVICE_NAME, ACCOUNT_NAME)
-            .map_err(|e| format!("Failed to delete key from Keychain: {}", e))
+        if cfg!(debug_assertions) {
+            let status = Command::new("security")
+                .args([
+                    "delete-generic-password",
+                    "-s",
+                    SERVICE_NAME,
+                    "-a",
+                    ACCOUNT_NAME,
+                ])
+                .status()
+                .map_err(|e| format!("Failed to run security CLI: {}", e))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Failed to delete key via security CLI".into())
+            }
+        } else {
+            delete_generic_password(SERVICE_NAME, ACCOUNT_NAME)
+                .map_err(|e| format!("Failed to delete key from Keychain: {}", e))
+        }
     }
 }
 

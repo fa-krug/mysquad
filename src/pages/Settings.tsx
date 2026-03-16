@@ -42,9 +42,16 @@ export function SettingsPage({
   const [checking, setChecking] = useState(false);
   const [upToDate, setUpToDate] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
 
   useEffect(() => {
     getVersion().then(setAppVersion);
+  }, []);
+
+  useEffect(() => {
+    getSetting("show_ranges_in_presentation").then((value) => {
+      if (value !== null) setShowRangesInPresentation(value === "true");
+    });
   }, []);
 
   useEffect(() => {
@@ -89,6 +96,16 @@ export function SettingsPage({
       setTimeout(() => setAutoLockSaved(false), 1500);
     } catch (err) {
       setAutoLockError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleShowRangesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const checked = e.target.checked;
+    setShowRangesInPresentation(checked);
+    try {
+      await setSetting("show_ranges_in_presentation", checked ? "true" : "false");
+    } catch {
+      // Best effort
     }
   }
 
@@ -253,6 +270,25 @@ export function SettingsPage({
           )}
           {autoLockError && <p className="text-sm text-destructive">{autoLockError}</p>}
           {autoLockSaved && <p className="text-sm text-green-600">Saved</p>}
+        </div>
+
+        {/* Presentation: show salary ranges */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="presentation-ranges-toggle"
+              checked={showRangesInPresentation}
+              onChange={handleShowRangesChange}
+              className="h-4 w-4 rounded border-input"
+            />
+            <label htmlFor="presentation-ranges-toggle" className="text-sm font-medium">
+              Show salary ranges in presentation mode
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            When enabled, salary range indicators are visible while presenting.
+          </p>
         </div>
 
         {/* Welcome Screen */}

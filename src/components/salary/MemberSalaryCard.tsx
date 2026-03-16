@@ -20,6 +20,7 @@ interface MemberSalaryCardProps {
   onDeletePart: (partId: number) => void;
   onChanged: () => void;
   anyPresented: boolean;
+  showRangesInPresentation?: boolean;
   onTogglePresented: (id: number, value: boolean) => void;
   scenarioComparison?: ScenarioMemberComparison[];
   onExportDocx?: (memberId: number, memberName: string) => void;
@@ -32,13 +33,15 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onDeletePart,
   onChanged,
   anyPresented,
+  showRangesInPresentation,
   onTogglePresented,
   scenarioComparison,
   onExportDocx,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
+  const hideRanges = anyPresented && !showRangesInPresentation;
   const range = getRangeForMember(member, ranges);
-  const fit = rangeFitColor(total, range);
+  const fit = hideRanges ? "none" : rangeFitColor(total, range);
 
   return (
     <div
@@ -100,7 +103,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
         </div>
         <div className={cn("text-sm font-semibold", fitColors[fit])}>
           {formatCents(total)}/yr
-          {range && (
+          {range && !hideRanges && (
             <span className="ml-1 text-xs font-normal text-muted-foreground">
               ({formatCents(range.min_salary)} – {formatCents(range.max_salary)})
             </span>

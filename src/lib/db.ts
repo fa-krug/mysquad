@@ -157,6 +157,25 @@ export const updateScenarioGroupRange = (
     min_salary: minSalary,
     max_salary: maxSalary,
   });
+export const updateScenarioGroupMember = (
+  scenarioGroupId: number,
+  memberId: number,
+  field: string,
+  value: string | null,
+) =>
+  invoke<void>("update_scenario_group_member", {
+    scenario_group_id: scenarioGroupId,
+    member_id: memberId,
+    field,
+    value,
+  });
+export const addMemberToDataPoint = (dataPointId: number, memberId: number) =>
+  invoke<void>("add_member_to_data_point", { data_point_id: dataPointId, member_id: memberId });
+export const removeMemberFromDataPoint = (dataPointId: number, memberId: number) =>
+  invoke<void>("remove_member_from_data_point", {
+    data_point_id: dataPointId,
+    member_id: memberId,
+  });
 export const addScenario = (scenarioGroupId: number) =>
   invoke<SalaryDataPointSummary>("add_scenario", { scenario_group_id: scenarioGroupId });
 export const removeScenario = (dataPointId: number) =>

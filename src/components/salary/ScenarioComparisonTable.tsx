@@ -7,6 +7,8 @@ interface ScenarioComparisonTableProps {
   currentDataPointId: number;
   budget: number | null;
   previousTotal: number | null;
+  previousBudget: number | null;
+  previousHeadcount: number | null;
   anyPresented: boolean;
 }
 
@@ -15,6 +17,8 @@ export function ScenarioComparisonTable({
   currentDataPointId,
   budget,
   previousTotal,
+  previousBudget,
+  previousHeadcount,
   anyPresented,
 }: ScenarioComparisonTableProps) {
   if (summaries.length === 0) return null;
@@ -39,9 +43,11 @@ export function ScenarioComparisonTable({
             <tr className="text-xs text-muted-foreground border-b">
               <td className="px-2 py-1.5 italic">Previous</td>
               <td className="px-2 py-1.5 text-right">{formatCents(previousTotal)}</td>
+              <td className="px-2 py-1.5 text-right">
+                {previousBudget != null ? formatCents(previousBudget) : "—"}
+              </td>
               <td className="px-2 py-1.5 text-right">—</td>
-              <td className="px-2 py-1.5 text-right">—</td>
-              <td className="px-2 py-1.5 text-right">—</td>
+              <td className="px-2 py-1.5 text-right">{previousHeadcount ?? "—"}</td>
             </tr>
           )}
           {summaries.map((s) => {

@@ -1,12 +1,16 @@
+import { useCallback, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList, ResponsiveContainer } from "recharts";
 import { annualTotal, variableTotal, formatCents } from "@/lib/salary-utils";
 import type { SalaryDataPointMember } from "@/lib/types";
+import { TooltipPortal } from "./TooltipPortal";
 
 interface VariablePayChartProps {
   members: SalaryDataPointMember[];
 }
 
 export function VariablePayChart({ members }: VariablePayChartProps) {
+  const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
+  const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
   const active = members
     .filter((m) => m.is_active)
     .sort(
@@ -28,57 +32,69 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
   });
 
   return (
-    <div>
+    <div className="relative">
       <h4 className="text-sm font-semibold mb-2">Variable Pay Breakdown</h4>
-      <ResponsiveContainer width="100%" height={active.length * 40 + 40}>
-        <BarChart
-          data={data}
-          layout="vertical"
-          margin={{ left: 120, right: 60, top: 5, bottom: 5 }}
-        >
-          <XAxis
-            type="number"
-            tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
-            tick={{ fill: "currentColor" }}
-          />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={110}
-            tick={{ fontSize: 12, fill: "currentColor" }}
-          />
-          <Tooltip
-            formatter={(value) => formatCents((value as number) * 100)}
-            contentStyle={{ backgroundColor: "var(--popover)", border: "1px solid var(--border)" }}
-            labelStyle={{ color: "var(--popover-foreground)" }}
-            itemStyle={{ color: "var(--popover-foreground)" }}
-            cursor={{ fill: "currentColor", opacity: 0.1 }}
-          />
-          <Bar
-            dataKey="fixed"
-            stackId="salary"
-            fill="#3b82f6"
-            radius={[0, 0, 0, 0]}
-            name="Fixed"
-            activeBar={false}
-          />
-          <Bar
-            dataKey="variable"
-            stackId="salary"
-            fill="#93c5fd"
-            radius={[0, 4, 4, 0]}
-            name="Variable"
-            activeBar={false}
+      <div ref={chartCallbackRef}>
+        <ResponsiveContainer width="100%" height={active.length * 40 + 40}>
+          <BarChart
+            data={data}
+            layout="vertical"
+            margin={{ left: 120, right: 60, top: 5, bottom: 5 }}
           >
-            <LabelList
-              dataKey="varPct"
-              position="right"
-              formatter={(v) => `${v}%`}
-              style={{ fill: "currentColor", fontSize: 11 }}
+            <XAxis
+              type="number"
+              tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
+              tick={{ fill: "currentColor" }}
             />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={110}
+              tick={{ fontSize: 12, fill: "currentColor" }}
+            />
+            <Tooltip
+              isAnimationActive={false}
+              content={({ active: isActive, payload, coordinate, label }) => {
+                if (!isActive || !payload?.length) return null;
+                return (
+                  <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                    {payload.map((p, i) => (
+                      <div key={i} style={{ color: p.color }}>
+                        {p.name}: {formatCents((p.value as number) * 100)}
+                      </div>
+                    ))}
+                  </TooltipPortal>
+                );
+              }}
+              cursor={{ fill: "currentColor", opacity: 0.1 }}
+            />
+            <Bar
+              dataKey="fixed"
+              stackId="salary"
+              fill="#3b82f6"
+              radius={[0, 0, 0, 0]}
+              name="Fixed"
+              activeBar={false}
+            />
+            <Bar
+              dataKey="variable"
+              stackId="salary"
+              fill="#93c5fd"
+              radius={[0, 4, 4, 0]}
+              name="Variable"
+              activeBar={false}
+            >
+              <LabelList
+                dataKey="varPct"
+                position="right"
+                formatter={(v) => `${v}%`}
+                style={{ fill: "currentColor", fontSize: 11 }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

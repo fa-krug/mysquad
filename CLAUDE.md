@@ -56,3 +56,4 @@ MySquad is a **Tauri v2 desktop app** for team management — tracking team memb
   - Empty state: centered `text-muted-foreground` message
   - Top-level delete: `AlertDialog` confirmation; sub-item delete: immediate
   - Settings is the only single-page view (`max-w-lg p-6`)
+- **Scenario groups**: All scenarios within a group share identical member attributes (active, promoted, promoted title). These are stored in `scenario_group_members` (the single source of truth) and edited via the "Edit Scenario Group" modal. The backend command `update_scenario_group_member` updates the group table and propagates to all child `salary_data_point_members` rows. `get_salary_data_point` reads member attributes from `scenario_group_members` via COALESCE for scenario children. Individual scenarios only differ in salary parts — they have no separate edit modal for member attributes.

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { formatCents } from "@/lib/salary-utils";
 import type { SalaryOverTimePoint } from "@/lib/types";
+import { TooltipPortal } from "./TooltipPortal";
 
 const COLORS = [
   "#3b82f6",
@@ -26,6 +27,8 @@ interface SalaryOverTimeChartProps {
 }
 
 export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
+  const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
+  const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
   const { chartData, memberKeys } = useMemo(() => {
     const memberMap = new Map<number, { name: string; left: boolean }>();
 
@@ -65,38 +68,47 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
   return (
     <div>
       <h3 className="text-sm font-semibold mb-4">Salary Over Time</h3>
-      <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-          <XAxis dataKey="name" tick={{ fontSize: 12, fill: "currentColor" }} />
-          <YAxis
-            tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
-            tick={{ fill: "currentColor" }}
-          />
-          <Tooltip
-            formatter={(value) => formatCents((value as number) * 100)}
-            contentStyle={{
-              backgroundColor: "var(--popover)",
-              border: "1px solid var(--border)",
-            }}
-            labelStyle={{ color: "var(--popover-foreground)" }}
-            itemStyle={{ color: "var(--popover-foreground)" }}
-          />
-          <Legend />
-          {memberKeys.map((mk, i) => (
-            <Line
-              key={mk.id}
-              type="monotone"
-              dataKey={mk.dataKey}
-              name={mk.name}
-              stroke={COLORS[i % COLORS.length]}
-              strokeDasharray={mk.left ? "5 5" : undefined}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              connectNulls={false}
+      <div ref={chartCallbackRef}>
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <XAxis dataKey="name" tick={{ fontSize: 12, fill: "currentColor" }} />
+            <YAxis
+              tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
+              tick={{ fill: "currentColor" }}
             />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+            <Tooltip
+              isAnimationActive={false}
+              content={({ active: isActive, payload, coordinate, label }) => {
+                if (!isActive || !payload?.length) return null;
+                return (
+                  <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                    {payload.map((p, i) => (
+                      <div key={i} style={{ color: p.color }}>
+                        {p.name}: {formatCents((p.value as number) * 100)}
+                      </div>
+                    ))}
+                  </TooltipPortal>
+                );
+              }}
+            />
+            <Legend />
+            {memberKeys.map((mk, i) => (
+              <Line
+                key={mk.id}
+                type="monotone"
+                dataKey={mk.dataKey}
+                name={mk.name}
+                stroke={COLORS[i % COLORS.length]}
+                strokeDasharray={mk.left ? "5 5" : undefined}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                connectNulls={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
