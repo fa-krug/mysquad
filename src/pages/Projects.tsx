@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { ProjectDetail } from "@/components/projects/ProjectDetail";
 import { getProjects, createProject, deleteProject } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type { Project } from "@/lib/types";
 
 export function Projects() {
@@ -13,8 +12,6 @@ export function Projects() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const { scheduleDelete, pendingIds } = usePendingDelete();
-
   const loadProjects = useCallback(async () => {
     const data = await getProjects();
     setProjects(data);
@@ -65,34 +62,22 @@ export function Projects() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    const project = projects.find((p) => p.id === id);
-    if (!project) return;
+  const handleDelete = async (id: number) => {
     if (selectedId === id) setSelectedId(null);
-    scheduleDelete({
-      id,
-      label: project.name || "Project",
-      onConfirm: async () => {
-        await deleteProject(id);
-        await loadProjects();
-      },
-    });
+    await deleteProject(id);
+    await loadProjects();
   };
 
   const handleProjectChange = (field: string, value: string | null) => {
     setProjects((prev) => prev.map((p) => (p.id === selectedId ? { ...p, [field]: value } : p)));
   };
 
-  const visibleProjects = useMemo(
-    () => projects.filter((p) => !pendingIds.has(p.id)),
-    [projects, pendingIds],
-  );
-  const selectedProject = visibleProjects.find((p) => p.id === selectedId) ?? null;
+  const selectedProject = projects.find((p) => p.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
       <ProjectList
-        projects={visibleProjects}
+        projects={projects}
         selectedId={selectedId}
         loading={loading}
         creating={creating}

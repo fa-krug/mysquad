@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PlusIcon, Trash2Icon, Loader2Icon, CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -19,7 +19,6 @@ import {
   unresolveEscalatedTopic,
 } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type {
   TeamMeeting,
   TeamMeetingDetail,
@@ -409,7 +408,6 @@ export function TeamMeetings() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const { scheduleDelete, pendingIds } = usePendingDelete();
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   const loadMeetings = useCallback(async () => {
@@ -438,25 +436,13 @@ export function TeamMeetings() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    const meeting = meetings.find((m) => m.id === id);
-    if (!meeting) return;
+  const handleDelete = async (id: number) => {
     if (selectedId === id) setSelectedId(null);
-    scheduleDelete({
-      id,
-      label: `Team Meeting ${meeting.date}`,
-      onConfirm: async () => {
-        await deleteTeamMeeting(id);
-        await loadMeetings();
-      },
-    });
+    await deleteTeamMeeting(id);
+    await loadMeetings();
   };
 
-  const visibleMeetings = useMemo(
-    () => meetings.filter((m) => !pendingIds.has(m.id)),
-    [meetings, pendingIds],
-  );
-  const selectedMeeting = visibleMeetings.find((m) => m.id === selectedId) ?? null;
+  const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
@@ -478,13 +464,13 @@ export function TeamMeetings() {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">Loading...</div>
-          ) : visibleMeetings.length === 0 ? (
+          ) : meetings.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               No team meetings yet
             </div>
           ) : (
             <ul className="py-1">
-              {visibleMeetings.map((meeting) => (
+              {meetings.map((meeting) => (
                 <li
                   key={meeting.id}
                   className={`group relative flex items-start px-3 py-2 cursor-pointer hover:bg-muted/50 ${

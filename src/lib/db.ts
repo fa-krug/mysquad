@@ -292,5 +292,27 @@ export const exportMemberSalaryDocx = (dataPointId: number, memberId: number, ou
     output_path: outputPath,
   });
 
+// Trash - Team Members
+export const getTrashedTeamMembers = () => invoke<TeamMember[]>("get_trashed_team_members");
+export const restoreTeamMember = (id: number) => invoke<void>("restore_team_member", { id });
+export const permanentDeleteTeamMember = (id: number) =>
+  invoke<void>("permanent_delete_team_member", { id });
+
+// Trash - Titles
+export const getTrashedTitles = () => invoke<Title[]>("get_trashed_titles");
+export const restoreTitle = (id: number) => invoke<void>("restore_title", { id });
+export const permanentDeleteTitle = (id: number) => invoke<void>("permanent_delete_title", { id });
+
+// Trash - Salary
+export const getTrashedSalaryDataPoints = () =>
+  invoke<SalaryListItem[]>("get_trashed_salary_data_points");
+export const restoreSalaryDataPoint = (id: number) =>
+  invoke<void>("restore_salary_data_point", { id });
+export const permanentDeleteSalaryDataPoint = (id: number) =>
+  invoke<void>("permanent_delete_salary_data_point", { id });
+export const restoreScenarioGroup = (id: number) => invoke<void>("restore_scenario_group", { id });
+export const permanentDeleteScenarioGroup = (id: number) =>
+  invoke<void>("permanent_delete_scenario_group", { id });
+
 // Global Search
 export const globalSearch = (query: string) => invoke<SearchResult[]>("global_search", { query });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
@@ -10,9 +10,21 @@ import {
   deleteTeamMember,
   updateTeamMember,
   getPicturesDirPath,
+  getTrashedTeamMembers,
+  restoreTeamMember,
+  permanentDeleteTeamMember,
 } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import { usePendingDelete } from "@/hooks/usePendingDelete";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { TeamMember } from "@/lib/types";
 
 export function TeamMembers() {
@@ -24,7 +36,9 @@ export function TeamMembers() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [highlightTalkTopicId, setHighlightTalkTopicId] = useState<number | undefined>(undefined);
   const [view, setView] = useState<"list" | "chart">("list");
-  const { scheduleDelete, pendingIds } = usePendingDelete();
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedMembers, setTrashedMembers] = useState<TeamMember[]>([]);
+  const [permanentDeleteId, setPermanentDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     getPicturesDirPath()
@@ -36,6 +50,20 @@ export function TeamMembers() {
     const data = await getTeamMembers();
     setMembers(data);
   }, []);
+
+  const loadTrashedMembers = useCallback(async () => {
+    const data = await getTrashedTeamMembers();
+    setTrashedMembers(data);
+  }, []);
+
+  useEffect(() => {
+    if (showTrash) loadTrashedMembers();
+  }, [showTrash, loadTrashedMembers]);
+
+  // Load trashed members count on mount for the badge
+  useEffect(() => {
+    loadTrashedMembers();
+  }, [loadTrashedMembers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,21 +113,22 @@ export function TeamMembers() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    const member = members.find((m) => m.id === id);
-    if (!member) return;
+  const handleDelete = async (id: number) => {
     if (selectedId === id) setSelectedId(null);
-    scheduleDelete({
-      id,
-      label:
-        member.first_name || member.last_name
-          ? `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim()
-          : "Team member",
-      onConfirm: async () => {
-        await deleteTeamMember(id);
-        await loadMembers();
-      },
-    });
+    await deleteTeamMember(id);
+    await loadMembers();
+  };
+
+  const handleRestore = async (id: number) => {
+    await restoreTeamMember(id);
+    await Promise.all([loadMembers(), loadTrashedMembers()]);
+    setSelectedId(null);
+  };
+
+  const handlePermanentDelete = async (id: number) => {
+    await permanentDeleteTeamMember(id);
+    await loadTrashedMembers();
+    setSelectedId(null);
   };
 
   const handleMemberChange = async (
@@ -139,16 +168,12 @@ export function TeamMembers() {
     }
   };
 
-  const visibleMembers = useMemo(
-    () => members.filter((m) => !pendingIds.has(m.id)),
-    [members, pendingIds],
-  );
-  const selectedMember = visibleMembers.find((m) => m.id === selectedId) ?? null;
+  const selectedMember = members.find((m) => m.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
       <MemberList
-        members={visibleMembers}
+        members={showTrash ? trashedMembers : members}
         selectedId={selectedId}
         loading={loading}
         creating={creating}
@@ -156,33 +181,47 @@ export function TeamMembers() {
         onCreate={handleCreate}
         onDelete={handleDelete}
         picturesDir={picturesDir}
+        showTrash={showTrash}
+        onToggleTrash={() => {
+          setShowTrash(!showTrash);
+          setSelectedId(null);
+        }}
+        trashCount={trashedMembers.length}
+        onRestore={handleRestore}
+        onPermanentDelete={(id) => setPermanentDeleteId(id)}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* View toggle header */}
-        <div className="flex items-center justify-end gap-1 px-3 h-12 border-b">
-          <button
-            type="button"
-            className={`p-1.5 rounded ${view === "list" ? "bg-muted" : "hover:bg-muted/50"}`}
-            onClick={() => setView("list")}
-            title="List view"
-          >
-            <ListIcon className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className={`p-1.5 rounded ${view === "chart" ? "bg-muted" : "hover:bg-muted/50"}`}
-            onClick={() => setView("chart")}
-            title="Org chart"
-          >
-            <NetworkIcon className="h-4 w-4" />
-          </button>
-        </div>
+        {/* View toggle header - hidden in trash mode */}
+        {!showTrash && (
+          <div className="flex items-center justify-end gap-1 px-3 h-12 border-b">
+            <button
+              type="button"
+              className={`p-1.5 rounded ${view === "list" ? "bg-muted" : "hover:bg-muted/50"}`}
+              onClick={() => setView("list")}
+              title="List view"
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className={`p-1.5 rounded ${view === "chart" ? "bg-muted" : "hover:bg-muted/50"}`}
+              onClick={() => setView("chart")}
+              title="Org chart"
+            >
+              <NetworkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* View content */}
         <div className="flex-1 overflow-auto">
-          {view === "chart" ? (
+          {showTrash ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a trashed member to restore or permanently delete
+            </div>
+          ) : view === "chart" ? (
             <OrgChart
-              members={visibleMembers}
+              members={members}
               selectedId={selectedId}
               onSelect={(id) => {
                 setSelectedId(id);
@@ -194,7 +233,7 @@ export function TeamMembers() {
             <MemberDetail
               key={selectedMember.id}
               member={selectedMember}
-              members={visibleMembers}
+              members={members}
               onMemberChange={handleMemberChange}
               picturesDir={picturesDir}
               highlightTalkTopicId={highlightTalkTopicId}
@@ -206,6 +245,31 @@ export function TeamMembers() {
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={permanentDeleteId !== null}
+        onOpenChange={(o) => !o && setPermanentDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The member and all their data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (permanentDeleteId) handlePermanentDelete(permanentDeleteId);
+                setPermanentDeleteId(null);
+              }}
+            >
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

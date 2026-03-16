@@ -161,6 +161,17 @@ pub fn run() {
             commands::upload_salary_template,
             commands::delete_salary_template,
             commands::export_member_salary_docx,
+            commands::restore_team_member,
+            commands::restore_title,
+            commands::restore_salary_data_point,
+            commands::restore_scenario_group,
+            commands::permanent_delete_team_member,
+            commands::permanent_delete_title,
+            commands::permanent_delete_salary_data_point,
+            commands::permanent_delete_scenario_group,
+            commands::get_trashed_team_members,
+            commands::get_trashed_titles,
+            commands::get_trashed_salary_data_points,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

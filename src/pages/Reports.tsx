@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { ReportList } from "@/components/reports/ReportList";
 import { ReportDetail } from "@/components/reports/ReportDetail";
 import { ReportEditDialog } from "@/components/reports/ReportEditDialog";
 import { getReports, createReport, deleteReport, getSalaryOverTime } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import { usePendingDelete } from "@/hooks/usePendingDelete";
 import type { Report, SalaryOverTimePoint } from "@/lib/types";
 
 const SalaryOverTimeChart = lazy(() =>
@@ -21,7 +20,6 @@ export function Reports() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const { scheduleDelete, pendingIds } = usePendingDelete();
   const [salaryOverTime, setSalaryOverTime] = useState<SalaryOverTimePoint[]>([]);
 
   const loadReports = useCallback(async () => {
@@ -74,36 +72,24 @@ export function Reports() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    const report = reports.find((r) => r.id === id);
-    if (!report) return;
+  const handleDelete = async (id: number) => {
     if (selectedId === id) setSelectedId(null);
     if (editingId === id) setEditingId(null);
-    scheduleDelete({
-      id,
-      label: report.name || "Report",
-      onConfirm: async () => {
-        await deleteReport(id);
-        await loadReports();
-      },
-    });
+    await deleteReport(id);
+    await loadReports();
   };
 
   const handleReportChange = (updated: Report) => {
     setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   };
 
-  const visibleReports = useMemo(
-    () => reports.filter((r) => !pendingIds.has(r.id)),
-    [reports, pendingIds],
-  );
-  const selectedReport = visibleReports.find((r) => r.id === selectedId) ?? null;
+  const selectedReport = reports.find((r) => r.id === selectedId) ?? null;
   const editingReport = reports.find((r) => r.id === editingId) ?? null;
 
   return (
     <div className="flex h-full">
       <ReportList
-        reports={visibleReports}
+        reports={reports}
         selectedId={selectedId}
         loading={loading}
         creating={creating}

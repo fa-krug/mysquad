@@ -1,10 +1,28 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { TitleList } from "@/components/titles/TitleList";
 import { TitleDetail } from "@/components/titles/TitleDetail";
-import { getTitles, createTitle, updateTitle, deleteTitle, getTeamMembers } from "@/lib/db";
+import {
+  getTitles,
+  createTitle,
+  updateTitle,
+  deleteTitle,
+  getTeamMembers,
+  getTrashedTitles,
+  restoreTitle,
+  permanentDeleteTitle,
+} from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
-import { usePendingDelete } from "@/hooks/usePendingDelete";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Title, TeamMember } from "@/lib/types";
 
 export function Titles() {
@@ -15,8 +33,9 @@ export function Titles() {
   const [focusName, setFocusName] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-
-  const { scheduleDelete, pendingIds } = usePendingDelete();
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedTitles, setTrashedTitles] = useState<Title[]>([]);
+  const [permanentDeleteId, setPermanentDeleteId] = useState<number | null>(null);
 
   const loadTitles = useCallback(async () => {
     const [t, m] = await Promise.all([getTitles(), getTeamMembers()]);
@@ -24,6 +43,20 @@ export function Titles() {
     setMembers(m);
     return t;
   }, []);
+
+  const loadTrashedTitles = useCallback(async () => {
+    const data = await getTrashedTitles();
+    setTrashedTitles(data);
+  }, []);
+
+  useEffect(() => {
+    if (showTrash) loadTrashedTitles();
+  }, [showTrash, loadTrashedTitles]);
+
+  // Load trashed titles count on mount for the badge
+  useEffect(() => {
+    loadTrashedTitles();
+  }, [loadTrashedTitles]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,11 +105,11 @@ export function Titles() {
     }
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     const title = titles.find((t) => t.id === id);
     if (!title) return;
 
-    // Check if any members use this title before scheduling
+    // Check if any members use this title before deleting
     const assignedMembers = members.filter((m) => m.title_id === id || m.current_title_id === id);
     if (assignedMembers.length > 0) {
       showError(`Cannot delete "${title.name}" — ${assignedMembers.length} member(s) assigned`);
@@ -84,14 +117,20 @@ export function Titles() {
     }
 
     if (selectedId === id) setSelectedId(null);
-    scheduleDelete({
-      id,
-      label: title.name || "Title",
-      onConfirm: async () => {
-        await deleteTitle(id);
-        await loadTitles();
-      },
-    });
+    await deleteTitle(id);
+    await Promise.all([loadTitles(), loadTrashedTitles()]);
+  };
+
+  const handleRestore = async (id: number) => {
+    await restoreTitle(id);
+    await Promise.all([loadTitles(), loadTrashedTitles()]);
+    setSelectedId(null);
+  };
+
+  const handlePermanentDelete = async (id: number) => {
+    await permanentDeleteTitle(id);
+    await loadTrashedTitles();
+    setSelectedId(null);
   };
 
   const handleTitleChange = async (field: string, value: string) => {
@@ -102,16 +141,12 @@ export function Titles() {
     }
   };
 
-  const visibleTitles = useMemo(
-    () => titles.filter((t) => !pendingIds.has(t.id)),
-    [titles, pendingIds],
-  );
-  const selectedTitle = visibleTitles.find((t) => t.id === selectedId) ?? null;
+  const selectedTitle = titles.find((t) => t.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full">
       <TitleList
-        titles={visibleTitles}
+        titles={showTrash ? trashedTitles : titles}
         selectedId={selectedId}
         loading={loading}
         creating={creating}
@@ -121,9 +156,21 @@ export function Titles() {
         }}
         onCreate={handleCreate}
         onDelete={handleDelete}
+        showTrash={showTrash}
+        onToggleTrash={() => {
+          setShowTrash(!showTrash);
+          setSelectedId(null);
+        }}
+        trashCount={trashedTitles.length}
+        onRestore={handleRestore}
+        onPermanentDelete={(id) => setPermanentDeleteId(id)}
       />
       <div className="flex-1 overflow-auto">
-        {selectedTitle ? (
+        {showTrash ? (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            Select a trashed title to restore or permanently delete
+          </div>
+        ) : selectedTitle ? (
           <TitleDetail
             key={selectedTitle.id}
             title={selectedTitle}
@@ -137,6 +184,31 @@ export function Titles() {
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={permanentDeleteId !== null}
+        onOpenChange={(o) => !o && setPermanentDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The title will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (permanentDeleteId) handlePermanentDelete(permanentDeleteId);
+                setPermanentDeleteId(null);
+              }}
+            >
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

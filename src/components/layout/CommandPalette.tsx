@@ -135,7 +135,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const hasQuery = query.trim().length >= 2;
 
   return (
-    <CommandDialog open={open} onOpenChange={handleOpenChange}>
+    <CommandDialog open={open} onOpenChange={handleOpenChange} shouldFilter={!hasQuery}>
       <CommandInput
         placeholder="Type a command or search..."
         value={query}

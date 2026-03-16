@@ -106,7 +106,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                     promo.data_point_id as promo_data_point_id
              FROM team_members m
              LEFT JOIN titles t ON m.title_id = t.id
-             LEFT JOIN team_members lead ON m.lead_id = lead.id
+             LEFT JOIN team_members lead ON m.lead_id = lead.id AND lead.deleted_at IS NULL
              LEFT JOIN (
                  SELECT sdpm.member_id, sdpm.promoted_title_id, sdpm.data_point_id
                  FROM salary_data_point_members sdpm
@@ -118,6 +118,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
                  ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
              ) promo ON promo.member_id = m.id
              LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             WHERE m.deleted_at IS NULL
              ORDER BY m.last_name ASC, m.first_name ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -270,15 +271,11 @@ pub fn update_team_member(
 pub fn delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    conn.execute("DELETE FROM team_members WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-
-    // Clean up picture file
-    if let Ok(pictures_dir) = get_pictures_dir() {
-        let file_path = pictures_dir.join(format!("{}.jpg", id));
-        let _ = std::fs::remove_file(file_path); // Ignore errors — file may not exist
-    }
-
+    conn.execute(
+        "UPDATE team_members SET deleted_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -650,7 +647,7 @@ pub struct Title {
 pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let mut stmt = conn.prepare("SELECT t.id, t.name, COUNT(m.id) as member_count FROM titles t LEFT JOIN team_members m ON m.title_id = t.id GROUP BY t.id ORDER BY t.name ASC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT t.id, t.name, COUNT(m.id) as member_count FROM titles t LEFT JOIN team_members m ON m.title_id = t.id AND m.deleted_at IS NULL WHERE t.deleted_at IS NULL GROUP BY t.id ORDER BY t.name ASC").map_err(|e| e.to_string())?;
     let titles = stmt
         .query_map([], |row| {
             Ok(Title {
@@ -697,7 +694,7 @@ pub fn delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
     let conn = guard.as_ref().ok_or("Database not open")?;
     let count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM team_members WHERE title_id = ?1",
+            "SELECT COUNT(*) FROM team_members WHERE title_id = ?1 AND deleted_at IS NULL",
             params![id],
             |row| row.get(0),
         )
@@ -708,8 +705,11 @@ pub fn delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
             count
         ));
     }
-    conn.execute("DELETE FROM titles WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE titles SET deleted_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -831,7 +831,7 @@ pub fn get_project_members(
             "SELECT pm.id, pm.project_id, pm.team_member_id, m.first_name, m.last_name
              FROM project_members pm
              JOIN team_members m ON m.id = pm.team_member_id
-             WHERE pm.project_id = ?1
+             WHERE pm.project_id = ?1 AND m.deleted_at IS NULL
              ORDER BY m.last_name ASC, m.first_name ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -1117,7 +1117,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut dp_stmt = conn
-        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id DESC")
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points WHERE scenario_group_id IS NULL AND deleted_at IS NULL ORDER BY id DESC")
         .map_err(|e| e.to_string())?;
     let normal_points: Vec<SalaryDataPointSummary> = dp_stmt
         .query_map([], |row| {
@@ -1135,7 +1135,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
         .map_err(|e| e.to_string())?;
 
     let mut sg_stmt = conn
-        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM scenario_groups ORDER BY id DESC")
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM scenario_groups WHERE deleted_at IS NULL ORDER BY id DESC")
         .map_err(|e| e.to_string())?;
     #[allow(clippy::type_complexity)]
     let groups: Vec<(i64, String, Option<i64>, Option<i64>, String)> = sg_stmt
@@ -1153,7 +1153,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
         .map_err(|e| e.to_string())?;
 
     let mut child_stmt = conn
-        .prepare("SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id FROM salary_data_points WHERE scenario_group_id = ?1 ORDER BY id ASC")
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id FROM salary_data_points WHERE scenario_group_id = ?1 AND deleted_at IS NULL ORDER BY id ASC")
         .map_err(|e| e.to_string())?;
 
     let mut scenario_groups: Vec<ScenarioGroup> = Vec::new();
@@ -1216,6 +1216,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPointDetail, String> {
+    eprintln!("[DEBUG] get_salary_data_point called with id={}", id);
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
@@ -1225,7 +1226,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
             params![id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| { eprintln!("[ERROR] get_salary_data_point query failed: {}", e); e.to_string() })?;
 
     // For scenarios in a group, inherit budget and previous_data_point_id from the group
     if let Some(sg_id) = scenario_group_id {
@@ -1391,6 +1392,12 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
             result
         };
 
+    eprintln!(
+        "[DEBUG] get_salary_data_point id={} returning {} members, {} ranges",
+        id,
+        members.len(),
+        ranges.len()
+    );
     Ok(SalaryDataPointDetail {
         id,
         name,
@@ -1412,7 +1419,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
     let prev_id: Option<i64> = conn
         .query_row(
-            "SELECT id FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM salary_data_points WHERE scenario_group_id IS NULL AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
             [],
             |row| row.get(0),
         )
@@ -1442,7 +1449,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
                  SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
                  FROM salary_data_point_members sdpm
                  JOIN team_members m ON m.id = sdpm.member_id
-                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL",
+                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL AND m.deleted_at IS NULL",
                 params![new_id, prev],
             ).map_err(|e| e.to_string())?;
 
@@ -1491,7 +1498,7 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
 
             conn.execute(
                 "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                 SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL",
+                 SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL AND deleted_at IS NULL",
                 params![new_id],
             ).map_err(|e| e.to_string())?;
 
@@ -1547,8 +1554,11 @@ pub fn update_salary_data_point(
 pub fn delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    conn.execute("DELETE FROM salary_data_points WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE salary_data_points SET deleted_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1758,7 +1768,7 @@ pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>
 
     let mut dp_stmt = conn
         .prepare(
-            "SELECT id, name FROM salary_data_points WHERE scenario_group_id IS NULL ORDER BY id",
+            "SELECT id, name FROM salary_data_points WHERE scenario_group_id IS NULL AND deleted_at IS NULL ORDER BY id",
         )
         .map_err(|e| e.to_string())?;
 
@@ -1856,7 +1866,7 @@ pub fn create_scenario_group(
                  SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
                  FROM salary_data_point_members sdpm
                  JOIN team_members m ON m.id = sdpm.member_id
-                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL",
+                 WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL AND m.deleted_at IS NULL",
                 params![group_id, prev_id],
             ).map_err(|e| e.to_string())?;
         }
@@ -1878,7 +1888,7 @@ pub fn create_scenario_group(
                      SELECT ?1, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
                      FROM salary_data_point_members sdpm
                      JOIN team_members m ON m.id = sdpm.member_id
-                     WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL",
+                     WHERE sdpm.data_point_id = ?2 AND m.exclude_from_salary = 0 AND m.left_date IS NULL AND m.deleted_at IS NULL",
                     params![child_id, prev_id],
                 ).map_err(|e| e.to_string())?;
 
@@ -1919,7 +1929,7 @@ pub fn create_scenario_group(
 
                 conn.execute(
                     "INSERT INTO salary_data_point_members (data_point_id, member_id, is_active, is_promoted)
-                     SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL",
+                     SELECT ?1, id, 1, 0 FROM team_members WHERE exclude_from_salary = 0 AND left_date IS NULL AND deleted_at IS NULL",
                     params![child_id],
                 ).map_err(|e| e.to_string())?;
 
@@ -1974,8 +1984,16 @@ pub fn create_scenario_group(
 pub fn delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    conn.execute("DELETE FROM scenario_groups WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE scenario_groups SET deleted_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE salary_data_points SET deleted_at = datetime('now') WHERE scenario_group_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2617,6 +2635,7 @@ pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, Stri
                      ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
                  ) promo ON promo.member_id = m.id
                  LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+                 WHERE m.deleted_at IS NULL
                  ORDER BY m.last_name ASC, m.first_name ASC",
             )
             .map_err(|e| e.to_string())?;
@@ -2913,14 +2932,14 @@ pub fn get_report_block_data(
 fn build_team_overview(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
     let active_count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM team_members WHERE left_date IS NULL",
+            "SELECT COUNT(*) FROM team_members WHERE left_date IS NULL AND deleted_at IS NULL",
             [],
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
     let left_count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM team_members WHERE left_date IS NOT NULL",
+            "SELECT COUNT(*) FROM team_members WHERE left_date IS NOT NULL AND deleted_at IS NULL",
             [],
             |row| row.get(0),
         )
@@ -2931,7 +2950,7 @@ fn build_team_overview(conn: &rusqlite::Connection) -> Result<serde_json::Value,
             "SELECT COALESCE(t.name, 'No Title') as title_name, COUNT(*) as cnt
              FROM team_members m
              LEFT JOIN titles t ON t.id = m.title_id
-             WHERE m.left_date IS NULL
+             WHERE m.left_date IS NULL AND m.deleted_at IS NULL
              GROUP BY title_name
              ORDER BY cnt DESC",
         )
@@ -2959,7 +2978,7 @@ fn build_member_statuses(conn: &rusqlite::Connection) -> Result<serde_json::Valu
         .prepare(
             "SELECT m.id, m.first_name, m.last_name
              FROM team_members m
-             WHERE m.left_date IS NULL
+             WHERE m.left_date IS NULL AND m.deleted_at IS NULL
              ORDER BY m.last_name ASC, m.first_name ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -3027,7 +3046,7 @@ fn build_open_escalations(conn: &rusqlite::Connection) -> Result<serde_json::Val
             "SELECT tt.id, tt.text, m.first_name || ' ' || m.last_name as member_name, tt.escalated_at
              FROM talk_topics tt
              JOIN team_members m ON m.id = tt.team_member_id
-             WHERE tt.escalated = 1 AND tt.resolved = 0
+             WHERE tt.escalated = 1 AND tt.resolved = 0 AND m.deleted_at IS NULL
              ORDER BY tt.escalated_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -3081,7 +3100,7 @@ fn build_salary_summary(conn: &rusqlite::Connection) -> Result<serde_json::Value
     let dp: Option<(i64, String, Option<f64>)> = conn
         .query_row(
             "SELECT id, name, budget FROM salary_data_points
-             WHERE scenario_group_id IS NULL
+             WHERE scenario_group_id IS NULL AND deleted_at IS NULL
              ORDER BY id DESC LIMIT 1",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -3153,7 +3172,7 @@ fn build_one_on_one_coverage(conn: &rusqlite::Connection) -> Result<serde_json::
             "SELECT m.id, m.first_name, m.last_name,
                     (SELECT MAX(mt.date) FROM meetings mt WHERE mt.team_member_id = m.id) as last_meeting_date
              FROM team_members m
-             WHERE m.left_date IS NULL
+             WHERE m.left_date IS NULL AND m.deleted_at IS NULL
              ORDER BY last_meeting_date ASC NULLS FIRST",
         )
         .map_err(|e| e.to_string())?;
@@ -3180,7 +3199,7 @@ fn build_upcoming_birthdays(conn: &rusqlite::Connection) -> Result<serde_json::V
             "SELECT c.name, c.date_of_birth, m.first_name || ' ' || m.last_name as parent_name
              FROM children c
              JOIN team_members m ON m.id = c.team_member_id
-             WHERE c.date_of_birth IS NOT NULL AND m.left_date IS NULL
+             WHERE c.date_of_birth IS NOT NULL AND m.left_date IS NULL AND m.deleted_at IS NULL
              ORDER BY c.date_of_birth",
         )
         .map_err(|e| e.to_string())?;
@@ -3702,7 +3721,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
                  ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
              ) promo ON promo.member_id = m.id
              LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
-             WHERE tt.escalated = 1 AND tt.resolved = 0
+             WHERE tt.escalated = 1 AND tt.resolved = 0 AND m.deleted_at IS NULL
              ORDER BY m.last_name ASC, m.first_name ASC, tt.created_at ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -3783,6 +3802,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
                  ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
              ) promo ON promo.member_id = m.id
              LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             WHERE m.deleted_at IS NULL
              ORDER BY m.last_name ASC, m.first_name ASC, si.created_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -4096,7 +4116,7 @@ pub fn import_data_point_salaries(
                 None
             } else {
                 conn.query_row(
-                    "SELECT id FROM team_members WHERE email = ?1",
+                    "SELECT id FROM team_members WHERE email = ?1 AND deleted_at IS NULL",
                     params![member.email],
                     |row| row.get(0),
                 )
@@ -4234,8 +4254,8 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
                     (SELECT name FROM titles WHERE id = m.title_id) AS subtitle,
                     NULL AS parent_id
              FROM team_members m
-             WHERE first_name LIKE ?1 OR last_name LIKE ?1 OR email LIKE ?1
-                   OR (first_name || ' ' || last_name) LIKE ?1 OR notes LIKE ?1
+             WHERE m.deleted_at IS NULL AND (first_name LIKE ?1 OR last_name LIKE ?1 OR email LIKE ?1
+                   OR (first_name || ' ' || last_name) LIKE ?1 OR notes LIKE ?1)
 
              UNION ALL
 
@@ -4247,7 +4267,7 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
 
              SELECT id, 'title', name, NULL, NULL
              FROM titles
-             WHERE name LIKE ?1
+             WHERE deleted_at IS NULL AND name LIKE ?1
 
              UNION ALL
 
@@ -4262,7 +4282,7 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
                     tt.team_member_id
              FROM talk_topics tt
              JOIN team_members m2 ON m2.id = tt.team_member_id
-             WHERE tt.text LIKE ?1
+             WHERE m2.deleted_at IS NULL AND tt.text LIKE ?1
 
              UNION ALL
 
@@ -4271,7 +4291,7 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
                     si.team_member_id
              FROM status_items si
              JOIN team_members m3 ON m3.id = si.team_member_id
-             WHERE si.text LIKE ?1
+             WHERE m3.deleted_at IS NULL AND si.text LIKE ?1
 
              LIMIT 50",
         )
@@ -4754,4 +4774,308 @@ fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 
 fn extract_first_rpr(xml: &str) -> Option<String> {
     extract_tag(xml, "w:rPr")
+}
+
+// ── Trash / Restore / Permanent Delete commands ──
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn restore_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE team_members SET deleted_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn restore_title(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE titles SET deleted_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn restore_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE salary_data_points SET deleted_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn restore_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE scenario_groups SET deleted_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE salary_data_points SET deleted_at = NULL WHERE scenario_group_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn permanent_delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM team_members WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+
+    // Clean up picture file
+    if let Ok(pictures_dir) = get_pictures_dir() {
+        let file_path = pictures_dir.join(format!("{}.jpg", id));
+        let _ = std::fs::remove_file(file_path); // Ignore errors — file may not exist
+    }
+
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn permanent_delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM titles WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn permanent_delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM salary_data_points WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn permanent_delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM scenario_groups WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_trashed_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT m.id, m.first_name, m.last_name, m.email, m.personal_email,
+                    m.personal_phone, m.address_street, m.address_city, m.address_zip,
+                    m.title_id, t.name as title_name, m.start_date, m.notes, m.picture_path,
+                    m.exclude_from_salary, m.left_date,
+                    m.lead_id, lead.first_name || ' ' || lead.last_name as lead_name,
+                    promo.promoted_title_id, pt.name as promoted_title_name,
+                    promo.data_point_id as promo_data_point_id
+             FROM team_members m
+             LEFT JOIN titles t ON m.title_id = t.id
+             LEFT JOIN team_members lead ON m.lead_id = lead.id AND lead.deleted_at IS NULL
+             LEFT JOIN (
+                 SELECT sdpm.member_id, sdpm.promoted_title_id, sdpm.data_point_id
+                 FROM salary_data_point_members sdpm
+                 INNER JOIN (
+                     SELECT member_id, MAX(data_point_id) as max_dp_id
+                     FROM salary_data_point_members
+                     WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                     GROUP BY member_id
+                 ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+             ) promo ON promo.member_id = m.id
+             LEFT JOIN titles pt ON pt.id = promo.promoted_title_id
+             WHERE m.deleted_at IS NOT NULL
+             ORDER BY m.deleted_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let members = stmt
+        .query_map([], |row| {
+            let title_id: Option<i64> = row.get(9)?;
+            let title_name: Option<String> = row.get(10)?;
+            let lead_id: Option<i64> = row.get(16)?;
+            let lead_name: Option<String> = row.get(17)?;
+            let promoted_title_id: Option<i64> = row.get(18)?;
+            let promoted_title_name: Option<String> = row.get(19)?;
+            let promo_data_point_id: Option<i64> = row.get(20)?;
+            Ok(TeamMember {
+                id: row.get(0)?,
+                first_name: row.get(1)?,
+                last_name: row.get(2)?,
+                email: row.get(3)?,
+                personal_email: row.get(4)?,
+                personal_phone: row.get(5)?,
+                address_street: row.get(6)?,
+                address_city: row.get(7)?,
+                address_zip: row.get(8)?,
+                title_id,
+                title_name: title_name.clone(),
+                current_title_id: if promoted_title_id.is_some() {
+                    promoted_title_id
+                } else {
+                    title_id
+                },
+                current_title_name: if promoted_title_name.is_some() {
+                    promoted_title_name
+                } else {
+                    title_name
+                },
+                current_title_data_point_id: promo_data_point_id,
+                start_date: row.get(11)?,
+                notes: row.get(12)?,
+                picture_path: row.get(13)?,
+                exclude_from_salary: row.get(14)?,
+                left_date: row.get(15)?,
+                lead_id,
+                lead_name,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(members)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_trashed_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.name, 0 as member_count FROM titles t WHERE t.deleted_at IS NOT NULL ORDER BY t.deleted_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let titles = stmt
+        .query_map([], |row| {
+            Ok(Title {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                member_count: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(titles)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_trashed_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut dp_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM salary_data_points WHERE scenario_group_id IS NULL AND deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+        .map_err(|e| e.to_string())?;
+    let normal_points: Vec<SalaryDataPointSummary> = dp_stmt
+        .query_map([], |row| {
+            Ok(SalaryDataPointSummary {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                budget: row.get(2)?,
+                previous_data_point_id: row.get(3)?,
+                created_at: row.get(4)?,
+                scenario_group_id: None,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut sg_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at FROM scenario_groups WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+        .map_err(|e| e.to_string())?;
+    #[allow(clippy::type_complexity)]
+    let groups: Vec<(i64, String, Option<i64>, Option<i64>, String)> = sg_stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut child_stmt = conn
+        .prepare("SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id FROM salary_data_points WHERE scenario_group_id = ?1 ORDER BY id ASC")
+        .map_err(|e| e.to_string())?;
+
+    let mut scenario_groups: Vec<ScenarioGroup> = Vec::new();
+    for (sg_id, sg_name, sg_budget, sg_prev, sg_created) in groups {
+        let children: Vec<SalaryDataPointSummary> = child_stmt
+            .query_map(params![sg_id], |row| {
+                Ok(SalaryDataPointSummary {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    budget: row.get(2)?,
+                    previous_data_point_id: row.get(3)?,
+                    created_at: row.get(4)?,
+                    scenario_group_id: row.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        scenario_groups.push(ScenarioGroup {
+            id: sg_id,
+            name: sg_name,
+            budget: sg_budget,
+            previous_data_point_id: sg_prev,
+            created_at: sg_created,
+            children,
+        });
+    }
+
+    // Interleave by created_at descending
+    let mut items: Vec<SalaryListItem> = Vec::new();
+    let mut dp_iter = normal_points.into_iter().peekable();
+    let mut sg_iter = scenario_groups.into_iter().peekable();
+
+    loop {
+        match (dp_iter.peek(), sg_iter.peek()) {
+            (Some(dp), Some(sg)) => {
+                if dp.created_at >= sg.created_at {
+                    let dp = dp_iter.next().unwrap();
+                    items.push(SalaryListItem::DataPoint { data_point: dp });
+                } else {
+                    let sg = sg_iter.next().unwrap();
+                    items.push(SalaryListItem::ScenarioGroup { scenario_group: sg });
+                }
+            }
+            (Some(_), None) => {
+                let dp = dp_iter.next().unwrap();
+                items.push(SalaryListItem::DataPoint { data_point: dp });
+            }
+            (None, Some(_)) => {
+                let sg = sg_iter.next().unwrap();
+                items.push(SalaryListItem::ScenarioGroup { scenario_group: sg });
+            }
+            (None, None) => break,
+        }
+    }
+
+    Ok(items)
 }

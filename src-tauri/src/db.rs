@@ -26,8 +26,19 @@ pub fn open_db_with_key(path: &str, key: &str) -> Result<Connection> {
     Ok(conn)
 }
 
+fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
+    let sql = format!(
+        "SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name = ?1",
+        table
+    );
+    conn.query_row(&sql, [column], |row| row.get::<_, i32>(0))
+        .unwrap_or(0)
+        > 0
+}
+
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    eprintln!("[DEBUG] Current DB user_version = {}", version);
 
     if version < 1 {
         let migration_sql = include_str!("../migrations/001_initial.sql");
@@ -42,8 +53,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     if version < 3 {
-        let migration_sql = include_str!("../migrations/003_member_pictures.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "team_members", "picture_path") {
+            let migration_sql = include_str!("../migrations/003_member_pictures.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 3)?;
     }
 
@@ -54,8 +67,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     if version < 5 {
-        let migration_sql = include_str!("../migrations/005_exclude_from_salary.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "team_members", "exclude_from_salary") {
+            let migration_sql = include_str!("../migrations/005_exclude_from_salary.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 5)?;
     }
 
@@ -72,20 +87,26 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     if version < 8 {
-        let migration_sql = include_str!("../migrations/008_promoted_title.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "salary_data_point_members", "promoted_title_id") {
+            let migration_sql = include_str!("../migrations/008_promoted_title.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 8)?;
     }
 
     if version < 9 {
-        let migration_sql = include_str!("../migrations/009_previous_data_point.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "salary_data_points", "previous_data_point_id") {
+            let migration_sql = include_str!("../migrations/009_previous_data_point.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 9)?;
     }
 
     if version < 10 {
-        let migration_sql = include_str!("../migrations/010_left_date.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "team_members", "left_date") {
+            let migration_sql = include_str!("../migrations/010_left_date.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 10)?;
     }
 
@@ -96,14 +117,18 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     if version < 12 {
-        let migration_sql = include_str!("../migrations/012_presentation_toggle.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "salary_data_point_members", "is_presented") {
+            let migration_sql = include_str!("../migrations/012_presentation_toggle.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 12)?;
     }
 
     if version < 13 {
-        let migration_sql = include_str!("../migrations/013_lead_id.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "team_members", "lead_id") {
+            let migration_sql = include_str!("../migrations/013_lead_id.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 13)?;
     }
 
@@ -126,8 +151,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     if version < 17 {
-        let migration_sql = include_str!("../migrations/017_salary_template.sql");
-        conn.execute_batch(migration_sql)?;
+        if !has_column(conn, "salary_data_points", "template_path") {
+            let migration_sql = include_str!("../migrations/017_salary_template.sql");
+            conn.execute_batch(migration_sql)?;
+        }
         conn.pragma_update(None, "user_version", 17)?;
     }
 
@@ -135,6 +162,53 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         let migration_sql = include_str!("../migrations/018_scenario_group_members.sql");
         conn.execute_batch(migration_sql)?;
         conn.pragma_update(None, "user_version", 18)?;
+    }
+
+    if version < 19 {
+        let migration_sql = include_str!("../migrations/019_soft_delete.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 19)?;
+    }
+
+    // Repair: ensure columns exist even if version was bumped past their migration
+    let repair_columns = [
+        ("team_members", "picture_path", "TEXT"),
+        (
+            "team_members",
+            "exclude_from_salary",
+            "INTEGER NOT NULL DEFAULT 0",
+        ),
+        ("team_members", "left_date", "TEXT"),
+        (
+            "team_members",
+            "lead_id",
+            "INTEGER REFERENCES team_members(id) ON DELETE SET NULL DEFAULT NULL",
+        ),
+        (
+            "salary_data_point_members",
+            "promoted_title_id",
+            "INTEGER REFERENCES titles(id) ON DELETE SET NULL",
+        ),
+        (
+            "salary_data_point_members",
+            "is_presented",
+            "INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "salary_data_points",
+            "previous_data_point_id",
+            "INTEGER REFERENCES salary_data_points(id) ON DELETE SET NULL",
+        ),
+        ("salary_data_points", "template_path", "TEXT"),
+    ];
+    for (table, column, col_type) in repair_columns {
+        if !has_column(conn, table, column) {
+            eprintln!("[REPAIR] Adding missing column {}.{}", table, column);
+            conn.execute_batch(&format!(
+                "ALTER TABLE {} ADD COLUMN {} {};",
+                table, column, col_type
+            ))?;
+        }
     }
 
     Ok(())
@@ -180,7 +254,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
     }
 
     #[test]
@@ -280,7 +354,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
     }
 
     #[test]
@@ -296,7 +370,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
     }
 
     #[test]

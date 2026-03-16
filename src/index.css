@@ -18,6 +18,12 @@ textarea,
   user-select: text;
 }
 
+/* Fix number input spinner arrows in dark mode */
+.dark input[type="number"]::-webkit-inner-spin-button,
+.dark input[type="number"]::-webkit-outer-spin-button {
+  filter: invert(1);
+}
+
 /* Prevent focus outline on Recharts containers */
 .recharts-wrapper,
 .recharts-surface {

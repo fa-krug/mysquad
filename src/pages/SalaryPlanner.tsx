@@ -9,7 +9,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 const SalaryAnalytics = lazy(() =>
   import("@/components/salary/SalaryAnalytics").then((m) => ({ default: m.SalaryAnalytics })),
 );
-import { usePendingDelete } from "@/hooks/usePendingDelete";
 import {
   getSalaryDataPoints,
   getSalaryDataPoint,
@@ -27,6 +26,11 @@ import {
   deleteSalaryTemplate,
   exportMemberSalaryDocx,
   getSetting,
+  getTrashedSalaryDataPoints,
+  restoreSalaryDataPoint,
+  permanentDeleteSalaryDataPoint,
+  restoreScenarioGroup,
+  permanentDeleteScenarioGroup,
 } from "@/lib/db";
 import { open as openFile, save } from "@tauri-apps/plugin-dialog";
 import { EyeOff, Upload, FileDown, Trash2, FileText } from "lucide-react";
@@ -64,6 +68,7 @@ export function SalaryPlanner() {
   const [editingDpId, setEditingDpId] = useState<number | null>(null);
   const [editingIsNew, setEditingIsNew] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [scenarioSummaries, setScenarioSummaries] = useState<ScenarioSummary[]>([]);
   const [memberComparisons, setMemberComparisons] = useState<
     Record<number, ScenarioMemberComparison[]>
@@ -71,7 +76,12 @@ export function SalaryPlanner() {
   const [editingGroup, setEditingGroup] = useState<ScenarioGroup | null>(null);
   const [promotingId, setPromotingId] = useState<number | null>(null);
   const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
-  const { scheduleDelete, pendingIds } = usePendingDelete();
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedItems, setTrashedItems] = useState<SalaryListItem[]>([]);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<{
+    id: number;
+    type: "data_point" | "scenario_group";
+  } | null>(null);
 
   const loadDataPoints = useCallback(async () => {
     const [items, t] = await Promise.all([getSalaryDataPoints(), getTitles()]);
@@ -79,6 +89,15 @@ export function SalaryPlanner() {
     setTitles(t);
     return items;
   }, []);
+
+  const loadTrashedItems = useCallback(async () => {
+    const items = await getTrashedSalaryDataPoints();
+    setTrashedItems(items);
+  }, []);
+
+  useEffect(() => {
+    if (showTrash) loadTrashedItems();
+  }, [showTrash, loadTrashedItems]);
 
   const loadDetail = useCallback(async (id: number) => {
     const d = await getSalaryDataPoint(id);
@@ -125,6 +144,7 @@ export function SalaryPlanner() {
           setLoading(false);
         }
       });
+    loadTrashedItems();
     return () => {
       cancelled = true;
     };
@@ -133,18 +153,24 @@ export function SalaryPlanner() {
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
-    getSalaryDataPoint(selectedId).then((d) => {
-      if (cancelled) return;
-      setDetail(d);
-      Promise.all(
-        d.members.map(
-          async (m) => [m.member_id, await getPreviousMemberData(selectedId, m.member_id)] as const,
-        ),
-      ).then((entries) => {
+    setDetailError(null);
+    getSalaryDataPoint(selectedId)
+      .then((d) => {
         if (cancelled) return;
-        setPreviousData(Object.fromEntries(entries));
+        setDetail(d);
+        Promise.all(
+          d.members.map(
+            async (m) =>
+              [m.member_id, await getPreviousMemberData(selectedId, m.member_id)] as const,
+          ),
+        ).then((entries) => {
+          if (cancelled) return;
+          setPreviousData(Object.fromEntries(entries));
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setDetailError(String(err));
       });
-    });
     return () => {
       cancelled = true;
     };
@@ -210,22 +236,17 @@ export function SalaryPlanner() {
   }
 
   async function handleDeleteGroup(groupId: number) {
-    scheduleDelete({
-      id: groupId,
-      label: "Scenario group",
-      onConfirm: async () => {
-        await deleteScenarioGroup(groupId);
-        const items = await loadDataPoints();
-        setSelectedId(null);
-        setDetail(null);
-        for (const item of items) {
-          if (item.type === "data_point") {
-            setSelectedId(item.data_point.id);
-            break;
-          }
-        }
-      },
-    });
+    setSelectedId(null);
+    setDetail(null);
+    await deleteScenarioGroup(groupId);
+    const items = await loadDataPoints();
+    await loadTrashedItems();
+    for (const item of items) {
+      if (item.type === "data_point") {
+        setSelectedId(item.data_point.id);
+        break;
+      }
+    }
   }
 
   async function handlePromote(dataPointId: number) {
@@ -242,38 +263,22 @@ export function SalaryPlanner() {
     }
   }
 
-  function handleDelete(id: number) {
-    let dpName = "Data point";
-    for (const item of listItems) {
-      if (item.type === "data_point" && item.data_point.id === id) {
-        dpName = item.data_point.name || dpName;
-        break;
-      }
-    }
+  async function handleDelete(id: number) {
     const wasSelected = selectedId === id;
-    scheduleDelete({
-      id,
-      label: dpName,
-      onConfirm: async () => {
-        await deleteSalaryDataPoint(id);
-        const items = await loadDataPoints();
-        if (wasSelected) {
-          let newId: number | null = null;
-          for (const item of items) {
-            if (item.type === "data_point") {
-              newId = item.data_point.id;
-              break;
-            }
-          }
-          setSelectedId(newId);
-          setDetail(null);
-        }
-      },
-      onUndo: wasSelected ? () => setSelectedId(id) : undefined,
-    });
     if (wasSelected) {
       setSelectedId(null);
       setDetail(null);
+    }
+    await deleteSalaryDataPoint(id);
+    const items = await loadDataPoints();
+    await loadTrashedItems();
+    if (wasSelected) {
+      for (const item of items) {
+        if (item.type === "data_point") {
+          setSelectedId(item.data_point.id);
+          break;
+        }
+      }
     }
   }
 
@@ -437,14 +442,19 @@ export function SalaryPlanner() {
     [filteredDetail],
   );
 
-  const visibleItems = useMemo(
-    () =>
-      listItems.filter((item) => {
-        if (item.type === "data_point") return !pendingIds.has(item.data_point.id);
-        return !pendingIds.has(item.scenario_group.id);
-      }),
-    [listItems, pendingIds],
-  );
+  async function handleRestore(id: number, type: "data_point" | "scenario_group") {
+    if (type === "scenario_group") await restoreScenarioGroup(id);
+    else await restoreSalaryDataPoint(id);
+    await Promise.all([loadDataPoints(), loadTrashedItems()]);
+    setSelectedId(null);
+  }
+
+  async function handlePermanentDelete(id: number, type: "data_point" | "scenario_group") {
+    if (type === "scenario_group") await permanentDeleteScenarioGroup(id);
+    else await permanentDeleteSalaryDataPoint(id);
+    await loadTrashedItems();
+    setSelectedId(null);
+  }
 
   // Exclude promoted members to match budgetTotals logic
   const promotedMemberIds = useMemo(
@@ -490,7 +500,7 @@ export function SalaryPlanner() {
       {/* Left panel */}
       <div className="w-64 shrink-0">
         <DataPointList
-          items={visibleItems}
+          items={showTrash ? trashedItems : listItems}
           selectedId={selectedId}
           loading={loading}
           creating={false}
@@ -501,13 +511,32 @@ export function SalaryPlanner() {
           onDelete={handleDelete}
           onDeleteGroup={handleDeleteGroup}
           onPromote={setPromotingId}
+          showTrash={showTrash}
+          onToggleTrash={() => {
+            setShowTrash(!showTrash);
+            setSelectedId(null);
+            setDetail(null);
+          }}
+          trashCount={trashedItems.length}
+          onRestore={handleRestore}
+          onPermanentDelete={(id, type) => setPermanentDeleteTarget({ id, type })}
         />
       </div>
 
       {/* Right panel */}
       <div className="flex-1 overflow-auto">
         <ErrorBoundary>
-          {!detail ? (
+          {showTrash ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a trashed item to restore or permanently delete
+            </div>
+          ) : detailError ? (
+            <div className="flex h-full items-center justify-center">
+              <pre className="text-sm text-destructive max-w-lg whitespace-pre-wrap">
+                {detailError}
+              </pre>
+            </div>
+          ) : !detail ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               Select a data point to view details
             </div>
@@ -517,39 +546,40 @@ export function SalaryPlanner() {
                 <div className="flex items-center justify-between">
                   <h1 className="text-2xl font-bold">{detail.name}</h1>
                   <div className="flex items-center gap-2">
-                    {detail.template_path ? (
-                      <>
+                    {!anyPresented &&
+                      (detail.template_path ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportAllDocx}
+                            title="Export salary overview for all members"
+                          >
+                            <FileDown className="h-4 w-4 mr-1" />
+                            Export All
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleDeleteTemplate}
+                            title="Remove template"
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Template
+                          </Button>
+                        </>
+                      ) : (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={handleExportAllDocx}
-                          title="Export salary overview for all members"
+                          onClick={handleUploadTemplate}
+                          title="Upload a .docx template for salary overviews"
                         >
-                          <FileDown className="h-4 w-4 mr-1" />
-                          Export All
+                          <Upload className="h-4 w-4 mr-1" />
+                          Upload Template
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDeleteTemplate}
-                          title="Remove template"
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Template
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUploadTemplate}
-                        title="Upload a .docx template for salary overviews"
-                      >
-                        <Upload className="h-4 w-4 mr-1" />
-                        Upload Template
-                      </Button>
-                    )}
+                      ))}
                     {anyPresented && (
                       <Button
                         variant="outline"
@@ -569,7 +599,7 @@ export function SalaryPlanner() {
                     )}
                   </div>
                 </div>
-                {detail.template_path && (
+                {detail.template_path && !anyPresented && (
                   <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
                     <FileText className="h-3 w-3" />
                     Template uploaded
@@ -675,6 +705,32 @@ export function SalaryPlanner() {
               }}
             >
               Promote
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={permanentDeleteTarget !== null}
+        onOpenChange={(o) => !o && setPermanentDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The data point and all its data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (permanentDeleteTarget)
+                  handlePermanentDelete(permanentDeleteTarget.id, permanentDeleteTarget.type);
+                setPermanentDeleteTarget(null);
+              }}
+            >
+              Delete Forever
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

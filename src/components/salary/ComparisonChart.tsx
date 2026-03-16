@@ -101,7 +101,8 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
                 dataKey="deltaLabel"
                 position="right"
                 content={({ x, y, width, height, value, index }) => {
-                  const d = data[index as number];
+                  const d = index != null ? data[index as number] : undefined;
+                  if (!d) return null;
                   const color = d.isNew
                     ? "#94a3b8"
                     : d.delta! > 0

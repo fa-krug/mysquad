@@ -1,4 +1,4 @@
-CREATE TABLE scenario_group_members (
+CREATE TABLE IF NOT EXISTS scenario_group_members (
     id INTEGER PRIMARY KEY,
     scenario_group_id INTEGER NOT NULL REFERENCES scenario_groups(id) ON DELETE CASCADE,
     member_id INTEGER NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
@@ -9,7 +9,7 @@ CREATE TABLE scenario_group_members (
 );
 
 -- Backfill from existing scenario groups: copy member attributes from the first child
-INSERT INTO scenario_group_members (scenario_group_id, member_id, is_active, is_promoted, promoted_title_id)
+INSERT OR IGNORE INTO scenario_group_members (scenario_group_id, member_id, is_active, is_promoted, promoted_title_id)
 SELECT sg.id, sdpm.member_id, sdpm.is_active, sdpm.is_promoted, sdpm.promoted_title_id
 FROM scenario_groups sg
 JOIN salary_data_points sdp ON sdp.scenario_group_id = sg.id

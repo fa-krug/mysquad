@@ -22,7 +22,6 @@ const TeamMeetingsPage = lazy(() =>
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
-import { pendingDeleteRegistry } from "./hooks/usePendingDelete";
 import {
   authenticate,
   unlockDb,
@@ -133,7 +132,6 @@ function App() {
   }, []);
 
   const handleLock = useCallback(async () => {
-    for (const cancel of pendingDeleteRegistry) cancel();
     await Promise.all([...flushRegistry].map((flush) => flush()));
     await lockDb();
     setUnlocked(false);
