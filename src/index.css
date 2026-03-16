@@ -168,18 +168,14 @@ textarea,
   animation: highlight-flash 2s ease-in-out;
 }
 
-/* Custom scrollbar: thin, theme-aware, auto-hide */
+/* Custom scrollbar: thin, theme-aware */
+/* Standard properties for Safari/WKWebView — let macOS handle overlay show/hide */
 * {
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-*:hover,
-*:focus-within {
   scrollbar-color: var(--muted-foreground) transparent;
 }
 
-/* WebKit scrollbar styling */
+/* WebKit pseudo-elements for Chromium browsers (not supported in Safari/WKWebView) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
