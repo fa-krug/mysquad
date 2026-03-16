@@ -155,6 +155,9 @@ pub fn run() {
             commands::import_data_point_salaries,
             commands::get_talk_topic_by_id,
             commands::global_search,
+            commands::upload_salary_template,
+            commands::delete_salary_template,
+            commands::export_member_salary_docx,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

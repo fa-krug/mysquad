@@ -22,8 +22,12 @@ import {
   getScenarioSummaries,
   getScenarioMemberComparison,
   updateSalaryDataPointMember,
+  uploadSalaryTemplate,
+  deleteSalaryTemplate,
+  exportMemberSalaryDocx,
 } from "@/lib/db";
-import { EyeOff } from "lucide-react";
+import { open as openFile, save } from "@tauri-apps/plugin-dialog";
+import { EyeOff, Upload, FileDown, Trash2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/lib/toast";
 import type {
@@ -293,6 +297,51 @@ export function SalaryPlanner() {
     if (selectedId) loadDetailOnly(selectedId);
   }, [selectedId, loadDetailOnly]);
 
+  const handleUploadTemplate = useCallback(async () => {
+    if (!selectedId) return;
+    try {
+      const filePath = await openFile({
+        filters: [{ name: "Word Document", extensions: ["docx"] }],
+        multiple: false,
+      });
+      if (!filePath) return;
+      await uploadSalaryTemplate(selectedId, filePath);
+      await loadDetailOnly(selectedId);
+      showSuccess("Template uploaded");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+    }
+  }, [selectedId, loadDetailOnly]);
+
+  const handleDeleteTemplate = useCallback(async () => {
+    if (!selectedId) return;
+    try {
+      await deleteSalaryTemplate(selectedId);
+      await loadDetailOnly(selectedId);
+      showSuccess("Template removed");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+    }
+  }, [selectedId, loadDetailOnly]);
+
+  const handleExportMemberDocx = useCallback(
+    async (memberId: number, memberName: string) => {
+      if (!selectedId) return;
+      try {
+        const filePath = await save({
+          defaultPath: `${memberName.replace(/\s+/g, "_")}_salary.docx`,
+          filters: [{ name: "Word Document", extensions: ["docx"] }],
+        });
+        if (!filePath) return;
+        await exportMemberSalaryDocx(selectedId, memberId, filePath);
+        showSuccess(`Exported salary overview for ${memberName}`);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [selectedId],
+  );
+
   const handleTogglePresented = useCallback(
     async (id: number, value: boolean) => {
       await updateSalaryDataPointMember(id, "is_presented", value ? "1" : "0");
@@ -322,6 +371,31 @@ export function SalaryPlanner() {
     () => (anyPresented ? sortedMembers.filter((m) => m.is_presented) : sortedMembers),
     [sortedMembers, anyPresented],
   );
+
+  const handleExportAllDocx = useCallback(async () => {
+    if (!selectedId || !detail) return;
+    const members = anyPresented ? presentedMembers : detail.members;
+    let exported = 0;
+    for (const member of members) {
+      const memberName = `${member.first_name}_${member.last_name}`;
+      try {
+        const filePath = await save({
+          defaultPath: `${memberName}_salary.docx`,
+          filters: [{ name: "Word Document", extensions: ["docx"] }],
+        });
+        if (!filePath) continue;
+        await exportMemberSalaryDocx(selectedId, member.member_id, filePath);
+        exported++;
+      } catch (err) {
+        showError(
+          `Failed for ${member.first_name} ${member.last_name}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    if (exported > 0) {
+      showSuccess(`Exported ${exported} salary overview(s)`);
+    }
+  }, [selectedId, detail, anyPresented, presentedMembers]);
 
   const filteredDetail = useMemo(() => {
     if (!detail) return null;
@@ -394,24 +468,65 @@ export function SalaryPlanner() {
             <div className="sticky top-0 z-10 bg-background px-6 pt-6 pb-2">
               <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">{detail.name}</h1>
-                {anyPresented && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      await Promise.all(
-                        detail.members
-                          .filter((m) => m.is_presented)
-                          .map((m) => updateSalaryDataPointMember(m.id, "is_presented", "0")),
-                      );
-                      await loadDetailOnly(selectedId!);
-                    }}
-                  >
-                    <EyeOff className="h-4 w-4 mr-1" />
-                    Clear presentation
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {detail.template_path ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportAllDocx}
+                        title="Export salary overview for all members"
+                      >
+                        <FileDown className="h-4 w-4 mr-1" />
+                        Export All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDeleteTemplate}
+                        title="Remove template"
+                        className="text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Template
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUploadTemplate}
+                      title="Upload a .docx template for salary overviews"
+                    >
+                      <Upload className="h-4 w-4 mr-1" />
+                      Upload Template
+                    </Button>
+                  )}
+                  {anyPresented && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        await Promise.all(
+                          detail.members
+                            .filter((m) => m.is_presented)
+                            .map((m) => updateSalaryDataPointMember(m.id, "is_presented", "0")),
+                        );
+                        await loadDetailOnly(selectedId!);
+                      }}
+                    >
+                      <EyeOff className="h-4 w-4 mr-1" />
+                      Clear presentation
+                    </Button>
+                  )}
+                </div>
               </div>
+              {detail.template_path && (
+                <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                  <FileText className="h-3 w-3" />
+                  Template uploaded
+                </div>
+              )}
             </div>
             <div className="px-6 pb-6 space-y-6">
               {!anyPresented && detail.scenario_group_id && scenarioSummaries.length > 0 && (
@@ -442,6 +557,7 @@ export function SalaryPlanner() {
                         scenarioComparison={
                           detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
                         }
+                        onExportDocx={detail.template_path ? handleExportMemberDocx : undefined}
                       />
                     ))
                   )}

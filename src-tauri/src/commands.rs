@@ -1042,6 +1042,7 @@ pub struct SalaryDataPointDetail {
     pub budget: Option<i64>,
     pub previous_data_point_id: Option<i64>,
     pub scenario_group_id: Option<i64>,
+    pub template_path: Option<String>,
     pub members: Vec<SalaryDataPointMember>,
     pub ranges: Vec<SalaryRange>,
 }
@@ -1218,11 +1219,11 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
     let guard = db.conn.lock().unwrap();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
-    let (name, budget, previous_data_point_id, scenario_group_id): (String, Option<i64>, Option<i64>, Option<i64>) = conn
+    let (name, budget, previous_data_point_id, scenario_group_id, template_path): (String, Option<i64>, Option<i64>, Option<i64>, Option<String>) = conn
         .query_row(
-            "SELECT name, budget, previous_data_point_id, scenario_group_id FROM salary_data_points WHERE id = ?1",
+            "SELECT name, budget, previous_data_point_id, scenario_group_id, template_path FROM salary_data_points WHERE id = ?1",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .map_err(|e| e.to_string())?;
 
@@ -1364,6 +1365,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
         budget,
         previous_data_point_id,
         scenario_group_id,
+        template_path,
         members,
         ranges,
     })
@@ -4079,4 +4081,466 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
         .map_err(|e| e.to_string())?;
 
     Ok(results)
+}
+
+// ── Salary Template / DOCX Export ──
+
+fn get_templates_dir() -> Result<std::path::PathBuf, String> {
+    let templates_dir = get_app_data_dir()?.join("templates");
+    std::fs::create_dir_all(&templates_dir)
+        .map_err(|e| format!("Failed to create templates directory: {}", e))?;
+    Ok(templates_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn upload_salary_template(
+    db: State<AppDb>,
+    data_point_id: i64,
+    file_path: String,
+) -> Result<(), String> {
+    let templates_dir = get_templates_dir()?;
+    let filename = format!("dp_{}.docx", data_point_id);
+    let dest_path = templates_dir.join(&filename);
+
+    std::fs::copy(&file_path, &dest_path).map_err(|e| format!("Failed to copy template: {}", e))?;
+
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute(
+        "UPDATE salary_data_points SET template_path = ?1 WHERE id = ?2",
+        params![filename, data_point_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_salary_template(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let template_path: Option<String> = conn
+        .query_row(
+            "SELECT template_path FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if let Some(filename) = template_path {
+        let templates_dir = get_templates_dir()?;
+        let file = templates_dir.join(&filename);
+        if file.exists() {
+            std::fs::remove_file(&file).map_err(|e| format!("Failed to delete template: {}", e))?;
+        }
+    }
+
+    conn.execute(
+        "UPDATE salary_data_points SET template_path = NULL WHERE id = ?1",
+        params![data_point_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn format_cents_for_template(cents: i64) -> String {
+    let euros = cents as f64 / 100.0;
+    let whole = (euros.abs().floor()) as i64;
+    let frac = ((euros.abs() - whole as f64) * 100.0).round() as i64;
+
+    let whole_str = {
+        let s = whole.to_string();
+        let mut result = String::new();
+        for (i, c) in s.chars().rev().enumerate() {
+            if i > 0 && i % 3 == 0 {
+                result.push('.');
+            }
+            result.push(c);
+        }
+        result.chars().rev().collect::<String>()
+    };
+
+    if frac > 0 {
+        format!("{},{:02} \u{20ac}", whole_str, frac)
+    } else {
+        format!("{} \u{20ac}", whole_str)
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn export_member_salary_docx(
+    db: State<AppDb>,
+    data_point_id: i64,
+    member_id: i64,
+    output_path: String,
+) -> Result<(), String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    // Get template path
+    let template_path: Option<String> = conn
+        .query_row(
+            "SELECT template_path FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let template_filename = template_path.ok_or("No template uploaded for this data point")?;
+    let templates_dir = get_templates_dir()?;
+    let template_file = templates_dir.join(&template_filename);
+
+    if !template_file.exists() {
+        return Err("Template file not found".into());
+    }
+
+    // Get data point name
+    let dp_name: String = conn
+        .query_row(
+            "SELECT name FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Get member data
+    let (first_name, last_name, title_name, start_date, email): (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = conn
+        .query_row(
+            "SELECT m.first_name, m.last_name, t.name, m.start_date, m.email
+             FROM salary_data_point_members sdpm
+             JOIN team_members m ON m.id = sdpm.member_id
+             LEFT JOIN titles t ON t.id = m.title_id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.member_id = ?2",
+            params![data_point_id, member_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .map_err(|e| format!("Member not found in data point: {}", e))?;
+
+    // Check if promoted
+    let (is_promoted, promoted_title_name): (bool, Option<String>) = conn
+        .query_row(
+            "SELECT sdpm.is_promoted, pt.name
+             FROM salary_data_point_members sdpm
+             LEFT JOIN titles pt ON pt.id = sdpm.promoted_title_id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.member_id = ?2",
+            params![data_point_id, member_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let effective_title = if is_promoted {
+        promoted_title_name.or(title_name.clone())
+    } else {
+        title_name.clone()
+    };
+
+    // Get salary parts
+    let sdpm_id: i64 = conn
+        .query_row(
+            "SELECT id FROM salary_data_point_members WHERE data_point_id = ?1 AND member_id = ?2",
+            params![data_point_id, member_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut parts_stmt = conn
+        .prepare(
+            "SELECT name, amount, frequency, is_variable FROM salary_parts
+             WHERE data_point_member_id = ?1 ORDER BY sort_order ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    struct PartInfo {
+        name: Option<String>,
+        amount: i64,
+        frequency: i64,
+        is_variable: bool,
+    }
+
+    let parts: Vec<PartInfo> = parts_stmt
+        .query_map(params![sdpm_id], |row| {
+            Ok(PartInfo {
+                name: row.get(0)?,
+                amount: row.get(1)?,
+                frequency: row.get(2)?,
+                is_variable: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let annual_total: i64 = parts.iter().map(|p| p.amount * p.frequency).sum();
+    let fixed_total: i64 = parts
+        .iter()
+        .filter(|p| !p.is_variable)
+        .map(|p| p.amount * p.frequency)
+        .sum();
+    let variable_total: i64 = parts
+        .iter()
+        .filter(|p| p.is_variable)
+        .map(|p| p.amount * p.frequency)
+        .sum();
+
+    // Build plain text parts list
+    let parts_text: String = parts
+        .iter()
+        .map(|p| {
+            let name = p.name.clone().unwrap_or_else(|| "Unnamed".to_string());
+            let annual = format_cents_for_template(p.amount * p.frequency);
+            let var_label = if p.is_variable { " (variable)" } else { "" };
+            format!("{}: {}{}", name, annual, var_label)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // Build replacements map
+    let replacements: Vec<(&str, String)> = vec![
+        ("{{first_name}}", first_name.clone()),
+        ("{{last_name}}", last_name.clone()),
+        ("{{full_name}}", format!("{} {}", first_name, last_name)),
+        ("{{title}}", effective_title.unwrap_or_default()),
+        ("{{original_title}}", title_name.unwrap_or_default()),
+        ("{{email}}", email.unwrap_or_default()),
+        ("{{start_date}}", start_date.unwrap_or_default()),
+        ("{{data_point_name}}", dp_name),
+        ("{{annual_total}}", format_cents_for_template(annual_total)),
+        ("{{fixed_total}}", format_cents_for_template(fixed_total)),
+        (
+            "{{variable_total}}",
+            format_cents_for_template(variable_total),
+        ),
+        ("{{parts_text}}", parts_text),
+    ];
+
+    // Add individual salary part placeholders: {{part_1_name}}, {{part_1_amount}}, etc.
+    let mut extra_replacements: Vec<(String, String)> = Vec::new();
+    for (i, p) in parts.iter().enumerate() {
+        let n = i + 1;
+        extra_replacements.push((
+            format!("{{{{part_{}_name}}}}", n),
+            p.name.clone().unwrap_or_default(),
+        ));
+        extra_replacements.push((
+            format!("{{{{part_{}_amount}}}}", n),
+            format_cents_for_template(p.amount),
+        ));
+        extra_replacements.push((
+            format!("{{{{part_{}_frequency}}}}", n),
+            p.frequency.to_string(),
+        ));
+        extra_replacements.push((
+            format!("{{{{part_{}_annual}}}}", n),
+            format_cents_for_template(p.amount * p.frequency),
+        ));
+        extra_replacements.push((
+            format!("{{{{part_{}_type}}}}", n),
+            if p.is_variable {
+                "Variable".to_string()
+            } else {
+                "Fixed".to_string()
+            },
+        ));
+    }
+
+    // Process DOCX (ZIP) file - replace placeholders in XML files
+    let template_bytes =
+        std::fs::read(&template_file).map_err(|e| format!("Failed to read template: {}", e))?;
+
+    let reader = std::io::Cursor::new(&template_bytes);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| format!("Failed to open template as ZIP: {}", e))?;
+
+    let output_file = std::fs::File::create(&output_path)
+        .map_err(|e| format!("Failed to create output file: {}", e))?;
+    let mut writer = zip::ZipWriter::new(output_file);
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let name = file.name().to_string();
+
+        let mut content = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut content).map_err(|e| e.to_string())?;
+
+        // Only process XML files in the docx
+        let should_process = name.ends_with(".xml") || name.ends_with(".xml.rels");
+
+        let final_content = if should_process {
+            let mut text = String::from_utf8(content)
+                .map_err(|e| format!("Invalid UTF-8 in {}: {}", name, e))?;
+
+            for (placeholder, value) in &replacements {
+                let escaped = value
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
+                    .replace('"', "&quot;")
+                    .replace('\'', "&apos;");
+                text = text.replace(placeholder, &escaped);
+            }
+            for (placeholder, value) in &extra_replacements {
+                let escaped = value
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
+                    .replace('"', "&quot;")
+                    .replace('\'', "&apos;");
+                text = text.replace(placeholder, &escaped);
+            }
+
+            // Handle split placeholders
+            let text = collapse_split_placeholders(&text, &replacements, &extra_replacements);
+
+            text.into_bytes()
+        } else {
+            content
+        };
+
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(file.compression())
+            .large_file(file.size() > u32::MAX as u64);
+
+        writer
+            .start_file(&name, options)
+            .map_err(|e| format!("Failed to write to output: {}", e))?;
+        std::io::Write::write_all(&mut writer, &final_content)
+            .map_err(|e| format!("Failed to write content: {}", e))?;
+    }
+
+    writer
+        .finish()
+        .map_err(|e| format!("Failed to finalize output: {}", e))?;
+
+    Ok(())
+}
+
+/// Handle placeholders that Word may have split across multiple XML runs.
+fn collapse_split_placeholders(
+    xml: &str,
+    replacements: &[(&str, String)],
+    extra_replacements: &[(String, String)],
+) -> String {
+    if !xml.contains("{{") {
+        return xml.to_string();
+    }
+
+    let result = xml.to_string();
+    let mut output = String::with_capacity(result.len());
+    let mut pos = 0;
+
+    while pos < result.len() {
+        if let Some(p_start) = result[pos..]
+            .find("<w:p>")
+            .or_else(|| result[pos..].find("<w:p "))
+        {
+            let p_start = pos + p_start;
+            if let Some(p_end_rel) = result[p_start..].find("</w:p>") {
+                let p_end = p_start + p_end_rel + "</w:p>".len();
+                let paragraph = &result[p_start..p_end];
+
+                // Extract all text content from <w:t> tags
+                let mut full_text = String::new();
+                let mut t_pos = 0;
+                while t_pos < paragraph.len() {
+                    if let Some(t_start) =
+                        paragraph[t_pos..].find("<w:t>").map(|p| p + 5).or_else(|| {
+                            paragraph[t_pos..]
+                                .find("<w:t ")
+                                .and_then(|p| paragraph[t_pos + p..].find('>').map(|q| p + q + 1))
+                        })
+                    {
+                        let t_start = t_pos + t_start;
+                        if let Some(t_end) = paragraph[t_start..].find("</w:t>") {
+                            full_text.push_str(&paragraph[t_start..t_start + t_end]);
+                            t_pos = t_start + t_end + "</w:t>".len();
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                let mut has_placeholder = false;
+                let mut replaced_text = full_text.clone();
+                for (placeholder, value) in replacements {
+                    if replaced_text.contains(placeholder) {
+                        let escaped = value
+                            .replace('&', "&amp;")
+                            .replace('<', "&lt;")
+                            .replace('>', "&gt;")
+                            .replace('"', "&quot;")
+                            .replace('\'', "&apos;");
+                        replaced_text = replaced_text.replace(placeholder, &escaped);
+                        has_placeholder = true;
+                    }
+                }
+                for (placeholder, value) in extra_replacements {
+                    if replaced_text.contains(placeholder) {
+                        let escaped = value
+                            .replace('&', "&amp;")
+                            .replace('<', "&lt;")
+                            .replace('>', "&gt;")
+                            .replace('"', "&quot;")
+                            .replace('\'', "&apos;");
+                        replaced_text = replaced_text.replace(placeholder, &escaped);
+                        has_placeholder = true;
+                    }
+                }
+
+                if has_placeholder {
+                    let ppr = extract_tag(paragraph, "w:pPr");
+                    let rpr = extract_first_rpr(paragraph);
+
+                    let new_paragraph = format!(
+                        "<w:p>{}<w:r>{}<w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+                        ppr.unwrap_or_default(),
+                        rpr.unwrap_or_default(),
+                        replaced_text,
+                    );
+                    output.push_str(&result[pos..p_start]);
+                    output.push_str(&new_paragraph);
+                } else {
+                    output.push_str(&result[pos..p_end]);
+                }
+                pos = p_end;
+                continue;
+            }
+        }
+        output.push_str(&result[pos..]);
+        break;
+    }
+
+    output
+}
+
+fn extract_tag(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{}", tag);
+    if let Some(start) = xml.find(&open) {
+        let close = format!("</{}>", tag);
+        if let Some(end) = xml[start..].find(&close) {
+            return Some(xml[start..start + end + close.len()].to_string());
+        }
+    }
+    None
+}
+
+fn extract_first_rpr(xml: &str) -> Option<String> {
+    extract_tag(xml, "w:rPr")
 }

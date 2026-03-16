@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Eye, Plus, Star, UserX } from "lucide-react";
+import { Eye, FileDown, Plus, Star, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
@@ -22,6 +22,7 @@ interface MemberSalaryCardProps {
   anyPresented: boolean;
   onTogglePresented: (id: number, value: boolean) => void;
   scenarioComparison?: ScenarioMemberComparison[];
+  onExportDocx?: (memberId: number, memberName: string) => void;
 }
 
 export const MemberSalaryCard = memo(function MemberSalaryCard({
@@ -33,6 +34,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   anyPresented,
   onTogglePresented,
   scenarioComparison,
+  onExportDocx,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
   const range = getRangeForMember(member, ranges);
@@ -81,6 +83,20 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
+          {onExportDocx && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground opacity-0 group-hover/card:opacity-100"
+              title="Export salary overview"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExportDocx(member.member_id, `${member.first_name} ${member.last_name}`);
+              }}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
         <div className={cn("text-sm font-semibold", fitColors[fit])}>
           {formatCents(total)}/yr
