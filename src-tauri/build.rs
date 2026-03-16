@@ -19,11 +19,22 @@ fn compile_swift_helper(target: &str) {
 
     println!("cargo:rerun-if-changed={}", swift_source.display());
 
+    // Set minimum deployment target to avoid linking against newer Swift runtime
+    // libraries that don't exist on older macOS versions (e.g. libswift_DarwinFoundation2.dylib)
+    let arch = if target.contains("aarch64") {
+        "arm64"
+    } else {
+        "x86_64"
+    };
+    let target_triple = format!("{}-apple-macosx11.0", arch);
+
     let status = std::process::Command::new("swiftc")
         .args([
             swift_source.to_string_lossy().as_ref(),
             "-o",
             output_path,
+            "-target",
+            &target_triple,
             "-framework",
             "LocalAuthentication",
         ])
