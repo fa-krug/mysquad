@@ -43,6 +43,7 @@ export function SettingsPage({
   const [upToDate, setUpToDate] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(false);
 
   useEffect(() => {
     getVersion().then(setAppVersion);
@@ -51,6 +52,9 @@ export function SettingsPage({
   useEffect(() => {
     getSetting("show_ranges_in_presentation").then((value) => {
       if (value !== null) setShowRangesInPresentation(value === "true");
+    });
+    getSetting("auto_check_updates").then((value) => {
+      if (value !== null) setAutoCheckUpdates(value === "true");
     });
   }, []);
 
@@ -96,6 +100,16 @@ export function SettingsPage({
       setTimeout(() => setAutoLockSaved(false), 1500);
     } catch (err) {
       setAutoLockError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleAutoCheckUpdatesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const checked = e.target.checked;
+    setAutoCheckUpdates(checked);
+    try {
+      await setSetting("auto_check_updates", checked ? "true" : "false");
+    } catch {
+      // Best effort
     }
   }
 
@@ -375,6 +389,18 @@ export function SettingsPage({
         <div className="space-y-1.5">
           <h2 className="text-sm font-medium">About</h2>
           <p className="text-xs text-muted-foreground">MySquad v{appVersion}</p>
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="auto-check-updates-toggle"
+              checked={autoCheckUpdates}
+              onChange={handleAutoCheckUpdatesChange}
+              className="h-4 w-4 rounded border-input"
+            />
+            <label htmlFor="auto-check-updates-toggle" className="text-sm font-medium">
+              Automatically check for updates
+            </label>
+          </div>
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleCheckForUpdate}

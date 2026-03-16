@@ -173,10 +173,14 @@ function App() {
 
   const { dialogState, setDialogState, checkForUpdate, dismiss } = useUpdateCheck();
 
-  // Check for updates after unlock (main window only)
+  // Check for updates after unlock (main window only, if enabled)
   useEffect(() => {
     if (unlocked && getCurrentWebviewWindow().label === "main") {
-      checkForUpdate({ silent: true });
+      getSetting("auto_check_updates").then((value) => {
+        if (value === "true") {
+          checkForUpdate({ silent: true });
+        }
+      });
     }
   }, [unlocked, checkForUpdate]);
 
