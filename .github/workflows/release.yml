@@ -10,7 +10,7 @@ jobs:
     name: Checks (${{ matrix.os }})
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-26, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-26
             artifact: dmg
           - os: windows-latest
             artifact: nsis

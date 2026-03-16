@@ -18,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_sharekit::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(AppDb::new())
         .setup(|app| {
             #[cfg(desktop)]
@@ -29,7 +30,22 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
 
-            let file_menu = SubmenuBuilder::new(app, "File").item(&new_window).build()?;
+            let app_menu = SubmenuBuilder::new(app, "MySquad")
+                .about(None)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&new_window)
+                .close_window()
+                .build()?;
 
             let edit_menu = SubmenuBuilder::new(app, "Edit")
                 .undo()
@@ -41,9 +57,30 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
+            let view_menu = SubmenuBuilder::new(app, "View").fullscreen().build()?;
+
+            let window_menu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .maximize()
+                .separator()
+                .close_window()
+                .build()?;
+
+            let github_item = MenuItemBuilder::new("MySquad on GitHub")
+                .id("github")
+                .build(app)?;
+
+            let help_menu = SubmenuBuilder::new(app, "Help")
+                .item(&github_item)
+                .build()?;
+
             let menu = MenuBuilder::new(app)
+                .item(&app_menu)
                 .item(&file_menu)
                 .item(&edit_menu)
+                .item(&view_menu)
+                .item(&window_menu)
+                .item(&help_menu)
                 .build()?;
 
             app.set_menu(menu)?;
@@ -57,6 +94,11 @@ pub fn run() {
                         .inner_size(1200.0, 800.0)
                         .min_inner_size(900.0, 600.0)
                         .build();
+                } else if event.id().0 == "github" {
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = app_handle
+                        .opener()
+                        .open_url("https://github.com/fa-krug/mysquad", None::<&str>);
                 }
             });
 
