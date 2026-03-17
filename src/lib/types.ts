@@ -181,7 +181,8 @@ export type ReportBlockDataPayload =
   | ProjectStatusData
   | SalarySummaryData
   | OneOnOneCoverageData
-  | UpcomingBirthdaysData;
+  | UpcomingBirthdaysData
+  | SalaryOverTimePoint[];
 
 export interface ReportBlockData {
   id: number;

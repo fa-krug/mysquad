@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { getReportBlockData, addReportBlock, removeReportBlock } from "@/lib/db";
+import { getReportBlockData } from "@/lib/db";
 import type { Report, ReportBlockData } from "@/lib/types";
-import { Download } from "lucide-react";
+import { Download, Settings } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
 import { BlockRenderer } from "./blocks/BlockRenderer";
-import { AddBlockMenu } from "./AddBlockMenu";
 
 interface ReportDetailProps {
   report: Report;
+  onEdit: () => void;
 }
 
 async function generatePdf(name: string, blocks: ReportBlockData[]) {
@@ -38,7 +38,7 @@ async function generatePdf(name: string, blocks: ReportBlockData[]) {
   showSuccess("PDF exported");
 }
 
-export function ReportDetail({ report }: ReportDetailProps) {
+export function ReportDetail({ report, onEdit }: ReportDetailProps) {
   const [blocks, setBlocks] = useState<ReportBlockData[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,24 +57,6 @@ export function ReportDetail({ report }: ReportDetailProps) {
     loadBlocks();
   }, [loadBlocks]);
 
-  const handleAdd = async (blockType: string) => {
-    try {
-      await addReportBlock(report.id, blockType);
-      await loadBlocks();
-    } catch {
-      showError("Failed to add block");
-    }
-  };
-
-  const handleRemove = async (blockId: number) => {
-    try {
-      await removeReportBlock(blockId);
-      setBlocks((prev) => prev.filter((b) => b.id !== blockId));
-    } catch {
-      showError("Failed to remove block");
-    }
-  };
-
   if (loading) {
     return (
       <div className="max-w-2xl p-6 space-y-4">
@@ -90,7 +72,10 @@ export function ReportDetail({ report }: ReportDetailProps) {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{report.name}</h2>
         <div className="flex items-center gap-2">
-          <AddBlockMenu existingBlockTypes={blocks.map((b) => b.block_type)} onAdd={handleAdd} />
+          <Button variant="outline" size="sm" className="gap-2" onClick={onEdit}>
+            <Settings className="size-4" />
+            Configure
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -107,12 +92,12 @@ export function ReportDetail({ report }: ReportDetailProps) {
 
       {blocks.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No blocks added yet. Use the "Add Block" button to build your report.
+          No blocks added yet. Click "Configure" to build your report.
         </p>
       ) : (
         <div className="space-y-4">
           {blocks.map((block) => (
-            <BlockRenderer key={block.id} block={block} onRemove={handleRemove} />
+            <BlockRenderer key={block.id} block={block} />
           ))}
         </div>
       )}

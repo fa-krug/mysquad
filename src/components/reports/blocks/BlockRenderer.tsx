@@ -6,6 +6,7 @@ import { ProjectStatusBlock } from "./ProjectStatusBlock";
 import { SalarySummaryBlock } from "./SalarySummaryBlock";
 import { OneOnOneCoverageBlock } from "./OneOnOneCoverageBlock";
 import { UpcomingBirthdaysBlock } from "./UpcomingBirthdaysBlock";
+import { SalaryOverTimeChart } from "@/components/salary/SalaryOverTimeChart";
 import type {
   ReportBlockData,
   TeamOverviewData,
@@ -15,6 +16,7 @@ import type {
   SalarySummaryData,
   OneOnOneCoverageData,
   UpcomingBirthdaysData,
+  SalaryOverTimePoint,
 } from "@/lib/types";
 
 export const BLOCK_LABELS: Record<string, string> = {
@@ -25,11 +27,12 @@ export const BLOCK_LABELS: Record<string, string> = {
   salary_summary: "Salary Summary",
   one_on_one_coverage: "1:1 Coverage",
   upcoming_birthdays: "Upcoming Birthdays",
+  salary_over_time: "Salary Over Time",
 };
 
 interface BlockRendererProps {
   block: ReportBlockData;
-  onRemove: (id: number) => void;
+  onRemove?: (id: number) => void;
 }
 
 export function BlockRenderer({ block, onRemove }: BlockRendererProps) {
@@ -51,13 +54,15 @@ export function BlockRenderer({ block, onRemove }: BlockRendererProps) {
         return <OneOnOneCoverageBlock data={block.data as OneOnOneCoverageData} />;
       case "upcoming_birthdays":
         return <UpcomingBirthdaysBlock data={block.data as UpcomingBirthdaysData} />;
+      case "salary_over_time":
+        return <SalaryOverTimeChart data={block.data as SalaryOverTimePoint[]} />;
       default:
         return <p className="text-sm text-muted-foreground">Unknown block type.</p>;
     }
   })();
 
   return (
-    <BlockCard title={title} onRemove={() => onRemove(block.id)}>
+    <BlockCard title={title} onRemove={onRemove ? () => onRemove(block.id) : undefined}>
       {content}
     </BlockCard>
   );

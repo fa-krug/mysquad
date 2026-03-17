@@ -3007,6 +3007,7 @@ pub fn get_report_block_data(
             "salary_summary" => build_salary_summary(conn)?,
             "one_on_one_coverage" => build_one_on_one_coverage(conn)?,
             "upcoming_birthdays" => build_upcoming_birthdays(conn)?,
+            "salary_over_time" => build_salary_over_time(conn)?,
             _ => serde_json::json!({}),
         };
         result.push(ReportBlockData {
@@ -3324,6 +3325,58 @@ fn build_upcoming_birthdays(conn: &rusqlite::Connection) -> Result<serde_json::V
     birthdays.sort_by_key(|b| b["days_until"].as_i64().unwrap_or(999));
 
     Ok(serde_json::json!({ "birthdays": birthdays }))
+}
+
+fn build_salary_over_time(conn: &rusqlite::Connection) -> Result<serde_json::Value, String> {
+    let mut dp_stmt = conn
+        .prepare(
+            "SELECT id, name FROM salary_data_points WHERE scenario_group_id IS NULL AND deleted_at IS NULL ORDER BY id",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let data_points: Vec<(i64, String)> = dp_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut member_stmt = conn
+        .prepare(
+            "SELECT sdpm.member_id, m.first_name, m.last_name, m.left_date,
+                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+             FROM salary_data_point_members sdpm
+             JOIN team_members m ON m.id = sdpm.member_id
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.is_active = 1
+             GROUP BY sdpm.member_id
+             ORDER BY m.last_name, m.first_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut points = Vec::new();
+    for (dp_id, dp_name) in data_points {
+        let members: Vec<serde_json::Value> = member_stmt
+            .query_map(params![dp_id], |row| {
+                Ok(serde_json::json!({
+                    "member_id": row.get::<_, i64>(0)?,
+                    "first_name": row.get::<_, String>(1)?,
+                    "last_name": row.get::<_, String>(2)?,
+                    "left_date": row.get::<_, Option<String>>(3)?,
+                    "annual_total": row.get::<_, i64>(4)?
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        points.push(serde_json::json!({
+            "data_point_id": dp_id,
+            "data_point_name": dp_name,
+            "members": members
+        }));
+    }
+
+    Ok(serde_json::json!(points))
 }
 
 // ── Meeting commands ──
