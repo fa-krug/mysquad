@@ -29,6 +29,7 @@ interface SalaryOverTimeChartProps {
 export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
   const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
   const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
+  const [hoveredMember, setHoveredMember] = useState<string | null>(null);
   const { chartData, memberKeys } = useMemo(() => {
     const memberMap = new Map<number, { name: string; left: boolean }>();
 
@@ -78,14 +79,27 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
             />
             <Tooltip
               isAnimationActive={false}
-              content={({ active: isActive, payload, coordinate, label }) => {
-                if (!isActive || !payload?.length) return null;
+              content={({ active: isActive, coordinate }) => {
+                if (!isActive || !hoveredMember) return null;
+                const mk = memberKeys.find((k) => k.dataKey === hoveredMember);
+                if (!mk) return null;
+                const color = COLORS[memberKeys.indexOf(mk) % COLORS.length];
+                const history = chartData
+                  .filter((row) => row[hoveredMember] != null)
+                  .map((row) => ({
+                    label: row.name as string,
+                    value: row[hoveredMember] as number,
+                  }));
                 return (
                   <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                    {payload.map((p, i) => (
-                      <div key={i} style={{ color: p.color }}>
-                        {p.name}: {formatCents((p.value as number) * 100)}
+                    <div style={{ fontWeight: 600, marginBottom: 4, color }}>{mk.name}</div>
+                    {history.map((h, i) => (
+                      <div
+                        key={i}
+                        style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                      >
+                        <span style={{ color: "var(--muted-foreground, #888)" }}>{h.label}</span>
+                        <span style={{ fontWeight: 500 }}>{formatCents(h.value * 100)}</span>
                       </div>
                     ))}
                   </TooltipPortal>
@@ -101,8 +115,14 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
                 name={mk.name}
                 stroke={COLORS[i % COLORS.length]}
                 strokeDasharray={mk.left ? "5 5" : undefined}
-                strokeWidth={2}
+                strokeWidth={hoveredMember === mk.dataKey ? 3 : hoveredMember ? 1 : 2}
+                strokeOpacity={hoveredMember && hoveredMember !== mk.dataKey ? 0.3 : 1}
                 dot={{ r: 3 }}
+                activeDot={{
+                  r: 5,
+                  onMouseEnter: () => setHoveredMember(mk.dataKey),
+                  onMouseLeave: () => setHoveredMember(null),
+                }}
                 connectNulls={false}
               />
             ))}
