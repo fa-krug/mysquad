@@ -1,5 +1,5 @@
+use parking_lot::Mutex;
 use rusqlite::{Connection, Result};
-use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct AppDb {
@@ -11,6 +11,16 @@ impl AppDb {
         Self {
             conn: Mutex::new(None),
         }
+    }
+
+    /// Acquire the database connection, returning a descriptive error if the DB is not open.
+    pub fn with_db<F, T>(&self, f: F) -> Result<T, String>
+    where
+        F: FnOnce(&Connection) -> Result<T, String>,
+    {
+        let guard = self.conn.lock();
+        let conn = guard.as_ref().ok_or("Database not open")?;
+        f(conn)
     }
 }
 
@@ -38,7 +48,6 @@ fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    eprintln!("[DEBUG] Current DB user_version = {}", version);
 
     if version < 1 {
         let migration_sql = include_str!("../migrations/001_initial.sql");
@@ -170,6 +179,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 19)?;
     }
 
+    if version < 20 {
+        let migration_sql = include_str!("../migrations/020_additional_indexes.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 20)?;
+    }
+
     // Repair: ensure columns exist even if version was bumped past their migration
     let repair_columns = [
         ("team_members", "picture_path", "TEXT"),
@@ -215,7 +230,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
 }
 
 pub fn close_db(db: &AppDb) {
-    let mut guard = db.conn.lock().unwrap();
+    let mut guard = db.conn.lock();
     *guard = None;
 }
 
@@ -254,7 +269,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
     }
 
     #[test]
@@ -354,7 +369,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
     }
 
     #[test]
@@ -370,7 +385,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
     }
 
     #[test]

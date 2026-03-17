@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { getReportBlockData } from "@/lib/db";
 import type { Report, ReportBlockData } from "@/lib/types";
-import { Download, Settings } from "lucide-react";
+import { Download, Settings, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
 import { BlockRenderer } from "./blocks/BlockRenderer";
 
@@ -41,6 +41,7 @@ async function generatePdf(name: string, blocks: ReportBlockData[]) {
 export function ReportDetail({ report, onEdit }: ReportDetailProps) {
   const [blocks, setBlocks] = useState<ReportBlockData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const loadBlocks = useCallback(async () => {
     try {
@@ -80,11 +81,23 @@ export function ReportDetail({ report, onEdit }: ReportDetailProps) {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => {
-              generatePdf(report.name, blocks).catch(() => showError("Export failed"));
+            disabled={exporting}
+            onClick={async () => {
+              setExporting(true);
+              try {
+                await generatePdf(report.name, blocks);
+              } catch {
+                showError("Export failed");
+              } finally {
+                setExporting(false);
+              }
             }}
           >
-            <Download className="size-4" />
+            {exporting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
             Download PDF
           </Button>
         </div>

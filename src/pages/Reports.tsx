@@ -1,40 +1,28 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { ReportList } from "@/components/reports/ReportList";
 import { ReportDetail } from "@/components/reports/ReportDetail";
 import { ReportModal } from "@/components/reports/ReportModal";
 import { getReports, createReport, deleteReport } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorRetry } from "@/components/ui/error-retry";
 import type { Report } from "@/lib/types";
+import { useResourceLoader } from "@/hooks/useResourceLoader";
 
 export function Reports() {
   const location = useLocation();
-  const [reports, setReports] = useState<Report[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  const loadReports = useCallback(async () => {
-    const r = await getReports();
-    setReports(r);
-    return r;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    getReports()
-      .then((r) => {
-        if (!cancelled) setReports(r);
-      })
-      .catch(() => showError("Failed to load reports"))
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    data: reports,
+    setData: setReports,
+    loading,
+    error,
+    reload: loadReports,
+  } = useResourceLoader(() => getReports(), [] as Report[]);
 
   useEffect(() => {
     const state = location.state;
@@ -90,17 +78,23 @@ export function Reports() {
         onEdit={(id) => setEditingId(id)}
       />
       <div className="flex-1 overflow-auto">
-        {selectedReport ? (
-          <ReportDetail
-            key={`${selectedReport.id}-${selectedReport.collect_statuses}-${selectedReport.include_stakeholders}-${selectedReport.include_projects}`}
-            report={selectedReport}
-            onEdit={() => setEditingId(selectedReport.id)}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">Select a report</p>
-          </div>
-        )}
+        <ErrorBoundary>
+          {selectedReport ? (
+            <ReportDetail
+              key={`${selectedReport.id}-${selectedReport.collect_statuses}-${selectedReport.include_stakeholders}-${selectedReport.include_projects}`}
+              report={selectedReport}
+              onEdit={() => setEditingId(selectedReport.id)}
+            />
+          ) : error ? (
+            <div className="flex h-full items-center justify-center">
+              <ErrorRetry message="Failed to load reports" onRetry={loadReports} />
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-muted-foreground">Select a report</p>
+            </div>
+          )}
+        </ErrorBoundary>
       </div>
 
       {editingReport && (

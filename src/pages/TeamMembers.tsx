@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { MemberList } from "@/components/team/MemberList";
 import { MemberDetail } from "@/components/team/MemberDetail";
 import { OrgChart } from "@/components/team/OrgChart";
+import { ErrorRetry } from "@/components/ui/error-retry";
 import { ListIcon, NetworkIcon } from "lucide-react";
 import {
   getTeamMembers,
@@ -26,60 +27,39 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { TeamMember } from "@/lib/types";
+import { useResourceLoader } from "@/hooks/useResourceLoader";
+import { useTrashManager } from "@/hooks/useTrashManager";
 
 export function TeamMembers() {
   const location = useLocation();
-  const [members, setMembers] = useState<TeamMember[]>([]);
   const [picturesDir, setPicturesDir] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [highlightTalkTopicId, setHighlightTalkTopicId] = useState<number | undefined>(undefined);
   const [view, setView] = useState<"list" | "chart">("list");
-  const [showTrash, setShowTrash] = useState(false);
-  const [trashedMembers, setTrashedMembers] = useState<TeamMember[]>([]);
-  const [permanentDeleteId, setPermanentDeleteId] = useState<number | null>(null);
+
+  const {
+    data: members,
+    setData: setMembers,
+    loading,
+    error,
+    reload: loadMembers,
+  } = useResourceLoader(() => getTeamMembers(), [] as TeamMember[]);
+
+  const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  const trash = useTrashManager<TeamMember>({
+    fetchTrashed: getTrashedTeamMembers,
+    restoreItem: restoreTeamMember,
+    permanentDeleteItem: permanentDeleteTeamMember,
+    onRefresh: loadMembers,
+    onSelectionClear: clearSelection,
+  });
 
   useEffect(() => {
     getPicturesDirPath()
       .then(setPicturesDir)
       .catch(() => showError("Failed to load pictures directory"));
-  }, []);
-
-  const loadMembers = useCallback(async () => {
-    const data = await getTeamMembers();
-    setMembers(data);
-  }, []);
-
-  const loadTrashedMembers = useCallback(async () => {
-    const data = await getTrashedTeamMembers();
-    setTrashedMembers(data);
-  }, []);
-
-  useEffect(() => {
-    if (showTrash) loadTrashedMembers();
-  }, [showTrash, loadTrashedMembers]);
-
-  // Load trashed members count on mount for the badge
-  useEffect(() => {
-    loadTrashedMembers();
-  }, [loadTrashedMembers]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getTeamMembers()
-      .then((data) => {
-        if (!cancelled) setMembers(data);
-      })
-      .catch(() => {
-        if (!cancelled) showError("Failed to load team members");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -117,18 +97,6 @@ export function TeamMembers() {
     if (selectedId === id) setSelectedId(null);
     await deleteTeamMember(id);
     await loadMembers();
-  };
-
-  const handleRestore = async (id: number) => {
-    await restoreTeamMember(id);
-    await Promise.all([loadMembers(), loadTrashedMembers()]);
-    setSelectedId(null);
-  };
-
-  const handlePermanentDelete = async (id: number) => {
-    await permanentDeleteTeamMember(id);
-    await loadTrashedMembers();
-    setSelectedId(null);
   };
 
   const handleMemberChange = async (
@@ -173,7 +141,7 @@ export function TeamMembers() {
   return (
     <div className="flex h-full">
       <MemberList
-        members={showTrash ? trashedMembers : members}
+        members={trash.showTrash ? trash.trashedItems : members}
         selectedId={selectedId}
         loading={loading}
         creating={creating}
@@ -181,18 +149,15 @@ export function TeamMembers() {
         onCreate={handleCreate}
         onDelete={handleDelete}
         picturesDir={picturesDir}
-        showTrash={showTrash}
-        onToggleTrash={() => {
-          setShowTrash(!showTrash);
-          setSelectedId(null);
-        }}
-        trashCount={trashedMembers.length}
-        onRestore={handleRestore}
-        onPermanentDelete={(id) => setPermanentDeleteId(id)}
+        showTrash={trash.showTrash}
+        onToggleTrash={trash.toggleTrash}
+        trashCount={trash.trashedItems.length}
+        onRestore={trash.handleRestore}
+        onPermanentDelete={(id) => trash.requestPermanentDelete(id)}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* View toggle header - hidden in trash mode */}
-        {!showTrash && (
+        {!trash.showTrash && (
           <div className="flex items-center justify-end gap-1 px-3 h-12 border-b">
             <button
               type="button"
@@ -215,7 +180,11 @@ export function TeamMembers() {
 
         {/* View content */}
         <div className="flex-1 overflow-auto">
-          {showTrash ? (
+          {error ? (
+            <div className="flex h-full items-center justify-center">
+              <ErrorRetry message="Failed to load team members" onRetry={loadMembers} />
+            </div>
+          ) : trash.showTrash ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               Select a trashed member to restore or permanently delete
             </div>
@@ -247,8 +216,8 @@ export function TeamMembers() {
       </div>
 
       <AlertDialog
-        open={permanentDeleteId !== null}
-        onOpenChange={(o) => !o && setPermanentDeleteId(null)}
+        open={trash.permanentDeleteId !== null}
+        onOpenChange={(o) => !o && trash.cancelPermanentDelete()}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -259,12 +228,7 @@ export function TeamMembers() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (permanentDeleteId) handlePermanentDelete(permanentDeleteId);
-                setPermanentDeleteId(null);
-              }}
-            >
+            <AlertDialogAction onClick={trash.confirmPermanentDelete}>
               Delete Forever
             </AlertDialogAction>
           </AlertDialogFooter>

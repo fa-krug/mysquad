@@ -16,6 +16,7 @@ import type {
   ReportBlockData,
   SalaryOverTimePoint,
   ScenarioGroup,
+  SalaryDataPointFull,
   SalaryListItem,
   ScenarioSummary,
   ScenarioMemberComparison,
@@ -197,10 +198,23 @@ export const getPreviousMemberData = (dataPointId: number, memberId: number) =>
     member_id: memberId,
   });
 
+export const getAllPreviousMemberData = (dataPointId: number) =>
+  invoke<Record<number, SalaryPart[]>>("get_all_previous_member_data", {
+    data_point_id: dataPointId,
+  });
+
+export const getAllScenarioMemberComparisons = (scenarioGroupId: number) =>
+  invoke<Record<number, ScenarioMemberComparison[]>>("get_all_scenario_member_comparisons", {
+    scenario_group_id: scenarioGroupId,
+  });
+
 export const getSalaryOverTime = () => invoke<SalaryOverTimePoint[]>("get_salary_over_time");
 
 export const getSalaryLineage = (dataPointId: number) =>
   invoke<SalaryOverTimePoint[]>("get_salary_lineage", { data_point_id: dataPointId });
+
+export const getSalaryDataPointFull = (id: number) =>
+  invoke<SalaryDataPointFull>("get_salary_data_point_full", { id });
 
 // Projects
 export const getProjects = () => invoke<Project[]>("get_projects");

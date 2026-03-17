@@ -1,38 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { ProjectDetail } from "@/components/projects/ProjectDetail";
 import { getProjects, createProject, deleteProject } from "@/lib/db";
 import { showSuccess, showError } from "@/lib/toast";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorRetry } from "@/components/ui/error-retry";
 import type { Project } from "@/lib/types";
+import { useResourceLoader } from "@/hooks/useResourceLoader";
 
 export function Projects() {
   const location = useLocation();
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const loadProjects = useCallback(async () => {
-    const data = await getProjects();
-    setProjects(data);
-  }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    getProjects()
-      .then((data) => {
-        if (!cancelled) setProjects(data);
-      })
-      .catch(() => {
-        if (!cancelled) showError("Failed to load projects");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    data: projects,
+    setData: setProjects,
+    loading,
+    error,
+    reload: loadProjects,
+  } = useResourceLoader(() => getProjects(), [] as Project[]);
 
   useEffect(() => {
     const state = location.state;
@@ -86,17 +74,23 @@ export function Projects() {
         onDelete={handleDelete}
       />
       <div className="flex-1 overflow-auto">
-        {selectedProject ? (
-          <ProjectDetail
-            key={selectedProject.id}
-            project={selectedProject}
-            onProjectChange={handleProjectChange}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a project to view details
-          </div>
-        )}
+        <ErrorBoundary>
+          {error ? (
+            <div className="flex h-full items-center justify-center">
+              <ErrorRetry message="Failed to load projects" onRetry={loadProjects} />
+            </div>
+          ) : selectedProject ? (
+            <ProjectDetail
+              key={selectedProject.id}
+              project={selectedProject}
+              onProjectChange={handleProjectChange}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a project to view details
+            </div>
+          )}
+        </ErrorBoundary>
       </div>
     </div>
   );

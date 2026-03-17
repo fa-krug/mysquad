@@ -23,60 +23,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorRetry } from "@/components/ui/error-retry";
 import type { Title, TeamMember } from "@/lib/types";
+import { useResourceLoader } from "@/hooks/useResourceLoader";
+import { useTrashManager } from "@/hooks/useTrashManager";
 
 export function Titles() {
   const location = useLocation();
-  const [titles, setTitles] = useState<Title[]>([]);
-  const [members, setMembers] = useState<TeamMember[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focusName, setFocusName] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [showTrash, setShowTrash] = useState(false);
-  const [trashedTitles, setTrashedTitles] = useState<Title[]>([]);
-  const [permanentDeleteId, setPermanentDeleteId] = useState<number | null>(null);
 
-  const loadTitles = useCallback(async () => {
-    const [t, m] = await Promise.all([getTitles(), getTeamMembers()]);
-    setTitles(t);
-    setMembers(m);
-    return t;
-  }, []);
+  const {
+    data: titles,
+    setData: setTitles,
+    loading,
+    error,
+    reload: loadTitles,
+  } = useResourceLoader(() => getTitles(), [] as Title[]);
 
-  const loadTrashedTitles = useCallback(async () => {
-    const data = await getTrashedTitles();
-    setTrashedTitles(data);
-  }, []);
+  const { data: members } = useResourceLoader(() => getTeamMembers(), [] as TeamMember[]);
 
-  useEffect(() => {
-    if (showTrash) loadTrashedTitles();
-  }, [showTrash, loadTrashedTitles]);
+  const clearSelection = useCallback(() => setSelectedId(null), []);
 
-  // Load trashed titles count on mount for the badge
-  useEffect(() => {
-    loadTrashedTitles();
-  }, [loadTrashedTitles]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getTitles(), getTeamMembers()])
-      .then(([t, m]) => {
-        if (!cancelled) {
-          setTitles(t);
-          setMembers(m);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) showError("Failed to load titles");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const trash = useTrashManager<Title>({
+    fetchTrashed: getTrashedTitles,
+    restoreItem: restoreTitle,
+    permanentDeleteItem: permanentDeleteTitle,
+    onRefresh: loadTitles,
+    onSelectionClear: clearSelection,
+  });
 
   useEffect(() => {
     const state = location.state;
@@ -118,19 +95,7 @@ export function Titles() {
 
     if (selectedId === id) setSelectedId(null);
     await deleteTitle(id);
-    await Promise.all([loadTitles(), loadTrashedTitles()]);
-  };
-
-  const handleRestore = async (id: number) => {
-    await restoreTitle(id);
-    await Promise.all([loadTitles(), loadTrashedTitles()]);
-    setSelectedId(null);
-  };
-
-  const handlePermanentDelete = async (id: number) => {
-    await permanentDeleteTitle(id);
-    await loadTrashedTitles();
-    setSelectedId(null);
+    await Promise.all([loadTitles(), trash.loadTrashedItems()]);
   };
 
   const handleTitleChange = async (field: string, value: string) => {
@@ -146,7 +111,7 @@ export function Titles() {
   return (
     <div className="flex h-full">
       <TitleList
-        titles={showTrash ? trashedTitles : titles}
+        titles={trash.showTrash ? trash.trashedItems : titles}
         selectedId={selectedId}
         loading={loading}
         creating={creating}
@@ -156,38 +121,41 @@ export function Titles() {
         }}
         onCreate={handleCreate}
         onDelete={handleDelete}
-        showTrash={showTrash}
-        onToggleTrash={() => {
-          setShowTrash(!showTrash);
-          setSelectedId(null);
-        }}
-        trashCount={trashedTitles.length}
-        onRestore={handleRestore}
-        onPermanentDelete={(id) => setPermanentDeleteId(id)}
+        showTrash={trash.showTrash}
+        onToggleTrash={trash.toggleTrash}
+        trashCount={trash.trashedItems.length}
+        onRestore={trash.handleRestore}
+        onPermanentDelete={(id) => trash.requestPermanentDelete(id)}
       />
       <div className="flex-1 overflow-auto">
-        {showTrash ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a trashed title to restore or permanently delete
-          </div>
-        ) : selectedTitle ? (
-          <TitleDetail
-            key={selectedTitle.id}
-            title={selectedTitle}
-            members={members}
-            onTitleChange={handleTitleChange}
-            focusName={focusName}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            Select a title to view details
-          </div>
-        )}
+        <ErrorBoundary>
+          {trash.showTrash ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a trashed title to restore or permanently delete
+            </div>
+          ) : selectedTitle ? (
+            <TitleDetail
+              key={selectedTitle.id}
+              title={selectedTitle}
+              members={members}
+              onTitleChange={handleTitleChange}
+              focusName={focusName}
+            />
+          ) : error ? (
+            <div className="flex h-full items-center justify-center">
+              <ErrorRetry message="Failed to load titles" onRetry={loadTitles} />
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select a title to view details
+            </div>
+          )}
+        </ErrorBoundary>
       </div>
 
       <AlertDialog
-        open={permanentDeleteId !== null}
-        onOpenChange={(o) => !o && setPermanentDeleteId(null)}
+        open={trash.permanentDeleteId !== null}
+        onOpenChange={(o) => !o && trash.cancelPermanentDelete()}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -198,12 +166,7 @@ export function Titles() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (permanentDeleteId) handlePermanentDelete(permanentDeleteId);
-                setPermanentDeleteId(null);
-              }}
-            >
+            <AlertDialogAction onClick={trash.confirmPermanentDelete}>
               Delete Forever
             </AlertDialogAction>
           </AlertDialogFooter>

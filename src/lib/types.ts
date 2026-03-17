@@ -257,6 +257,12 @@ export interface SalaryOverTimePoint {
   members: SalaryOverTimeMember[];
 }
 
+export interface SalaryDataPointFull {
+  detail: SalaryDataPointDetail;
+  lineage: SalaryOverTimePoint[];
+  previous_data: Record<number, SalaryPart[]>;
+}
+
 export interface ScenarioGroup {
   id: number;
   name: string;

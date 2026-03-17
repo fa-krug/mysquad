@@ -214,7 +214,10 @@ pub fn run() {
             commands::permanent_delete_scenario_group,
             commands::get_trashed_team_members,
             commands::get_trashed_titles,
+            commands::get_all_previous_member_data,
+            commands::get_all_scenario_member_comparisons,
             commands::get_trashed_salary_data_points,
+            commands::get_salary_data_point_full,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

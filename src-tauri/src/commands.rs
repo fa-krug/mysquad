@@ -29,7 +29,7 @@ pub fn unlock_db(db: State<AppDb>) -> Result<(), String> {
         .map_err(|e| format!("Failed to open database: {}", e))?;
     db::run_migrations(&conn).map_err(|e| format!("Failed to run migrations: {}", e))?;
 
-    let mut guard = db.conn.lock().unwrap();
+    let mut guard = db.conn.lock();
     *guard = Some(conn);
     Ok(())
 }
@@ -93,7 +93,7 @@ pub struct TeamMember {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -173,7 +173,7 @@ pub fn get_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_team_member(db: State<AppDb>) -> Result<TeamMember, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO team_members (first_name, last_name) VALUES ('New', 'Member')",
@@ -213,7 +213,7 @@ pub fn update_team_member(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = [
         "first_name",
@@ -269,7 +269,7 @@ pub fn update_team_member(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE team_members SET deleted_at = datetime('now') WHERE id = ?1",
@@ -311,7 +311,7 @@ pub fn upload_member_picture(
         .map_err(|e| format!("Failed to save image: {}", e))?;
 
     // Update DB
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE team_members SET picture_path = ?1 WHERE id = ?2",
@@ -334,7 +334,7 @@ pub fn delete_member_picture(db: State<AppDb>, id: i64) -> Result<(), String> {
     }
 
     // Clear DB
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE team_members SET picture_path = NULL WHERE id = ?1",
@@ -363,7 +363,7 @@ pub struct Child {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_children(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Child>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare("SELECT id, team_member_id, name, date_of_birth FROM children WHERE team_member_id = ?1")
@@ -390,7 +390,7 @@ pub fn add_child(
     name: String,
     date_of_birth: Option<String>,
 ) -> Result<Child, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO children (team_member_id, name, date_of_birth) VALUES (?1, ?2, ?3)",
@@ -413,7 +413,7 @@ pub fn update_child(
     name: String,
     date_of_birth: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE children SET name = ?1, date_of_birth = ?2 WHERE id = ?3",
@@ -425,7 +425,7 @@ pub fn update_child(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_child(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM children WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -448,7 +448,7 @@ fn get_items(db: &AppDb, table: &str, team_member_id: i64) -> Result<Vec<Checkab
     if !allowed_tables.contains(&table) {
         return Err(format!("Invalid table: {}", table));
     }
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let sql = format!(
         "SELECT id, team_member_id, text, checked, created_at FROM {} WHERE team_member_id = ?1 ORDER BY checked ASC, CASE WHEN checked = 0 THEN created_at END ASC, CASE WHEN checked = 1 THEN created_at END DESC",
@@ -489,7 +489,7 @@ pub fn get_talk_topics(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_talk_topic_by_id(db: State<AppDb>, id: i64) -> Result<CheckableItem, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.query_row(
         "SELECT id, team_member_id, text, checked, created_at FROM talk_topics WHERE id = ?1",
@@ -517,7 +517,7 @@ fn add_item(
     if !allowed_tables.contains(&table) {
         return Err(format!("Invalid table: {}", table));
     }
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         &format!(
@@ -573,7 +573,7 @@ fn update_item(
     if !allowed_tables.contains(&table) {
         return Err(format!("Invalid table: {}", table));
     }
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     if let Some(t) = text {
         conn.execute(
@@ -617,7 +617,7 @@ fn delete_item(db: &AppDb, table: &str, id: i64) -> Result<(), String> {
     if !allowed_tables.contains(&table) {
         return Err(format!("Invalid table: {}", table));
     }
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(&format!("DELETE FROM {} WHERE id = ?1", table), params![id])
         .map_err(|e| e.to_string())?;
@@ -645,7 +645,7 @@ pub struct Title {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn.prepare("SELECT t.id, t.name, COUNT(m.id) as member_count FROM titles t LEFT JOIN team_members m ON m.title_id = t.id AND m.deleted_at IS NULL WHERE t.deleted_at IS NULL GROUP BY t.id ORDER BY t.name ASC").map_err(|e| e.to_string())?;
     let titles = stmt
@@ -664,7 +664,7 @@ pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_title(db: State<AppDb>, name: String) -> Result<Title, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO titles (name) VALUES (?1)", params![name])
         .map_err(|e| e.to_string())?;
@@ -678,7 +678,7 @@ pub fn create_title(db: State<AppDb>, name: String) -> Result<Title, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn update_title(db: State<AppDb>, id: i64, name: String) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE titles SET name = ?1 WHERE id = ?2",
@@ -690,7 +690,7 @@ pub fn update_title(db: State<AppDb>, id: i64, name: String) -> Result<(), Strin
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let count: i64 = conn
         .query_row(
@@ -728,7 +728,7 @@ pub struct Project {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_projects(db: State<AppDb>) -> Result<Vec<Project>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -757,7 +757,7 @@ pub fn get_projects(db: State<AppDb>) -> Result<Vec<Project>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_project(db: State<AppDb>) -> Result<Project, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO projects (name) VALUES ('')", [])
         .map_err(|e| e.to_string())?;
@@ -789,7 +789,7 @@ pub fn update_project(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = ["name", "end_date", "notes"];
     if !allowed.contains(&field.as_str()) {
@@ -803,7 +803,7 @@ pub fn update_project(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_project(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM projects WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -824,7 +824,7 @@ pub fn get_project_members(
     db: State<AppDb>,
     project_id: i64,
 ) -> Result<Vec<ProjectMember>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -857,7 +857,7 @@ pub fn add_project_member(
     project_id: i64,
     team_member_id: i64,
 ) -> Result<ProjectMember, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO project_members (project_id, team_member_id) VALUES (?1, ?2)",
@@ -883,7 +883,7 @@ pub fn add_project_member(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn remove_project_member(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM project_members WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -904,7 +904,7 @@ pub fn get_project_status_items(
     db: State<AppDb>,
     project_id: i64,
 ) -> Result<Vec<ProjectStatusItem>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -936,7 +936,7 @@ pub fn add_project_status_item(
     project_id: i64,
     text: String,
 ) -> Result<ProjectStatusItem, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO project_status_items (project_id, text) VALUES (?1, ?2)",
@@ -967,7 +967,7 @@ pub fn update_project_status_item(
     text: Option<String>,
     checked: Option<bool>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     if let Some(t) = text {
         conn.execute(
@@ -988,7 +988,7 @@ pub fn update_project_status_item(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "DELETE FROM project_status_items WHERE id = ?1",
@@ -1002,7 +1002,7 @@ pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), Strin
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_setting(db: State<AppDb>, key: String) -> Result<Option<String>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     match conn.query_row(
         "SELECT value FROM settings WHERE key = ?1",
@@ -1017,7 +1017,7 @@ pub fn get_setting(db: State<AppDb>, key: String) -> Result<Option<String>, Stri
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn set_setting(db: State<AppDb>, key: String, value: String) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![key, value]).map_err(|e| e.to_string())?;
     Ok(())
@@ -1113,7 +1113,7 @@ pub struct ScenarioSummary {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut dp_stmt = conn
@@ -1152,14 +1152,24 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut child_stmt = conn
-        .prepare("SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id FROM salary_data_points WHERE scenario_group_id = ?1 AND deleted_at IS NULL ORDER BY id ASC")
-        .map_err(|e| e.to_string())?;
+    // Batch-fetch ALL scenario children in one query (avoids N+1)
+    let group_ids: Vec<i64> = groups.iter().map(|(id, ..)| *id).collect();
+    let mut children_map: HashMap<i64, Vec<SalaryDataPointSummary>> = HashMap::new();
 
-    let mut scenario_groups: Vec<ScenarioGroup> = Vec::new();
-    for (sg_id, sg_name, sg_budget, sg_prev, sg_created) in groups {
-        let children: Vec<SalaryDataPointSummary> = child_stmt
-            .query_map(params![sg_id], |row| {
+    if !group_ids.is_empty() {
+        let placeholders: Vec<String> = (1..=group_ids.len()).map(|i| format!("?{}", i)).collect();
+        let sql = format!(
+            "SELECT id, name, budget, previous_data_point_id, created_at, scenario_group_id \
+             FROM salary_data_points WHERE scenario_group_id IN ({}) AND deleted_at IS NULL ORDER BY id ASC",
+            placeholders.join(", ")
+        );
+        let params: Vec<&dyn rusqlite::types::ToSql> = group_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let mut child_stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = child_stmt
+            .query_map(params.as_slice(), |row| {
                 Ok(SalaryDataPointSummary {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -1169,17 +1179,24 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
                     scenario_group_id: row.get(5)?,
                 })
             })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
+        for row in rows {
+            let child = row.map_err(|e| e.to_string())?;
+            if let Some(sg_id) = child.scenario_group_id {
+                children_map.entry(sg_id).or_default().push(child);
+            }
+        }
+    }
 
+    let mut scenario_groups: Vec<ScenarioGroup> = Vec::new();
+    for (sg_id, sg_name, sg_budget, sg_prev, sg_created) in groups {
         scenario_groups.push(ScenarioGroup {
             id: sg_id,
             name: sg_name,
             budget: sg_budget,
             previous_data_point_id: sg_prev,
             created_at: sg_created,
-            children,
+            children: children_map.remove(&sg_id).unwrap_or_default(),
         });
     }
 
@@ -1216,8 +1233,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPointDetail, String> {
-    eprintln!("[DEBUG] get_salary_data_point called with id={}", id);
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let (name, mut budget, mut previous_data_point_id, scenario_group_id, template_path): (String, Option<i64>, Option<i64>, Option<i64>, Option<String>) = conn
@@ -1226,7 +1242,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
             params![id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
-        .map_err(|e| { eprintln!("[ERROR] get_salary_data_point query failed: {}", e); e.to_string() })?;
+        .map_err(|e| e.to_string())?;
 
     // For scenarios in a group, inherit budget and previous_data_point_id from the group
     if let Some(sg_id) = scenario_group_id {
@@ -1392,12 +1408,6 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
             result
         };
 
-    eprintln!(
-        "[DEBUG] get_salary_data_point id={} returning {} members, {} ranges",
-        id,
-        members.len(),
-        ranges.len()
-    );
     Ok(SalaryDataPointDetail {
         id,
         name,
@@ -1412,7 +1422,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSummary, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -1524,7 +1534,9 @@ pub fn create_salary_data_point(db: State<AppDb>) -> Result<SalaryDataPointSumma
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
 
@@ -1538,7 +1550,7 @@ pub fn update_salary_data_point(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = ["name", "budget", "previous_data_point_id"];
     if !allowed.contains(&field.as_str()) {
@@ -1552,7 +1564,7 @@ pub fn update_salary_data_point(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE salary_data_points SET deleted_at = datetime('now') WHERE id = ?1",
@@ -1569,7 +1581,7 @@ pub fn update_salary_data_point_member(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = [
         "is_active",
@@ -1594,7 +1606,7 @@ pub fn create_salary_part(
     db: State<AppDb>,
     data_point_member_id: i64,
 ) -> Result<SalaryPart, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let sort_order: i64 = conn
         .query_row(
@@ -1625,7 +1637,7 @@ pub fn update_salary_part(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = ["name", "amount", "frequency", "is_variable"];
     if !allowed.contains(&field.as_str()) {
@@ -1639,7 +1651,7 @@ pub fn update_salary_part(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_salary_part(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM salary_parts WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -1654,7 +1666,7 @@ pub fn update_salary_range(
     min_salary: i64,
     max_salary: i64,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO salary_ranges (data_point_id, title_id, min_salary, max_salary)
@@ -1671,7 +1683,7 @@ pub fn get_previous_member_data(
     data_point_id: i64,
     member_id: i64,
 ) -> Result<Option<Vec<SalaryPart>>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     // Look up the explicit previous_data_point_id, inheriting from scenario group if needed
@@ -1743,6 +1755,122 @@ pub fn get_previous_member_data(
     }
 }
 
+/// Batch version: returns previous salary parts for ALL members in a data point.
+#[tauri::command]
+pub fn get_all_previous_member_data(
+    db: State<AppDb>,
+    data_point_id: i64,
+) -> Result<HashMap<i64, Vec<SalaryPart>>, String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    // Resolve the previous data point id (inherit from scenario group if needed)
+    let (prev_dp_id, scenario_group_id): (Option<i64>, Option<i64>) = conn
+        .query_row(
+            "SELECT previous_data_point_id, scenario_group_id FROM salary_data_points WHERE id = ?1",
+            params![data_point_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let prev_dp_id = match prev_dp_id {
+        Some(id) => id,
+        None => {
+            if let Some(sg_id) = scenario_group_id {
+                match conn.query_row(
+                    "SELECT previous_data_point_id FROM scenario_groups WHERE id = ?1",
+                    params![sg_id],
+                    |row| row.get::<_, Option<i64>>(0),
+                ) {
+                    Ok(Some(id)) => id,
+                    _ => return Ok(HashMap::new()),
+                }
+            } else {
+                return Ok(HashMap::new());
+            }
+        }
+    };
+
+    // Get all active members in the previous data point and their salary parts in one query
+    let mut stmt = conn
+        .prepare(
+            "SELECT sdpm.member_id, sp.id, sp.name, sp.amount, sp.frequency, sp.is_variable, sp.sort_order
+             FROM salary_data_point_members sdpm
+             JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.is_active = 1
+             ORDER BY sdpm.member_id, sp.sort_order ASC, sp.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut result: HashMap<i64, Vec<SalaryPart>> = HashMap::new();
+    let rows = stmt
+        .query_map(params![prev_dp_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                SalaryPart {
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                    amount: row.get(3)?,
+                    frequency: row.get(4)?,
+                    is_variable: row.get(5)?,
+                    sort_order: row.get(6)?,
+                },
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        let (member_id, part) = row.map_err(|e| e.to_string())?;
+        result.entry(member_id).or_default().push(part);
+    }
+
+    Ok(result)
+}
+
+/// Batch version: returns scenario member comparisons for ALL members in a scenario group.
+#[tauri::command]
+pub fn get_all_scenario_member_comparisons(
+    db: State<AppDb>,
+    scenario_group_id: i64,
+) -> Result<HashMap<i64, Vec<ScenarioMemberComparison>>, String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT sdpm.member_id, sdp.id, sdp.name,
+                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+             FROM salary_data_points sdp
+             JOIN salary_data_point_members sdpm ON sdpm.data_point_id = sdp.id
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdp.scenario_group_id = ?1
+             GROUP BY sdpm.member_id, sdp.id
+             ORDER BY sdpm.member_id, sdp.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut result: HashMap<i64, Vec<ScenarioMemberComparison>> = HashMap::new();
+    let rows = stmt
+        .query_map(params![scenario_group_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                ScenarioMemberComparison {
+                    data_point_id: row.get(1)?,
+                    data_point_name: row.get(2)?,
+                    annual_total: row.get(3)?,
+                },
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        let (member_id, comparison) = row.map_err(|e| e.to_string())?;
+        result.entry(member_id).or_default().push(comparison);
+    }
+
+    Ok(result)
+}
+
 // ── Salary over time command ──
 
 #[derive(Serialize)]
@@ -1763,7 +1891,7 @@ pub struct SalaryOverTimePoint {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut dp_stmt = conn
@@ -1778,41 +1906,62 @@ pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut member_stmt = conn
-        .prepare(
-            "SELECT sdpm.member_id, m.first_name, m.last_name, m.left_date,
-                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
-             FROM salary_data_point_members sdpm
-             JOIN team_members m ON m.id = sdpm.member_id
-             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
-             WHERE sdpm.data_point_id = ?1 AND sdpm.is_active = 1
-             GROUP BY sdpm.member_id
-             ORDER BY m.last_name, m.first_name",
-        )
+    // Fetch all members across all relevant data points in a single query (avoids N+1)
+    let dp_ids: Vec<i64> = data_points.iter().map(|(id, _)| *id).collect();
+    let placeholders: Vec<String> = dp_ids
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("?{}", i + 1))
+        .collect();
+    let sql = format!(
+        "SELECT sdpm.data_point_id, sdpm.member_id, m.first_name, m.last_name, m.left_date,
+                COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+         FROM salary_data_point_members sdpm
+         JOIN team_members m ON m.id = sdpm.member_id
+         LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+         WHERE sdpm.data_point_id IN ({}) AND sdpm.is_active = 1
+         GROUP BY sdpm.data_point_id, sdpm.member_id
+         ORDER BY sdpm.data_point_id, m.last_name, m.first_name",
+        placeholders.join(", ")
+    );
+
+    let mut member_stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = dp_ids
+        .iter()
+        .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+        .collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        params_vec.iter().map(|p| p.as_ref()).collect();
+
+    let mut members_by_dp: HashMap<i64, Vec<SalaryOverTimeMember>> = HashMap::new();
+    let rows = member_stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                SalaryOverTimeMember {
+                    member_id: row.get(1)?,
+                    first_name: row.get(2)?,
+                    last_name: row.get(3)?,
+                    left_date: row.get(4)?,
+                    annual_total: row.get(5)?,
+                },
+            ))
+        })
         .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::new();
-    for (dp_id, dp_name) in data_points {
-        let members = member_stmt
-            .query_map(params![dp_id], |row| {
-                Ok(SalaryOverTimeMember {
-                    member_id: row.get(0)?,
-                    first_name: row.get(1)?,
-                    last_name: row.get(2)?,
-                    left_date: row.get(3)?,
-                    annual_total: row.get(4)?,
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+    for row in rows {
+        let (dp_id, member) = row.map_err(|e| e.to_string())?;
+        members_by_dp.entry(dp_id).or_default().push(member);
+    }
 
-        result.push(SalaryOverTimePoint {
+    let result = data_points
+        .into_iter()
+        .map(|(dp_id, dp_name)| SalaryOverTimePoint {
             data_point_id: dp_id,
             data_point_name: dp_name,
-            members,
-        });
-    }
+            members: members_by_dp.remove(&dp_id).unwrap_or_default(),
+        })
+        .collect();
 
     Ok(result)
 }
@@ -1822,7 +1971,7 @@ pub fn get_salary_lineage(
     db: State<AppDb>,
     data_point_id: i64,
 ) -> Result<Vec<SalaryOverTimePoint>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     // Resolve the effective previous_data_point_id: for scenario children, inherit from the group
@@ -1907,6 +2056,30 @@ pub fn get_salary_lineage(
     Ok(result)
 }
 
+// ── Combined detail loader (detail + lineage + previous member data) ──
+
+#[derive(Serialize)]
+pub struct SalaryDataPointFull {
+    pub detail: SalaryDataPointDetail,
+    pub lineage: Vec<SalaryOverTimePoint>,
+    pub previous_data: HashMap<i64, Vec<SalaryPart>>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_salary_data_point_full(
+    db: State<AppDb>,
+    id: i64,
+) -> Result<SalaryDataPointFull, String> {
+    let detail = get_salary_data_point(db.clone(), id)?;
+    let lineage = get_salary_lineage(db.clone(), id)?;
+    let previous_data = get_all_previous_member_data(db, id)?;
+    Ok(SalaryDataPointFull {
+        detail,
+        lineage,
+        previous_data,
+    })
+}
+
 // ── Scenario group commands ──
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1915,7 +2088,7 @@ pub fn create_scenario_group(
     previous_data_point_id: Option<i64>,
     count: i64,
 ) -> Result<ScenarioGroup, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     if count < 2 {
@@ -2063,7 +2236,9 @@ pub fn create_scenario_group(
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
 
@@ -2072,7 +2247,7 @@ pub fn create_scenario_group(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE scenario_groups SET deleted_at = datetime('now') WHERE id = ?1",
@@ -2094,7 +2269,7 @@ pub fn update_scenario_group(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = ["name", "budget", "previous_data_point_id"];
     if !allowed.contains(&field.as_str()) {
@@ -2114,7 +2289,7 @@ pub fn update_scenario_group_range(
     min_salary: i64,
     max_salary: i64,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO scenario_group_ranges (scenario_group_id, title_id, min_salary, max_salary)
@@ -2133,7 +2308,7 @@ pub fn update_scenario_group_member(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = ["is_active", "is_promoted", "promoted_title_id"];
     if !allowed.contains(&field.as_str()) {
@@ -2164,7 +2339,7 @@ pub fn add_scenario(
     db: State<AppDb>,
     scenario_group_id: i64,
 ) -> Result<SalaryDataPointSummary, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     // Get current child count
@@ -2238,7 +2413,9 @@ pub fn add_scenario(
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
 
@@ -2247,7 +2424,7 @@ pub fn add_scenario(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn remove_scenario(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let sg_id: i64 = conn
@@ -2285,7 +2462,7 @@ pub fn add_member_to_data_point(
     data_point_id: i64,
     member_id: i64,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let scenario_group_id: Option<i64> = conn
@@ -2338,7 +2515,9 @@ pub fn add_member_to_data_point(
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
     result
@@ -2351,7 +2530,7 @@ pub fn remove_member_from_data_point(
     data_point_id: i64,
     member_id: i64,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let scenario_group_id: Option<i64> = conn
@@ -2392,7 +2571,9 @@ pub fn remove_member_from_data_point(
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
     result
@@ -2400,7 +2581,7 @@ pub fn remove_member_from_data_point(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn promote_scenario(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
@@ -2458,7 +2639,9 @@ pub fn promote_scenario(db: State<AppDb>, data_point_id: i64) -> Result<(), Stri
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
 
@@ -2470,7 +2653,7 @@ pub fn get_scenario_summaries(
     db: State<AppDb>,
     scenario_group_id: i64,
 ) -> Result<Vec<ScenarioSummary>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     // Use scenario_group_members for is_active/is_promoted (source of truth for scenarios)
@@ -2496,16 +2679,17 @@ pub fn get_scenario_summaries(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
+    // Headcount is the same for all scenarios in the group — query once before the loop
+    let headcount: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM scenario_group_members WHERE scenario_group_id = ?1 AND is_active = 1 AND is_promoted = 0",
+            params![scenario_group_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
     let mut result = Vec::new();
     for (dp_id, dp_name, total_salary) in summaries {
-        let headcount: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM scenario_group_members WHERE scenario_group_id = ?1 AND is_active = 1 AND is_promoted = 0",
-                params![scenario_group_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-
         result.push(ScenarioSummary {
             data_point_id: dp_id,
             data_point_name: dp_name,
@@ -2530,7 +2714,7 @@ pub fn get_scenario_member_comparison(
     scenario_group_id: i64,
     member_id: i64,
 ) -> Result<Vec<ScenarioMemberComparison>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut stmt = conn
@@ -2610,7 +2794,7 @@ pub struct ReportDetail {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_reports(db: State<AppDb>) -> Result<Vec<Report>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -2636,7 +2820,7 @@ pub fn get_reports(db: State<AppDb>) -> Result<Vec<Report>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_report(db: State<AppDb>) -> Result<Report, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO reports (name) VALUES ('New Report')", [])
         .map_err(|e| e.to_string())?;
@@ -2657,7 +2841,7 @@ pub fn update_report(
     field: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let allowed = [
         "name",
@@ -2676,7 +2860,7 @@ pub fn update_report(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_report(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM reports WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -2685,7 +2869,7 @@ pub fn delete_report(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_report_detail(db: State<AppDb>, id: i64) -> Result<ReportDetail, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let (name, collect_statuses, include_stakeholders, include_projects): (
@@ -2895,7 +3079,7 @@ pub struct ReportBlockData {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_report_blocks(db: State<AppDb>, report_id: i64) -> Result<Vec<ReportBlock>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -2925,7 +3109,7 @@ pub fn add_report_block(
     report_id: i64,
     block_type: String,
 ) -> Result<ReportBlock, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let next_order: i64 = conn
         .query_row(
@@ -2950,7 +3134,7 @@ pub fn add_report_block(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn remove_report_block(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM report_blocks WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -2963,7 +3147,7 @@ pub fn reorder_report_blocks(
     report_id: i64,
     block_ids: Vec<i64>,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     for (i, bid) in block_ids.iter().enumerate() {
         conn.execute(
@@ -2980,7 +3164,7 @@ pub fn get_report_block_data(
     db: State<AppDb>,
     report_id: i64,
 ) -> Result<Vec<ReportBlockData>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut stmt = conn
@@ -3426,7 +3610,7 @@ pub struct MeetingMemberInfo {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_meeting(db: State<AppDb>, team_member_id: i64) -> Result<Meeting, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO meetings (team_member_id) VALUES (?1)",
@@ -3452,7 +3636,7 @@ pub fn create_meeting(db: State<AppDb>, team_member_id: i64) -> Result<Meeting, 
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_meetings(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Meeting>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -3481,7 +3665,7 @@ pub fn get_meetings(db: State<AppDb>, team_member_id: i64) -> Result<Vec<Meeting
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_meeting_detail(db: State<AppDb>, id: i64) -> Result<MeetingDetail, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let (meeting_id, team_member_id, date): (i64, i64, String) = conn
@@ -3673,7 +3857,7 @@ pub fn add_meeting_update(
     team_member_id: i64,
     text: String,
 ) -> Result<CheckableItem, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "INSERT INTO status_items (team_member_id, text, meeting_id) VALUES (?1, ?2, ?3)",
@@ -3704,7 +3888,7 @@ pub fn check_talk_topic_in_meeting(
     meeting_id: i64,
     checked: bool,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     if checked {
         conn.execute(
@@ -3724,7 +3908,7 @@ pub fn check_talk_topic_in_meeting(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM meetings WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -3782,7 +3966,7 @@ pub struct TeamMeetingDetail {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn create_team_meeting(db: State<AppDb>) -> Result<TeamMeeting, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO team_meetings DEFAULT VALUES", [])
         .map_err(|e| e.to_string())?;
@@ -3804,7 +3988,7 @@ pub fn create_team_meeting(db: State<AppDb>) -> Result<TeamMeeting, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_team_meetings(db: State<AppDb>) -> Result<Vec<TeamMeeting>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -3831,7 +4015,7 @@ pub fn get_team_meetings(db: State<AppDb>) -> Result<Vec<TeamMeeting>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingDetail, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let date: String = conn
@@ -4055,7 +4239,7 @@ pub fn get_team_meeting_detail(db: State<AppDb>, id: i64) -> Result<TeamMeetingD
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_team_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM team_meetings WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -4064,7 +4248,7 @@ pub fn delete_team_meeting(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn escalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE talk_topics SET escalated = 1, escalated_at = datetime('now') WHERE id = ?1",
@@ -4076,7 +4260,7 @@ pub fn escalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn unescalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE talk_topics SET escalated = 0, escalated_at = NULL, team_meeting_id = NULL WHERE id = ?1",
@@ -4088,7 +4272,7 @@ pub fn unescalate_talk_topic(db: State<AppDb>, topic_id: i64) -> Result<(), Stri
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn resolve_escalated_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE talk_topics SET resolved = 1, resolved_at = datetime('now') WHERE id = ?1",
@@ -4100,7 +4284,7 @@ pub fn resolve_escalated_topic(db: State<AppDb>, topic_id: i64) -> Result<(), St
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn unresolve_escalated_topic(db: State<AppDb>, topic_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE talk_topics SET resolved = 0, resolved_at = NULL WHERE id = ?1",
@@ -4164,7 +4348,7 @@ pub fn export_data_point_salaries(
     data_point_id: i64,
     file_path: String,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let dp_name: String = conn
@@ -4244,7 +4428,7 @@ pub fn import_data_point_salaries(
     let data: SalaryExportData =
         serde_json::from_str(&json).map_err(|e| format!("Failed to parse file: {}", e))?;
 
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
@@ -4334,7 +4518,9 @@ pub fn import_data_point_salaries(
     match &result {
         Ok(_) => conn.execute_batch("COMMIT").map_err(|e| e.to_string())?,
         Err(_) => {
-            let _ = conn.execute_batch("ROLLBACK");
+            if let Err(e) = conn.execute_batch("ROLLBACK") {
+                eprintln!("[WARN] ROLLBACK failed: {}", e);
+            }
         }
     }
 
@@ -4345,7 +4531,7 @@ pub fn import_data_point_salaries(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn export_data(db: State<AppDb>, file_path: String) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let data = crate::export_import::export_all_data(conn)?;
     let json = serde_json::to_string_pretty(&data)
@@ -4363,7 +4549,7 @@ pub fn import_data(db: State<AppDb>, file_path: String, mode: String) -> Result<
     if data.version != 1 {
         return Err(format!("Unsupported export version: {}", data.version));
     }
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     crate::export_import::import_all_data(conn, data, &mode)
 }
@@ -4381,7 +4567,7 @@ pub struct SearchResult {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     if query.trim().len() < 2 {
@@ -4478,7 +4664,7 @@ pub fn upload_salary_template(
 
     std::fs::copy(&file_path, &dest_path).map_err(|e| format!("Failed to copy template: {}", e))?;
 
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE salary_data_points SET template_path = ?1 WHERE id = ?2",
@@ -4491,7 +4677,7 @@ pub fn upload_salary_template(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_salary_template(db: State<AppDb>, data_point_id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let template_path: Option<String> = conn
@@ -4550,7 +4736,7 @@ pub fn export_member_salary_docx(
     member_id: i64,
     output_path: String,
 ) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     // Get template path
@@ -4923,7 +5109,7 @@ fn extract_first_rpr(xml: &str) -> Option<String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn restore_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE team_members SET deleted_at = NULL WHERE id = ?1",
@@ -4935,7 +5121,7 @@ pub fn restore_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn restore_title(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE titles SET deleted_at = NULL WHERE id = ?1",
@@ -4947,7 +5133,7 @@ pub fn restore_title(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn restore_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE salary_data_points SET deleted_at = NULL WHERE id = ?1",
@@ -4959,7 +5145,7 @@ pub fn restore_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn restore_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute(
         "UPDATE scenario_groups SET deleted_at = NULL WHERE id = ?1",
@@ -4976,7 +5162,7 @@ pub fn restore_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn permanent_delete_team_member(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM team_members WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -4992,7 +5178,7 @@ pub fn permanent_delete_team_member(db: State<AppDb>, id: i64) -> Result<(), Str
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn permanent_delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM titles WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -5001,7 +5187,7 @@ pub fn permanent_delete_title(db: State<AppDb>, id: i64) -> Result<(), String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn permanent_delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM salary_data_points WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -5010,7 +5196,7 @@ pub fn permanent_delete_salary_data_point(db: State<AppDb>, id: i64) -> Result<(
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn permanent_delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("DELETE FROM scenario_groups WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -5019,7 +5205,7 @@ pub fn permanent_delete_scenario_group(db: State<AppDb>, id: i64) -> Result<(), 
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_trashed_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -5099,7 +5285,7 @@ pub fn get_trashed_team_members(db: State<AppDb>) -> Result<Vec<TeamMember>, Str
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_trashed_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
         .prepare(
@@ -5122,7 +5308,7 @@ pub fn get_trashed_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_trashed_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, String> {
-    let guard = db.conn.lock().unwrap();
+    let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
 
     let mut dp_stmt = conn

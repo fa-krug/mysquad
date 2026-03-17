@@ -1,19 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { MoneyInput } from "@/components/ui/money-input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import { showError } from "@/lib/toast";
-import { Switch } from "@/components/ui/switch";
 import {
   updateSalaryDataPoint,
   updateSalaryDataPointMember,
@@ -42,6 +28,10 @@ import type {
   TeamMember,
   Title,
 } from "@/lib/types";
+import type { MemberState } from "@/components/salary/DataPointMemberList";
+import { ScenarioGroupEditDialog } from "@/components/salary/ScenarioGroupEditDialog";
+import { DataPointCreateDialog } from "@/components/salary/DataPointCreateDialog";
+import { DataPointEditDialog } from "@/components/salary/DataPointEditDialog";
 
 interface DataPointModalProps {
   dataPointId: number | null;
@@ -71,9 +61,7 @@ export function DataPointModal({
   const [budget, setBudget] = useState("");
   const [previousDpId, setPreviousDpId] = useState("");
   const [ranges, setRanges] = useState<Record<number, { min: string; max: string }>>({});
-  const [memberStates, setMemberStates] = useState<
-    Record<number, { active: boolean; promoted: boolean; promotedTitleId: string }>
-  >({});
+  const [memberStates, setMemberStates] = useState<Record<number, MemberState>>({});
   const [saving, setSaving] = useState(false);
   const [salaryMessage, setSalaryMessage] = useState<string | null>(null);
   const [salaryError, setSalaryError] = useState(false);
@@ -105,8 +93,7 @@ export function DataPointModal({
       };
     });
     setRanges(rangeMap);
-    const mStates: Record<number, { active: boolean; promoted: boolean; promotedTitleId: string }> =
-      {};
+    const mStates: Record<number, MemberState> = {};
     d.members.forEach((m) => {
       mStates[m.id] = {
         active: m.is_active,
@@ -137,10 +124,7 @@ export function DataPointModal({
         setBudget("");
         setPreviousDpId("");
         setRanges({});
-        const mStates: Record<
-          number,
-          { active: boolean; promoted: boolean; promotedTitleId: string }
-        > = {};
+        const mStates: Record<number, MemberState> = {};
         d.members.forEach((m) => {
           mStates[m.id] = { active: true, promoted: false, promotedTitleId: "" };
         });
@@ -177,10 +161,7 @@ export function DataPointModal({
           };
         });
         setRanges(rangeMap);
-        const mStates: Record<
-          number,
-          { active: boolean; promoted: boolean; promotedTitleId: string }
-        > = {};
+        const mStates: Record<number, MemberState> = {};
         d.members.forEach((m) => {
           mStates[m.id] = {
             active: m.is_active,
@@ -197,7 +178,111 @@ export function DataPointModal({
     }
   }, [open, editingGroup]);
 
-  async function handlePreviousChange(newPrevId: string) {
+  // --- Shared callbacks ---
+
+  function validateName(val: string): string | null {
+    return required("Name")(val || null);
+  }
+
+  function validateBudget(val: string): string | null {
+    return positiveNumber(val || null);
+  }
+
+  function handleNameChange(value: string) {
+    setName(value);
+    setErrors((prev) => ({ ...prev, name: validateName(value) }));
+  }
+
+  function handleBudgetChange(value: string) {
+    setBudget(value);
+    setErrors((prev) => ({ ...prev, budget: validateBudget(value) }));
+  }
+
+  function handleRangeChange(titleId: number, field: "min" | "max", value: string) {
+    setRanges((prev) => ({
+      ...prev,
+      [titleId]: {
+        min: field === "min" ? value : (prev[titleId]?.min ?? ""),
+        max: field === "max" ? value : (prev[titleId]?.max ?? ""),
+      },
+    }));
+  }
+
+  function handleToggleActive(memberId: number, checked: boolean) {
+    setMemberStates((prev) => ({
+      ...prev,
+      [memberId]: { ...prev[memberId], active: checked },
+    }));
+  }
+
+  function handleTogglePromoted(memberId: number, checked: boolean) {
+    setMemberStates((prev) => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        promoted: checked,
+        promotedTitleId: checked ? (prev[memberId]?.promotedTitleId ?? "") : "",
+      },
+    }));
+  }
+
+  function handleChangePromotedTitle(memberId: number, titleId: string) {
+    setMemberStates((prev) => ({
+      ...prev,
+      [memberId]: { ...prev[memberId], promotedTitleId: titleId },
+    }));
+  }
+
+  // --- Create mode handlers ---
+
+  async function handleCreatePreviousChange(newPrevId: string) {
+    setPreviousDpId(newPrevId);
+    if (isScenario && newPrevId) {
+      const prevDetail = await getSalaryDataPoint(Number(newPrevId));
+      if (prevDetail.budget != null) {
+        setBudget(String(Math.round(prevDetail.budget / 100)));
+      }
+    }
+  }
+
+  async function handleCreateSave() {
+    const nameErr = validateName(name);
+    const budgetErr = validateBudget(budget);
+    setErrors({ name: nameErr, budget: budgetErr });
+    if (nameErr || budgetErr) return;
+    setSaving(true);
+    try {
+      if (isScenario) {
+        const group = await createScenarioGroup(
+          previousDpId ? Number(previousDpId) : null,
+          scenarioCount,
+        );
+        await updateScenarioGroup(group.id, "name", name);
+        const budgetCents = String(Math.round(parseFloat(budget) * 100));
+        await updateScenarioGroup(group.id, "budget", budgetCents);
+      } else {
+        const dp = await createSalaryDataPoint();
+        if (name && name !== dp.name) {
+          await updateSalaryDataPoint(dp.id, "name", name);
+        }
+        const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
+        if (budgetCents) {
+          await updateSalaryDataPoint(dp.id, "budget", budgetCents);
+        }
+        if (previousDpId) {
+          await updateSalaryDataPoint(dp.id, "previous_data_point_id", previousDpId);
+        }
+      }
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // --- Edit mode handlers ---
+
+  async function handleEditPreviousChange(newPrevId: string) {
     setPreviousDpId(newPrevId);
     // On create: fill form values from the selected previous DP
     if (isNew && newPrevId && detail) {
@@ -213,10 +298,7 @@ export function DataPointModal({
       setRanges(rangeMap);
       // Update member states from previous DP where members match
       const prevMemberMap = new Map(prevDetail.members.map((m) => [m.member_id, m]));
-      const mStates: Record<
-        number,
-        { active: boolean; promoted: boolean; promotedTitleId: string }
-      > = {};
+      const mStates: Record<number, MemberState> = {};
       detail.members.forEach((m) => {
         const prev = prevMemberMap.get(m.member_id);
         if (prev) {
@@ -235,6 +317,20 @@ export function DataPointModal({
       });
       setMemberStates(mStates);
     }
+  }
+
+  async function handleEditRemoveMember(_memberId: number, memberMemberId: number) {
+    if (!detail) return;
+    await removeMemberFromDataPoint(detail.id, memberMemberId);
+    const d = await getSalaryDataPoint(detail.id);
+    applyDetail(d);
+  }
+
+  async function handleEditAddMember(memberId: number) {
+    if (!detail) return;
+    await addMemberToDataPoint(detail.id, memberId);
+    const d = await getSalaryDataPoint(detail.id);
+    applyDetail(d);
   }
 
   async function handleExportSalaries() {
@@ -275,12 +371,89 @@ export function DataPointModal({
     }
   }
 
-  function validateName(val: string): string | null {
-    return required("Name")(val || null);
+  async function handleSave() {
+    if (!detail) return;
+    const nameErr = validateName(name);
+    const budgetErr = validateBudget(budget);
+    setErrors({ name: nameErr, budget: budgetErr });
+    if (nameErr || budgetErr) return;
+    setSaving(true);
+    try {
+      if (name !== detail.name) {
+        await updateSalaryDataPoint(detail.id, "name", name);
+      }
+      const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
+      const oldBudget = detail.budget != null ? String(detail.budget) : null;
+      if (budgetCents !== oldBudget) {
+        await updateSalaryDataPoint(detail.id, "budget", budgetCents);
+      }
+      // Save previous_data_point_id
+      const newPrevId = previousDpId === "" ? null : previousDpId;
+      const oldPrevId =
+        detail.previous_data_point_id != null ? String(detail.previous_data_point_id) : null;
+      if (newPrevId !== oldPrevId) {
+        await updateSalaryDataPoint(detail.id, "previous_data_point_id", newPrevId);
+      }
+      for (const member of detail.members) {
+        const state = memberStates[member.id];
+        if (!state) continue;
+        if (state.active !== member.is_active) {
+          await updateSalaryDataPointMember(member.id, "is_active", state.active ? "1" : "0");
+        }
+        if (state.promoted !== member.is_promoted) {
+          await updateSalaryDataPointMember(member.id, "is_promoted", state.promoted ? "1" : "0");
+        }
+        const oldPromotedTitleId =
+          member.promoted_title_id != null ? String(member.promoted_title_id) : "";
+        if (state.promotedTitleId !== oldPromotedTitleId) {
+          await updateSalaryDataPointMember(
+            member.id,
+            "promoted_title_id",
+            state.promotedTitleId === "" ? null : state.promotedTitleId,
+          );
+        }
+      }
+      for (const title of titles) {
+        const r = ranges[title.id];
+        if (!r) continue;
+        const minCents = r.min === "" ? 0 : Math.round(parseFloat(r.min) * 100);
+        const maxCents = r.max === "" ? 0 : Math.round(parseFloat(r.max) * 100);
+        if (minCents > 0 || maxCents > 0) {
+          await updateSalaryRange(detail.id, title.id, minCents, maxCents);
+        }
+      }
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function validateBudget(val: string): string | null {
-    return positiveNumber(val || null);
+  // --- Group edit handlers ---
+
+  async function handleGroupRemoveMember(_memberId: number, memberMemberId: number) {
+    if (!editingGroup) return;
+    await removeMemberFromDataPoint(editingGroup.children[0].id, memberMemberId);
+    if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
+  }
+
+  async function handleGroupAddMember(memberId: number) {
+    if (!editingGroup) return;
+    await addMemberToDataPoint(editingGroup.children[0].id, memberId);
+    if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
+  }
+
+  async function handleAddScenario() {
+    if (!editingGroup) return;
+    await addScenario(editingGroup.id);
+    if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
+  }
+
+  async function handleRemoveScenario() {
+    if (!editingGroup || editingGroup.children.length <= 2) return;
+    const lastChild = editingGroup.children[editingGroup.children.length - 1];
+    await removeScenario(lastChild.id);
+    if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
   }
 
   async function handleGroupSave() {
@@ -366,755 +539,103 @@ export function DataPointModal({
     }
   }
 
-  async function handleSave() {
-    if (!detail) return;
-    const nameErr = validateName(name);
-    const budgetErr = validateBudget(budget);
-    setErrors({ name: nameErr, budget: budgetErr });
-    if (nameErr || budgetErr) return;
-    setSaving(true);
-    try {
-      if (name !== detail.name) {
-        await updateSalaryDataPoint(detail.id, "name", name);
-      }
-      const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
-      const oldBudget = detail.budget != null ? String(detail.budget) : null;
-      if (budgetCents !== oldBudget) {
-        await updateSalaryDataPoint(detail.id, "budget", budgetCents);
-      }
-      // Save previous_data_point_id
-      const newPrevId = previousDpId === "" ? null : previousDpId;
-      const oldPrevId =
-        detail.previous_data_point_id != null ? String(detail.previous_data_point_id) : null;
-      if (newPrevId !== oldPrevId) {
-        await updateSalaryDataPoint(detail.id, "previous_data_point_id", newPrevId);
-      }
-      for (const member of detail.members) {
-        const state = memberStates[member.id];
-        if (!state) continue;
-        if (state.active !== member.is_active) {
-          await updateSalaryDataPointMember(member.id, "is_active", state.active ? "1" : "0");
-        }
-        if (state.promoted !== member.is_promoted) {
-          await updateSalaryDataPointMember(member.id, "is_promoted", state.promoted ? "1" : "0");
-        }
-        const oldPromotedTitleId =
-          member.promoted_title_id != null ? String(member.promoted_title_id) : "";
-        if (state.promotedTitleId !== oldPromotedTitleId) {
-          await updateSalaryDataPointMember(
-            member.id,
-            "promoted_title_id",
-            state.promotedTitleId === "" ? null : state.promotedTitleId,
-          );
-        }
-      }
-      for (const title of titles) {
-        const r = ranges[title.id];
-        if (!r) continue;
-        const minCents = r.min === "" ? 0 : Math.round(parseFloat(r.min) * 100);
-        const maxCents = r.max === "" ? 0 : Math.round(parseFloat(r.max) * 100);
-        if (minCents > 0 || maxCents > 0) {
-          await updateSalaryRange(detail.id, title.id, minCents, maxCents);
-        }
-      }
-      onSaved();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  }
+  // --- Render ---
 
   if (editingGroup) {
     return (
-      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Edit Scenario Group</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto pr-4">
-            <div className="flex flex-col gap-4 py-2">
-              <div className="flex flex-col gap-1">
-                <Label>Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
-                  }}
-                  aria-invalid={!!errors.name || undefined}
-                />
-                <div className="h-3 text-xs">
-                  {errors.name && <span className="text-destructive">{errors.name}</span>}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label>Budget</Label>
-                <MoneyInput
-                  min="0"
-                  value={budget}
-                  onChange={(e) => {
-                    setBudget(e.target.value);
-                    setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
-                  }}
-                  placeholder="Annual budget"
-                  aria-invalid={!!errors.budget || undefined}
-                />
-                <div className="h-3 text-xs">
-                  {errors.budget && <span className="text-destructive">{errors.budget}</span>}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Compare to</Label>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                  value={previousDpId}
-                  onChange={(e) => setPreviousDpId(e.target.value)}
-                >
-                  <option value="">None</option>
-                  {otherDataPoints.map((dp) => (
-                    <option key={dp.id} value={String(dp.id)}>
-                      {dp.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Separator />
-              <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
-              {titles.map((title) => (
-                <div key={title.id} className="flex items-center gap-2">
-                  <span className="flex-1 min-w-0 truncate text-sm" title={title.name}>
-                    {title.name}
-                  </span>
-                  <MoneyInput
-                    min="0"
-                    className="w-24 sm:w-32"
-                    placeholder="Min"
-                    value={ranges[title.id]?.min ?? ""}
-                    onChange={(e) =>
-                      setRanges((prev) => ({
-                        ...prev,
-                        [title.id]: {
-                          ...prev[title.id],
-                          min: e.target.value,
-                          max: prev[title.id]?.max ?? "",
-                        },
-                      }))
-                    }
-                  />
-                  <span className="text-xs text-muted-foreground">–</span>
-                  <MoneyInput
-                    min="0"
-                    className="w-24 sm:w-32"
-                    placeholder="Max"
-                    value={ranges[title.id]?.max ?? ""}
-                    onChange={(e) =>
-                      setRanges((prev) => ({
-                        ...prev,
-                        [title.id]: { min: prev[title.id]?.min ?? "", max: e.target.value },
-                      }))
-                    }
-                  />
-                </div>
-              ))}
-              {detail && (
-                <>
-                  <Separator />
-                  <h3 className="text-sm font-semibold">Team Members</h3>
-                  {detail.members.map((member) => {
-                    const state = memberStates[member.id] ?? {
-                      active: member.is_active,
-                      promoted: member.is_promoted,
-                      promotedTitleId:
-                        member.promoted_title_id != null ? String(member.promoted_title_id) : "",
-                    };
-                    return (
-                      <div key={member.id} className="flex flex-col gap-1.5">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                          <span className="w-36 sm:w-48 shrink-0 truncate">
-                            {member.last_name}, {member.first_name}
-                          </span>
-                          <label className="flex items-center gap-1.5">
-                            <Checkbox
-                              checked={state.active}
-                              onCheckedChange={(checked) =>
-                                setMemberStates((prev) => ({
-                                  ...prev,
-                                  [member.id]: { ...prev[member.id], active: !!checked },
-                                }))
-                              }
-                            />
-                            <span>Active</span>
-                          </label>
-                          <label className="flex items-center gap-1.5">
-                            <Checkbox
-                              checked={state.promoted}
-                              onCheckedChange={(checked) =>
-                                setMemberStates((prev) => ({
-                                  ...prev,
-                                  [member.id]: {
-                                    ...prev[member.id],
-                                    promoted: !!checked,
-                                    promotedTitleId: checked
-                                      ? (prev[member.id]?.promotedTitleId ?? "")
-                                      : "",
-                                  },
-                                }))
-                              }
-                            />
-                            <span>Promoted</span>
-                          </label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={async () => {
-                              await removeMemberFromDataPoint(
-                                editingGroup.children[0].id,
-                                member.member_id,
-                              );
-                              if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                        {state.promoted && (
-                          <div className="sm:ml-48 sm:pl-4 pl-6">
-                            <select
-                              className="h-7 w-48 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                              value={state.promotedTitleId}
-                              onChange={(e) =>
-                                setMemberStates((prev) => ({
-                                  ...prev,
-                                  [member.id]: {
-                                    ...prev[member.id],
-                                    promotedTitleId: e.target.value,
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="">Select new title…</option>
-                              {titles.map((t) => (
-                                <option key={t.id} value={String(t.id)}>
-                                  {t.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {(() => {
-                    const existingMemberIds = new Set(detail.members.map((m) => m.member_id));
-                    const available = allMembers.filter((m) => !existingMemberIds.has(m.id));
-                    if (available.length === 0) return null;
-                    return (
-                      <select
-                        className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                        value=""
-                        onChange={async (e) => {
-                          const memberId = Number(e.target.value);
-                          if (!memberId) return;
-                          await addMemberToDataPoint(editingGroup.children[0].id, memberId);
-                          if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
-                        }}
-                      >
-                        <option value="">Add team member…</option>
-                        {available
-                          .sort(
-                            (a, b) =>
-                              a.last_name.localeCompare(b.last_name) ||
-                              a.first_name.localeCompare(b.first_name),
-                          )
-                          .map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.last_name}, {m.first_name}
-                            </option>
-                          ))}
-                      </select>
-                    );
-                  })()}
-                </>
-              )}
-              <Separator />
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">
-                  Scenarios ({editingGroup.children.length})
-                </h3>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={editingGroup.children.length <= 2}
-                    onClick={async () => {
-                      if (editingGroup.children.length <= 2) return;
-                      const lastChild = editingGroup.children[editingGroup.children.length - 1];
-                      await removeScenario(lastChild.id);
-                      if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
-                    }}
-                  >
-                    −
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      await addScenario(editingGroup.id);
-                      if (onGroupRefresh) await onGroupRefresh(editingGroup.id);
-                    }}
-                  >
-                    +
-                  </Button>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {editingGroup.children.map((c) => (
-                  <Input
-                    key={c.id}
-                    value={scenarioNames[c.id] ?? c.name}
-                    onChange={(e) =>
-                      setScenarioNames((prev) => ({ ...prev, [c.id]: e.target.value }))
-                    }
-                    className="h-8 text-sm"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleGroupSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ScenarioGroupEditDialog
+        open={open}
+        onClose={onClose}
+        editingGroup={editingGroup}
+        name={name}
+        budget={budget}
+        previousDpId={previousDpId}
+        otherDataPoints={otherDataPoints}
+        errors={errors}
+        ranges={ranges}
+        memberStates={memberStates}
+        detail={detail}
+        titles={titles}
+        allMembers={allMembers}
+        scenarioNames={scenarioNames}
+        saving={saving}
+        onNameChange={handleNameChange}
+        onBudgetChange={handleBudgetChange}
+        onPreviousChange={(v) => setPreviousDpId(v)}
+        onRangeChange={handleRangeChange}
+        onToggleActive={handleToggleActive}
+        onTogglePromoted={handleTogglePromoted}
+        onChangePromotedTitle={handleChangePromotedTitle}
+        onRemoveMember={handleGroupRemoveMember}
+        onAddMember={handleGroupAddMember}
+        onScenarioNameChange={(childId, value) =>
+          setScenarioNames((prev) => ({ ...prev, [childId]: value }))
+        }
+        onAddScenario={handleAddScenario}
+        onRemoveScenario={handleRemoveScenario}
+        onSave={handleGroupSave}
+      />
     );
   }
 
   // Pure create mode: no pre-created data point, show simplified form
   if (isNew && !dataPointId && !editingGroup) {
-    async function handleCreateSave() {
-      const nameErr = validateName(name);
-      const budgetErr = validateBudget(budget);
-      setErrors({ name: nameErr, budget: budgetErr });
-      if (nameErr || budgetErr) return;
-      setSaving(true);
-      try {
-        if (isScenario) {
-          const group = await createScenarioGroup(
-            previousDpId ? Number(previousDpId) : null,
-            scenarioCount,
-          );
-          await updateScenarioGroup(group.id, "name", name);
-          const budgetCents = String(Math.round(parseFloat(budget) * 100));
-          await updateScenarioGroup(group.id, "budget", budgetCents);
-        } else {
-          const dp = await createSalaryDataPoint();
-          if (name && name !== dp.name) {
-            await updateSalaryDataPoint(dp.id, "name", name);
-          }
-          const budgetCents = budget === "" ? null : String(Math.round(parseFloat(budget) * 100));
-          if (budgetCents) {
-            await updateSalaryDataPoint(dp.id, "budget", budgetCents);
-          }
-          if (previousDpId) {
-            await updateSalaryDataPoint(dp.id, "previous_data_point_id", previousDpId);
-          }
-        }
-        onSaved();
-        onClose();
-      } finally {
-        setSaving(false);
-      }
-    }
-
     return (
-      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New Data Point</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 py-2">
-            <div className="flex items-center justify-between">
-              <Label>Create as Scenario Group</Label>
-              <Switch checked={isScenario} onCheckedChange={setIsScenario} />
-            </div>
-            {isScenario ? (
-              <>
-                <div className="flex flex-col gap-1">
-                  <Label>Name</Label>
-                  <Input
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
-                    }}
-                    placeholder="Scenario group name"
-                    aria-invalid={!!errors.name || undefined}
-                  />
-                  <div className="h-3 text-xs">
-                    {errors.name && <span className="text-destructive">{errors.name}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Compare to</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                    value={previousDpId}
-                    onChange={async (e) => {
-                      const newPrevId = e.target.value;
-                      setPreviousDpId(newPrevId);
-                      if (newPrevId) {
-                        const prevDetail = await getSalaryDataPoint(Number(newPrevId));
-                        if (prevDetail.budget != null) {
-                          setBudget(String(Math.round(prevDetail.budget / 100)));
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">None (empty scenarios)</option>
-                    {otherDataPoints.map((dp) => (
-                      <option key={dp.id} value={String(dp.id)}>
-                        {dp.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Budget</Label>
-                  <MoneyInput
-                    min="0"
-                    value={budget}
-                    onChange={(e) => {
-                      setBudget(e.target.value);
-                      setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
-                    }}
-                    placeholder="Annual budget"
-                    aria-invalid={!!errors.budget || undefined}
-                  />
-                  <div className="h-3 text-xs">
-                    {errors.budget && <span className="text-destructive">{errors.budget}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Number of Scenarios</Label>
-                  <Input
-                    type="number"
-                    min={2}
-                    value={scenarioCount}
-                    onChange={(e) => setScenarioCount(Math.max(2, parseInt(e.target.value) || 2))}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex flex-col gap-1">
-                  <Label>Name</Label>
-                  <Input
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
-                    }}
-                    placeholder="Data point name"
-                    aria-invalid={!!errors.name || undefined}
-                  />
-                  <div className="h-3 text-xs">
-                    {errors.name && <span className="text-destructive">{errors.name}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Compare to</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                    value={previousDpId}
-                    onChange={(e) => setPreviousDpId(e.target.value)}
-                  >
-                    <option value="">None</option>
-                    {otherDataPoints.map((dp) => (
-                      <option key={dp.id} value={String(dp.id)}>
-                        {dp.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Budget</Label>
-                  <MoneyInput
-                    min="0"
-                    value={budget}
-                    onChange={(e) => {
-                      setBudget(e.target.value);
-                      setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
-                    }}
-                    placeholder="Annual budget"
-                    aria-invalid={!!errors.budget || undefined}
-                  />
-                  <div className="h-3 text-xs">
-                    {errors.budget && <span className="text-destructive">{errors.budget}</span>}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateSave} disabled={saving}>
-              {saving ? "Creating…" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DataPointCreateDialog
+        open={open}
+        onClose={onClose}
+        name={name}
+        budget={budget}
+        previousDpId={previousDpId}
+        otherDataPoints={otherDataPoints}
+        errors={errors}
+        isScenario={isScenario}
+        scenarioCount={scenarioCount}
+        saving={saving}
+        onNameChange={handleNameChange}
+        onBudgetChange={handleBudgetChange}
+        onPreviousChange={handleCreatePreviousChange}
+        onIsScenarioChange={setIsScenario}
+        onScenarioCountChange={setScenarioCount}
+        onSave={handleCreateSave}
+      />
     );
   }
 
   if (!detail) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>{isNew ? "New Data Point" : "Edit Data Point"}</DialogTitle>
-        </DialogHeader>
-        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
-          <div className="flex flex-col gap-4 py-2">
-            <div className="flex flex-col gap-1">
-              <Label>Name</Label>
-              <Input
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setErrors((prev) => ({ ...prev, name: validateName(e.target.value) }));
-                }}
-                aria-invalid={!!errors.name || undefined}
-              />
-              <div className="h-3 text-xs">
-                {errors.name && <span className="text-destructive">{errors.name}</span>}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Compare to</Label>
-              <select
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                value={previousDpId}
-                onChange={(e) => handlePreviousChange(e.target.value)}
-              >
-                <option value="">None</option>
-                {otherDataPoints.map((dp) => (
-                  <option key={dp.id} value={String(dp.id)}>
-                    {dp.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Budget</Label>
-              <MoneyInput
-                min="0"
-                value={budget}
-                onChange={(e) => {
-                  setBudget(e.target.value);
-                  setErrors((prev) => ({ ...prev, budget: validateBudget(e.target.value) }));
-                }}
-                placeholder="Annual budget"
-                aria-invalid={!!errors.budget || undefined}
-              />
-              <div className="h-3 text-xs">
-                {errors.budget && <span className="text-destructive">{errors.budget}</span>}
-              </div>
-            </div>
-
-            <Separator />
-            <h3 className="text-sm font-semibold">Salary Ranges per Title</h3>
-            {titles.map((title) => (
-              <div key={title.id} className="flex items-center gap-2">
-                <span className="flex-1 min-w-0 truncate text-sm" title={title.name}>
-                  {title.name}
-                </span>
-                <MoneyInput
-                  min="0"
-                  className="w-24 sm:w-32"
-                  placeholder="Min"
-                  value={ranges[title.id]?.min ?? ""}
-                  onChange={(e) =>
-                    setRanges((prev) => ({
-                      ...prev,
-                      [title.id]: {
-                        ...prev[title.id],
-                        min: e.target.value,
-                        max: prev[title.id]?.max ?? "",
-                      },
-                    }))
-                  }
-                />
-                <span className="text-xs text-muted-foreground">–</span>
-                <MoneyInput
-                  min="0"
-                  className="w-24 sm:w-32"
-                  placeholder="Max"
-                  value={ranges[title.id]?.max ?? ""}
-                  onChange={(e) =>
-                    setRanges((prev) => ({
-                      ...prev,
-                      [title.id]: { min: prev[title.id]?.min ?? "", max: e.target.value },
-                    }))
-                  }
-                />
-              </div>
-            ))}
-
-            <Separator />
-            <h3 className="text-sm font-semibold">Team Members</h3>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExportSalaries}
-                className="rounded-md border border-input px-2.5 py-1 text-xs transition-colors hover:bg-muted"
-              >
-                Export Salaries
-              </button>
-              <button
-                type="button"
-                onClick={handleImportSalaries}
-                className="rounded-md border border-input px-2.5 py-1 text-xs transition-colors hover:bg-muted"
-              >
-                Import Salaries
-              </button>
-              {salaryMessage && (
-                <span className={`text-xs ${salaryError ? "text-destructive" : "text-green-600"}`}>
-                  {salaryMessage}
-                </span>
-              )}
-            </div>
-
-            {detail.members.map((member) => {
-              const state = memberStates[member.id] ?? {
-                active: member.is_active,
-                promoted: member.is_promoted,
-                promotedTitleId:
-                  member.promoted_title_id != null ? String(member.promoted_title_id) : "",
-              };
-              return (
-                <div key={member.id} className="flex flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                    <span className="w-36 sm:w-48 shrink-0 truncate">
-                      {member.last_name}, {member.first_name}
-                    </span>
-                    <label className="flex items-center gap-1.5">
-                      <Checkbox
-                        checked={state.active}
-                        onCheckedChange={(checked) =>
-                          setMemberStates((prev) => ({
-                            ...prev,
-                            [member.id]: { ...prev[member.id], active: !!checked },
-                          }))
-                        }
-                      />
-                      <span>Active</span>
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <Checkbox
-                        checked={state.promoted}
-                        onCheckedChange={(checked) =>
-                          setMemberStates((prev) => ({
-                            ...prev,
-                            [member.id]: {
-                              ...prev[member.id],
-                              promoted: !!checked,
-                              promotedTitleId: checked
-                                ? (prev[member.id]?.promotedTitleId ?? "")
-                                : "",
-                            },
-                          }))
-                        }
-                      />
-                      <span>Promoted</span>
-                    </label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={async () => {
-                        await removeMemberFromDataPoint(detail.id, member.member_id);
-                        const d = await getSalaryDataPoint(detail.id);
-                        applyDetail(d);
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                  {state.promoted && (
-                    <div className="sm:ml-48 sm:pl-4 pl-6">
-                      <select
-                        className="h-7 w-48 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                        value={state.promotedTitleId}
-                        onChange={(e) =>
-                          setMemberStates((prev) => ({
-                            ...prev,
-                            [member.id]: { ...prev[member.id], promotedTitleId: e.target.value },
-                          }))
-                        }
-                      >
-                        <option value="">Select new title…</option>
-                        {titles.map((t) => (
-                          <option key={t.id} value={String(t.id)}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {(() => {
-              const existingMemberIds = new Set(detail.members.map((m) => m.member_id));
-              const available = allMembers.filter((m) => !existingMemberIds.has(m.id));
-              if (available.length === 0) return null;
-              return (
-                <select
-                  className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
-                  value=""
-                  onChange={async (e) => {
-                    const memberId = Number(e.target.value);
-                    if (!memberId) return;
-                    await addMemberToDataPoint(detail.id, memberId);
-                    const d = await getSalaryDataPoint(detail.id);
-                    applyDetail(d);
-                  }}
-                >
-                  <option value="">Add team member…</option>
-                  {available
-                    .sort(
-                      (a, b) =>
-                        a.last_name.localeCompare(b.last_name) ||
-                        a.first_name.localeCompare(b.first_name),
-                    )
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.last_name}, {m.first_name}
-                      </option>
-                    ))}
-                </select>
-              );
-            })()}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DataPointEditDialog
+      open={open}
+      onClose={onClose}
+      isNew={isNew}
+      detail={detail}
+      name={name}
+      budget={budget}
+      previousDpId={previousDpId}
+      otherDataPoints={otherDataPoints}
+      errors={errors}
+      ranges={ranges}
+      memberStates={memberStates}
+      titles={titles}
+      allMembers={allMembers}
+      saving={saving}
+      salaryMessage={salaryMessage}
+      salaryError={salaryError}
+      onNameChange={handleNameChange}
+      onBudgetChange={handleBudgetChange}
+      onPreviousChange={handleEditPreviousChange}
+      onRangeChange={handleRangeChange}
+      onToggleActive={handleToggleActive}
+      onTogglePromoted={handleTogglePromoted}
+      onChangePromotedTitle={handleChangePromotedTitle}
+      onRemoveMember={handleEditRemoveMember}
+      onAddMember={handleEditAddMember}
+      onExportSalaries={handleExportSalaries}
+      onImportSalaries={handleImportSalaries}
+      onSave={handleSave}
+    />
   );
 }
+
+export default DataPointModal;
