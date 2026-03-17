@@ -1,7 +1,7 @@
 use crate::db::{self, AppDb};
 use crate::platform::{self, NativeSecurity, PlatformSecurity};
 use chrono::Datelike;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
@@ -1793,6 +1793,96 @@ pub fn get_salary_over_time(db: State<AppDb>) -> Result<Vec<SalaryOverTimePoint>
 
     let mut result = Vec::new();
     for (dp_id, dp_name) in data_points {
+        let members = member_stmt
+            .query_map(params![dp_id], |row| {
+                Ok(SalaryOverTimeMember {
+                    member_id: row.get(0)?,
+                    first_name: row.get(1)?,
+                    last_name: row.get(2)?,
+                    left_date: row.get(3)?,
+                    annual_total: row.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        result.push(SalaryOverTimePoint {
+            data_point_id: dp_id,
+            data_point_name: dp_name,
+            members,
+        });
+    }
+
+    Ok(result)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_salary_lineage(
+    db: State<AppDb>,
+    data_point_id: i64,
+) -> Result<Vec<SalaryOverTimePoint>, String> {
+    let guard = db.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+
+    // Resolve the effective previous_data_point_id: for scenario children, inherit from the group
+    let (start_id, start_name): (i64, String) = conn
+        .query_row(
+            "SELECT sdp.id, sdp.name FROM salary_data_points sdp WHERE sdp.id = ?1",
+            params![data_point_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Walk the previous_data_point_id chain backwards, collecting IDs
+    // For scenario children, previous_data_point_id comes from the group
+    let mut chain: Vec<(i64, String)> = vec![(start_id, start_name)];
+    let mut current_id = data_point_id;
+    loop {
+        let prev: Option<(i64, String)> = conn
+            .query_row(
+                "SELECT prev.id, prev.name
+                 FROM salary_data_points sdp
+                 LEFT JOIN scenario_groups sg ON sg.id = sdp.scenario_group_id
+                 JOIN salary_data_points prev ON prev.id = COALESCE(sg.previous_data_point_id, sdp.previous_data_point_id)
+                 WHERE sdp.id = ?1 AND prev.deleted_at IS NULL",
+                params![current_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        match prev {
+            Some((prev_id, prev_name)) => {
+                // Guard against cycles
+                if chain.iter().any(|(id, _)| *id == prev_id) {
+                    break;
+                }
+                chain.push((prev_id, prev_name));
+                current_id = prev_id;
+            }
+            None => break,
+        }
+    }
+
+    // Reverse so oldest is first
+    chain.reverse();
+
+    let mut member_stmt = conn
+        .prepare(
+            "SELECT sdpm.member_id, m.first_name, m.last_name, m.left_date,
+                    COALESCE(SUM(sp.amount * sp.frequency), 0) as annual_total
+             FROM salary_data_point_members sdpm
+             JOIN team_members m ON m.id = sdpm.member_id
+             LEFT JOIN salary_parts sp ON sp.data_point_member_id = sdpm.id
+             WHERE sdpm.data_point_id = ?1 AND sdpm.is_active = 1
+             GROUP BY sdpm.member_id
+             ORDER BY m.last_name, m.first_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for (dp_id, dp_name) in chain {
         let members = member_stmt
             .query_map(params![dp_id], |row| {
                 Ok(SalaryOverTimeMember {

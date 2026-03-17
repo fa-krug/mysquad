@@ -1,4 +1,9 @@
-import type { SalaryDataPointDetail, SalaryDataPointMember, SalaryPart } from "./types";
+import type {
+  SalaryDataPointDetail,
+  SalaryDataPointMember,
+  SalaryPart,
+  SalaryOverTimePoint,
+} from "./types";
 import {
   annualTotal,
   budgetTotals,
@@ -399,10 +404,145 @@ function drawComparisonChart(
   return y + 6;
 }
 
+const LINE_COLORS: [number, number, number][] = [
+  [59, 130, 246],
+  [239, 68, 68],
+  [16, 185, 129],
+  [245, 158, 11],
+  [139, 92, 246],
+  [236, 72, 153],
+  [6, 182, 212],
+  [132, 204, 22],
+  [249, 115, 22],
+  [99, 102, 241],
+  [20, 184, 166],
+  [225, 29, 72],
+];
+
+/** 5. Salary History Chart — line chart of salary lineage */
+function drawSalaryLineageChart(doc: JsPDF, lineage: SalaryOverTimePoint[], y: number): number {
+  if (lineage.length < 2) return y;
+
+  const chartH = 60;
+  const legendRowH = 4;
+
+  // Collect all unique members
+  const memberMap = new Map<number, string>();
+  for (const point of lineage) {
+    for (const m of point.members) {
+      if (!memberMap.has(m.member_id)) {
+        memberMap.set(m.member_id, `${m.last_name}, ${m.first_name.charAt(0)}.`);
+      }
+    }
+  }
+  const memberIds = Array.from(memberMap.keys());
+  if (memberIds.length === 0) return y;
+
+  const legendRows = Math.ceil(memberIds.length / 4);
+  const totalH = CHART_SECTION_TITLE_H + chartH + 8 + legendRows * legendRowH + 4;
+  y = ensureSpace(doc, y, totalH);
+  y = drawSectionTitle(doc, "Salary History", y);
+
+  // Find min/max values
+  let maxVal = 0;
+  for (const point of lineage) {
+    for (const m of point.members) {
+      maxVal = Math.max(maxVal, m.annual_total);
+    }
+  }
+  if (maxVal === 0) return y;
+
+  const plotLeft = MARGIN + 16;
+  const plotRight = MARGIN + CONTENT_WIDTH - 4;
+  const plotW = plotRight - plotLeft;
+  const plotTop = y;
+  const plotBottom = y + chartH;
+
+  // Draw axes
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.2);
+  doc.line(plotLeft, plotTop, plotLeft, plotBottom);
+  doc.line(plotLeft, plotBottom, plotRight, plotBottom);
+
+  // Y-axis labels (4 ticks)
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...GRAY);
+  for (let i = 0; i <= 4; i++) {
+    const val = (maxVal * i) / 4;
+    const ty = plotBottom - (chartH * i) / 4;
+    doc.text(formatEurK(val), plotLeft - 2, ty + 1, { align: "right" });
+    if (i > 0) {
+      doc.setDrawColor(230);
+      doc.setLineWidth(0.1);
+      doc.line(plotLeft, ty, plotRight, ty);
+    }
+  }
+
+  // X-axis labels
+  const xStep = lineage.length > 1 ? plotW / (lineage.length - 1) : 0;
+  for (let i = 0; i < lineage.length; i++) {
+    const x = plotLeft + i * xStep;
+    doc.setFontSize(6);
+    doc.setTextColor(...GRAY);
+    const label = lineage[i].data_point_name;
+    const truncated = label.length > 12 ? label.slice(0, 11) + "…" : label;
+    doc.text(truncated, x, plotBottom + 4, { align: "center" });
+  }
+
+  // Draw lines per member
+  for (let mi = 0; mi < memberIds.length; mi++) {
+    const memberId = memberIds[mi];
+    const color = LINE_COLORS[mi % LINE_COLORS.length];
+    doc.setDrawColor(...color);
+    doc.setLineWidth(0.5);
+
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i < lineage.length; i++) {
+      const member = lineage[i].members.find((m) => m.member_id === memberId);
+      if (member) {
+        const x = plotLeft + i * xStep;
+        const py = plotBottom - (member.annual_total / maxVal) * chartH;
+        points.push({ x, y: py });
+      }
+    }
+
+    // Draw connected line segments
+    for (let i = 1; i < points.length; i++) {
+      doc.line(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+    }
+
+    // Draw dots
+    doc.setFillColor(...color);
+    for (const p of points) {
+      doc.circle(p.x, p.y, 0.8, "F");
+    }
+  }
+
+  // Legend
+  const ly = plotBottom + 8;
+  doc.setFontSize(6);
+  const colW = CONTENT_WIDTH / 4;
+  for (let mi = 0; mi < memberIds.length; mi++) {
+    const col = mi % 4;
+    const row = Math.floor(mi / 4);
+    const lx = MARGIN + col * colW;
+    const lly = ly + row * legendRowH;
+    const color = LINE_COLORS[mi % LINE_COLORS.length];
+    doc.setFillColor(...color);
+    doc.rect(lx, lly - 2, 3, 2, "F");
+    doc.setTextColor(...BLACK);
+    doc.text(memberMap.get(memberIds[mi])!, lx + 4, lly);
+  }
+
+  return ly + legendRows * legendRowH + 4;
+}
+
 export async function generateSalaryPdf(
   detail: SalaryDataPointDetail,
   previousData: Record<number, SalaryPart[] | null>,
   previousTotal: number | null,
+  salaryLineage?: SalaryOverTimePoint[],
 ): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -606,7 +746,10 @@ export async function generateSalaryPdf(
   chartY = drawBudgetGauge(doc, detail, chartY);
   chartY = drawSalaryBarChart(doc, detail, chartY);
   chartY = drawVariablePayChart(doc, detail, chartY);
-  drawComparisonChart(doc, detail, previousData, chartY);
+  chartY = drawComparisonChart(doc, detail, previousData, chartY);
+  if (salaryLineage && salaryLineage.length >= 2) {
+    drawSalaryLineageChart(doc, salaryLineage, chartY);
+  }
 
   doc.save(`${detail.name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
 }

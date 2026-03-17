@@ -199,6 +199,9 @@ export const getPreviousMemberData = (dataPointId: number, memberId: number) =>
 
 export const getSalaryOverTime = () => invoke<SalaryOverTimePoint[]>("get_salary_over_time");
 
+export const getSalaryLineage = (dataPointId: number) =>
+  invoke<SalaryOverTimePoint[]>("get_salary_lineage", { data_point_id: dataPointId });
+
 // Projects
 export const getProjects = () => invoke<Project[]>("get_projects");
 export const createProject = () => invoke<Project>("create_project");

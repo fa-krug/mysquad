@@ -21,6 +21,7 @@ import {
   promoteScenario,
   getScenarioSummaries,
   getScenarioMemberComparison,
+  getSalaryLineage,
   updateSalaryDataPointMember,
   uploadSalaryTemplate,
   deleteSalaryTemplate,
@@ -45,6 +46,7 @@ import type {
   ScenarioGroup,
   ScenarioSummary,
   ScenarioMemberComparison,
+  SalaryOverTimePoint,
 } from "@/lib/types";
 import {
   AlertDialog,
@@ -78,6 +80,7 @@ export function SalaryPlanner() {
   const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [trashedItems, setTrashedItems] = useState<SalaryListItem[]>([]);
+  const [salaryLineage, setSalaryLineage] = useState<SalaryOverTimePoint[]>([]);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<{
     id: number;
     type: "data_point" | "scenario_group";
@@ -171,6 +174,9 @@ export function SalaryPlanner() {
       .catch((err) => {
         if (!cancelled) setDetailError(String(err));
       });
+    getSalaryLineage(selectedId).then((lineage) => {
+      if (!cancelled) setSalaryLineage(lineage);
+    });
     return () => {
       cancelled = true;
     };
@@ -437,6 +443,15 @@ export function SalaryPlanner() {
     );
   }, [previousData, presentedMembers, anyPresented]);
 
+  const filteredLineage = useMemo(() => {
+    if (!anyPresented || salaryLineage.length === 0) return salaryLineage;
+    const visibleMemberIds = new Set(presentedMembers.map((m) => m.member_id));
+    return salaryLineage.map((point) => ({
+      ...point,
+      members: point.members.filter((m) => visibleMemberIds.has(m.member_id)),
+    }));
+  }, [salaryLineage, presentedMembers, anyPresented]);
+
   const activeMembers = useMemo(
     () => (filteredDetail?.members ?? []).filter((m) => m.is_active),
     [filteredDetail],
@@ -479,12 +494,12 @@ export function SalaryPlanner() {
     if (!detail) return;
     try {
       const { generateSalaryPdf } = await import("@/lib/salary-pdf");
-      await generateSalaryPdf(detail, previousData, previousTotal);
+      await generateSalaryPdf(detail, previousData, previousTotal, salaryLineage);
       showSuccess("PDF exported");
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
     }
-  }, [detail, previousData, previousTotal]);
+  }, [detail, previousData, previousTotal, salaryLineage]);
 
   const previousHeadcount = useMemo(() => {
     if (!filteredPreviousData) return null;
@@ -682,6 +697,7 @@ export function SalaryPlanner() {
                             detail={filteredDetail!}
                             previousData={filteredPreviousData}
                             anyPresented={anyPresented}
+                            salaryLineage={filteredLineage}
                           />
                         </Suspense>
                       </ErrorBoundary>
