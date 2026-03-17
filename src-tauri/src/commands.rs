@@ -3,7 +3,7 @@ use crate::platform::{self, NativeSecurity, PlatformSecurity};
 use chrono::Datelike;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tauri::State;
 
 // ── Auth commands ──
@@ -1200,14 +1200,13 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
         });
     }
 
-    // Build chain ordering: walk previous_data_point_id links from roots to leaves.
-    // Roots = items with no compare target that ARE someone else's compare target.
-    // Standalone = items with no compare target and NOT anyone's compare target → bottom, alphabetical.
+    // Sort by compare-target chains: newest (leaves) at top, oldest (roots) at bottom.
+    // Standalone items (no chain connection) at the very bottom, alphabetically.
+    //
+    // Strategy: find leaves (items nobody points to that have a prev_id),
+    // then follow prev_id links backwards to collect each chain leaf→root.
 
-    // Collect all items into a flat vec with (unique_key, prev_data_point_id, name)
-    // Data points can be chain parents; scenario groups cannot (nothing references them).
     let mut all_items: Vec<SalaryListItem> = Vec::new();
-    // Map data_point_id → index for data points (so we can find chain parents)
     let mut dp_id_to_idx: HashMap<i64, usize> = HashMap::new();
 
     for dp in normal_points {
@@ -1219,9 +1218,9 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
         all_items.push(SalaryListItem::ScenarioGroup { scenario_group: sg });
     }
 
-    // Build children map: data_point_id → list of item indices that compare to it
-    let mut children_of: HashMap<i64, Vec<usize>> = HashMap::new();
-    for (idx, item) in all_items.iter().enumerate() {
+    // Set of data_point_ids that are targeted by something (i.e. appear as someone's prev)
+    let mut targeted_ids: HashSet<i64> = HashSet::new();
+    for item in &all_items {
         let prev = match item {
             SalaryListItem::DataPoint { data_point } => data_point.previous_data_point_id,
             SalaryListItem::ScenarioGroup { scenario_group } => {
@@ -1229,140 +1228,70 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
             }
         };
         if let Some(pid) = prev {
-            children_of.entry(pid).or_default().push(idx);
+            targeted_ids.insert(pid);
         }
     }
 
-    // Sort children alphabetically by name at each level
-    for children in children_of.values_mut() {
-        children.sort_by(|&a, &b| {
-            let name_a = match &all_items[a] {
-                SalaryListItem::DataPoint { data_point } => &data_point.name,
-                SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-            };
-            let name_b = match &all_items[b] {
-                SalaryListItem::DataPoint { data_point } => &data_point.name,
-                SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-            };
-            name_a.cmp(name_b)
-        });
+    // Find leaves: items that have a prev_id but whose own id is NOT targeted
+    // For scenario groups, they can never be targeted (prev always points to data_points)
+    let mut leaves: Vec<usize> = Vec::new();
+    for (idx, item) in all_items.iter().enumerate() {
+        let (has_prev, own_dp_id) = match item {
+            SalaryListItem::DataPoint { data_point } => (
+                data_point.previous_data_point_id.is_some(),
+                Some(data_point.id),
+            ),
+            SalaryListItem::ScenarioGroup { scenario_group } => {
+                (scenario_group.previous_data_point_id.is_some(), None)
+            }
+        };
+        if has_prev {
+            let is_targeted = own_dp_id.is_some_and(|id| targeted_ids.contains(&id));
+            if !is_targeted {
+                leaves.push(idx);
+            }
+        }
     }
+    // Sort leaves alphabetically
+    leaves.sort_by(|&a, &b| {
+        let name_a = match &all_items[a] {
+            SalaryListItem::DataPoint { data_point } => &data_point.name,
+            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
+        };
+        let name_b = match &all_items[b] {
+            SalaryListItem::DataPoint { data_point } => &data_point.name,
+            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
+        };
+        name_a.cmp(name_b)
+    });
 
-    // Identify roots: data points with no prev_id that ARE in children_of keys
-    // Also find chain roots that point to data points NOT in our list (orphan chains)
     let mut placed = vec![false; all_items.len()];
-
-    // Walk chains starting from roots (data points with no prev that are someone's target)
-    let mut roots: Vec<usize> = Vec::new();
-    for (idx, item) in all_items.iter().enumerate() {
-        if let SalaryListItem::DataPoint { data_point } = item {
-            if data_point.previous_data_point_id.is_none()
-                && children_of.contains_key(&data_point.id)
-            {
-                roots.push(idx);
-            }
-        }
-    }
-    // Sort roots alphabetically
-    roots.sort_by(|&a, &b| {
-        let name_a = match &all_items[a] {
-            SalaryListItem::DataPoint { data_point } => &data_point.name,
-            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-        };
-        let name_b = match &all_items[b] {
-            SalaryListItem::DataPoint { data_point } => &data_point.name,
-            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-        };
-        name_a.cmp(name_b)
-    });
-
-    // Post-order walk: children (newest) before parent (oldest)
-    fn walk_chain(
-        idx: usize,
-        all_items: &[SalaryListItem],
-        children_of: &HashMap<i64, Vec<usize>>,
-        _dp_id_to_idx: &HashMap<i64, usize>,
-        placed: &mut Vec<bool>,
-        result: &mut Vec<usize>,
-    ) {
-        if placed[idx] {
-            return;
-        }
-        placed[idx] = true;
-        // First recurse into children (they appear before this item)
-        if let SalaryListItem::DataPoint { data_point } = &all_items[idx] {
-            if let Some(kids) = children_of.get(&data_point.id) {
-                for &kid_idx in kids {
-                    walk_chain(
-                        kid_idx,
-                        all_items,
-                        children_of,
-                        _dp_id_to_idx,
-                        placed,
-                        result,
-                    );
-                }
-            }
-        }
-        result.push(idx);
-    }
-
     let mut ordered_indices: Vec<usize> = Vec::new();
-    for root_idx in &roots {
-        walk_chain(
-            *root_idx,
-            &all_items,
-            &children_of,
-            &dp_id_to_idx,
-            &mut placed,
-            &mut ordered_indices,
-        );
-    }
 
-    // Items whose prev points to a data point NOT in our list — treat as orphan chain heads
-    let mut orphans: Vec<usize> = Vec::new();
-    for (idx, item) in all_items.iter().enumerate() {
-        if placed[idx] {
-            continue;
-        }
-        let prev = match item {
-            SalaryListItem::DataPoint { data_point } => data_point.previous_data_point_id,
-            SalaryListItem::ScenarioGroup { scenario_group } => {
-                scenario_group.previous_data_point_id
+    // For each leaf, walk backwards through the chain via prev_id
+    for &leaf_idx in &leaves {
+        let mut current = Some(leaf_idx);
+        while let Some(idx) = current {
+            if placed[idx] {
+                break;
             }
-        };
-        if let Some(pid) = prev {
-            if !dp_id_to_idx.contains_key(&pid) {
-                orphans.push(idx);
-            }
+            placed[idx] = true;
+            ordered_indices.push(idx);
+            // Follow prev_id to the parent
+            let prev_id = match &all_items[idx] {
+                SalaryListItem::DataPoint { data_point } => data_point.previous_data_point_id,
+                SalaryListItem::ScenarioGroup { scenario_group } => {
+                    scenario_group.previous_data_point_id
+                }
+            };
+            current = prev_id.and_then(|pid| dp_id_to_idx.get(&pid).copied());
         }
     }
-    orphans.sort_by(|&a, &b| {
-        let name_a = match &all_items[a] {
-            SalaryListItem::DataPoint { data_point } => &data_point.name,
-            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-        };
-        let name_b = match &all_items[b] {
-            SalaryListItem::DataPoint { data_point } => &data_point.name,
-            SalaryListItem::ScenarioGroup { scenario_group } => &scenario_group.name,
-        };
-        name_a.cmp(name_b)
-    });
-    for orphan_idx in &orphans {
-        walk_chain(
-            *orphan_idx,
-            &all_items,
-            &children_of,
-            &dp_id_to_idx,
-            &mut placed,
-            &mut ordered_indices,
-        );
-    }
 
-    // Standalone items (no prev, not anyone's target) → bottom, alphabetically
+    // Standalone items: not yet placed (no prev AND not targeted, or orphan roots)
     let mut standalone: Vec<usize> = Vec::new();
-    for (idx, _) in all_items.iter().enumerate() {
-        if !placed[idx] {
+    for (idx, &is_placed) in placed.iter().enumerate() {
+        if !is_placed {
             standalone.push(idx);
         }
     }
@@ -1379,8 +1308,7 @@ pub fn get_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryListItem>, S
     });
     ordered_indices.extend(standalone);
 
-    // Build final result by consuming all_items in order
-    // We need to extract items by index, so swap with a placeholder approach
+    // Build final result
     let mut items: Vec<Option<SalaryListItem>> = all_items.into_iter().map(Some).collect();
     let mut final_items: Vec<SalaryListItem> = Vec::new();
     for idx in ordered_indices {
