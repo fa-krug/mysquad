@@ -19,6 +19,7 @@ pub struct ExportData {
     pub projects: Vec<ExportProject>,
     pub project_members: Vec<ExportProjectMember>,
     pub project_status_items: Vec<ExportProjectStatusItem>,
+    pub project_links: Vec<ExportProjectLink>,
     pub reports: Vec<ExportReport>,
 }
 
@@ -137,6 +138,16 @@ pub struct ExportProjectStatusItem {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct ExportProjectLink {
+    pub id: i64,
+    pub project_id: i64,
+    pub url: String,
+    pub label: Option<String>,
+    pub sort_order: i64,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct ExportReport {
     pub id: i64,
     pub name: String,
@@ -160,6 +171,7 @@ pub fn export_all_data(conn: &Connection) -> Result<ExportData, String> {
     let projects = query_projects(conn)?;
     let project_members = query_project_members(conn)?;
     let project_status_items = query_project_status_items(conn)?;
+    let project_links = query_project_links(conn)?;
     let reports = query_reports(conn)?;
 
     Ok(ExportData {
@@ -178,6 +190,7 @@ pub fn export_all_data(conn: &Connection) -> Result<ExportData, String> {
         projects,
         project_members,
         project_status_items,
+        project_links,
         reports,
     })
 }
@@ -211,6 +224,7 @@ fn import_overwrite(conn: &Connection, data: &ExportData) -> Result<(), String> 
          DELETE FROM salary_ranges;
          DELETE FROM salary_data_point_members;
          DELETE FROM salary_data_points;
+         DELETE FROM project_links;
          DELETE FROM project_status_items;
          DELETE FROM project_members;
          DELETE FROM projects;
@@ -250,6 +264,7 @@ fn import_update(conn: &Connection, data: &ExportData) -> Result<(), String> {
     let project_map = upsert_projects(conn, &data.projects)?;
     upsert_project_members(conn, &data.project_members, &project_map, &member_map)?;
     upsert_project_status_items(conn, &data.project_status_items, &project_map)?;
+    upsert_project_links(conn, &data.project_links, &project_map)?;
     upsert_reports(conn, &data.reports)?;
 
     Ok(())
@@ -275,6 +290,7 @@ fn insert_all(conn: &Connection, data: &ExportData) -> Result<(), String> {
     let project_map = insert_projects(conn, &data.projects)?;
     insert_project_members(conn, &data.project_members, &project_map, &member_map)?;
     insert_project_status_items(conn, &data.project_status_items, &project_map)?;
+    insert_project_links(conn, &data.project_links, &project_map)?;
     insert_reports(conn, &data.reports)?;
     Ok(())
 }
@@ -520,6 +536,26 @@ fn query_project_status_items(conn: &Connection) -> Result<Vec<ExportProjectStat
                 text: row.get(2)?,
                 checked: row.get(3)?,
                 created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+fn query_project_links(conn: &Connection) -> Result<Vec<ExportProjectLink>, String> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, url, label, sort_order, created_at FROM project_links ORDER BY id"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ExportProjectLink {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                url: row.get(2)?,
+                label: row.get(3)?,
+                sort_order: row.get(4)?,
+                created_at: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -781,6 +817,22 @@ fn insert_project_status_items(
             "INSERT INTO project_status_items (project_id, text, checked, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![new_project_id, item.text, item.checked, item.created_at],
         ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn insert_project_links(
+    conn: &Connection,
+    links: &[ExportProjectLink],
+    project_map: &HashMap<i64, i64>,
+) -> Result<(), String> {
+    for l in links {
+        if let Some(&new_pid) = project_map.get(&l.project_id) {
+            conn.execute(
+                "INSERT INTO project_links (project_id, url, label, sort_order, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![new_pid, l.url, l.label, l.sort_order, l.created_at],
+            ).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -1213,6 +1265,38 @@ fn upsert_project_status_items(
     Ok(())
 }
 
+fn upsert_project_links(
+    conn: &Connection,
+    links: &[ExportProjectLink],
+    project_map: &HashMap<i64, i64>,
+) -> Result<(), String> {
+    for l in links {
+        if let Some(&new_pid) = project_map.get(&l.project_id) {
+            let existing: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM project_links WHERE project_id = ?1 AND url = ?2",
+                    params![new_pid, l.url],
+                    |row| row.get(0),
+                )
+                .ok();
+            if let Some(eid) = existing {
+                conn.execute(
+                    "UPDATE project_links SET label = ?1, sort_order = ?2 WHERE id = ?3",
+                    params![l.label, l.sort_order, eid],
+                )
+                .map_err(|e| e.to_string())?;
+            } else {
+                conn.execute(
+                    "INSERT INTO project_links (project_id, url, label, sort_order, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![new_pid, l.url, l.label, l.sort_order, l.created_at],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn upsert_reports(conn: &Connection, reports: &[ExportReport]) -> Result<(), String> {
     for r in reports {
         let existing: Option<i64> = conn
@@ -1396,6 +1480,7 @@ mod tests {
             projects: vec![],
             project_members: vec![],
             project_status_items: vec![],
+            project_links: vec![],
             reports: vec![],
         };
 
