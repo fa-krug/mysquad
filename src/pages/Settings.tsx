@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { getSetting, setSetting, setConfig, exportData, importData } from "@/lib/db";
+import {
+  getSetting,
+  setSetting,
+  setConfig,
+  exportData,
+  importData,
+  toggleDevtools,
+} from "@/lib/db";
 import { save, open } from "@tauri-apps/plugin-dialog";
 
 interface SettingsPageProps {
@@ -384,6 +391,20 @@ export function SettingsPage({
             </div>
           </div>
         )}
+
+        {/* Debug Mode */}
+        <div className="space-y-1.5">
+          <h2 className="text-sm font-medium">Debug Mode</h2>
+          <p className="text-xs text-muted-foreground">
+            Open the browser developer tools to inspect the app.
+          </p>
+          <button
+            onClick={toggleDevtools}
+            className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+          >
+            Toggle DevTools
+          </button>
+        </div>
 
         {/* About */}
         <div className="space-y-1.5">

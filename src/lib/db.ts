@@ -251,8 +251,7 @@ export const addProjectLink = (projectId: number, url: string, label: string | n
   invoke<ProjectLink>("add_project_link", { project_id: projectId, url, label });
 export const updateProjectLink = (id: number, url?: string, label?: string) =>
   invoke<void>("update_project_link", { id, url: url ?? null, label: label ?? null });
-export const deleteProjectLink = (id: number) =>
-  invoke<void>("delete_project_link", { id });
+export const deleteProjectLink = (id: number) => invoke<void>("delete_project_link", { id });
 export const reorderProjectLinks = (projectId: number, linkIds: number[]) =>
   invoke<void>("reorder_project_links", { project_id: projectId, link_ids: linkIds });
 
@@ -297,6 +296,9 @@ export const unresolveEscalatedTopic = (topicId: number) =>
 export const getSetting = (key: string) => invoke<string | null>("get_setting", { key });
 export const setSetting = (key: string, value: string) =>
   invoke<void>("set_setting", { key, value });
+
+// Debug
+export const toggleDevtools = () => invoke<void>("toggle_devtools");
 
 // Export / Import
 export const exportData = (filePath: string) =>

@@ -1011,10 +1011,7 @@ pub struct ProjectLink {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn get_project_links(
-    db: State<AppDb>,
-    project_id: i64,
-) -> Result<Vec<ProjectLink>, String> {
+pub fn get_project_links(db: State<AppDb>, project_id: i64) -> Result<Vec<ProjectLink>, String> {
     let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
     let mut stmt = conn
@@ -1163,6 +1160,15 @@ pub fn set_setting(db: State<AppDb>, key: String, value: String) -> Result<(), S
     let conn = guard.as_ref().ok_or("Database not open")?;
     conn.execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![key, value]).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_devtools(window: tauri::WebviewWindow) {
+    if window.is_devtools_open() {
+        window.close_devtools();
+    } else {
+        window.open_devtools();
+    }
 }
 
 // ── Salary data point structs ──
@@ -1987,7 +1993,7 @@ pub fn get_previous_member_data(
 }
 
 /// Batch version: returns previous salary parts for ALL members in a data point.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_all_previous_member_data(
     db: State<AppDb>,
     data_point_id: i64,
@@ -2059,7 +2065,7 @@ pub fn get_all_previous_member_data(
 }
 
 /// Batch version: returns scenario member comparisons for ALL members in a scenario group.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_all_scenario_member_comparisons(
     db: State<AppDb>,
     scenario_group_id: i64,

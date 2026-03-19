@@ -179,14 +179,14 @@ export function SalaryPlanner() {
     let cancelled = false;
     const sgId = detail.scenario_group_id;
 
-    Promise.all([getScenarioSummaries(sgId), getAllScenarioMemberComparisons(sgId)]).then(
-      ([summaries, comparisons]) => {
+    Promise.all([getScenarioSummaries(sgId), getAllScenarioMemberComparisons(sgId)])
+      .then(([summaries, comparisons]) => {
         if (!cancelled) {
           setScenarioSummaries(summaries);
           setMemberComparisons(comparisons);
         }
-      },
-    );
+      })
+      .catch((err) => console.error("Failed to load scenario data:", err));
 
     return () => {
       cancelled = true;
