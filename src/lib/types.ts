@@ -63,6 +63,15 @@ export interface ProjectStatusItem extends BaseCheckableItem {
   project_id: number;
 }
 
+export interface ProjectLink {
+  id: number;
+  project_id: number;
+  url: string;
+  label: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface Title {
   id: number;
   name: string;

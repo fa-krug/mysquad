@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectMember,
   ProjectStatusItem,
+  ProjectLink,
   Report,
   ReportDetail,
   ReportBlock,
@@ -242,6 +243,18 @@ export const updateProjectStatusItem = (id: number, text?: string, checked?: boo
   invoke<void>("update_project_status_item", { id, text: text ?? null, checked: checked ?? null });
 export const deleteProjectStatusItem = (id: number) =>
   invoke<void>("delete_project_status_item", { id });
+
+// Project links
+export const getProjectLinks = (projectId: number) =>
+  invoke<ProjectLink[]>("get_project_links", { project_id: projectId });
+export const addProjectLink = (projectId: number, url: string, label: string | null) =>
+  invoke<ProjectLink>("add_project_link", { project_id: projectId, url, label });
+export const updateProjectLink = (id: number, url?: string, label?: string) =>
+  invoke<void>("update_project_link", { id, url: url ?? null, label: label ?? null });
+export const deleteProjectLink = (id: number) =>
+  invoke<void>("delete_project_link", { id });
+export const reorderProjectLinks = (projectId: number, linkIds: number[]) =>
+  invoke<void>("reorder_project_links", { project_id: projectId, link_ids: linkIds });
 
 // Meetings
 export const createMeeting = (teamMemberId: number) =>
