@@ -37,7 +37,7 @@ Five new Tauri commands following the `project_status_items` pattern:
 |---|---|---|---|
 | `get_project_links` | `project_id` | `ProjectLink[]` | Ordered by `sort_order ASC` |
 | `add_project_link` | `project_id, url, label` | `ProjectLink` | Sets `sort_order` to max+1 |
-| `update_project_link` | `id, url?, label?` | `()` | Conditional updates for url and/or label |
+| `update_project_link` | `id, url?, label?` | `()` | Conditional updates for url and/or label. Passing empty string for label clears it to null. |
 | `delete_project_link` | `id` | `()` | Hard delete |
 | `reorder_project_links` | `project_id, link_ids` | `()` | Receives ordered array of IDs, bulk-updates `sort_order` to match array index in a transaction |
 
@@ -67,7 +67,7 @@ New "Links" section placed after the date fields, before Notes.
 **Link list:**
 - Each link shows an auto-detected icon (folder icon for `file://`, globe icon for `https://`)
 - Displays label if provided, otherwise the URL
-- Clicking opens via Tauri's shell `open` API
+- Clicking opens via `@tauri-apps/plugin-opener` (already a project dependency)
 - Hover reveals edit and delete buttons
 - Drag handle for reordering
 
