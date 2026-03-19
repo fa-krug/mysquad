@@ -57,7 +57,7 @@ export function SortableLink({ link, onEdit, onDelete }: SortableLinkProps) {
 
       <button
         className="min-w-0 flex-1 truncate text-left hover:underline"
-        onClick={() => isFolder ? openPath(link.url) : openUrl(link.url)}
+        onClick={() => isFolder ? openPath(link.url.replace(/^file:\/\//, "")) : openUrl(link.url)}
         title={link.url}
       >
         {displayText}

@@ -1126,13 +1126,17 @@ pub fn reorder_project_links(
 ) -> Result<(), String> {
     let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
     for (i, lid) in link_ids.iter().enumerate() {
-        conn.execute(
+        if let Err(e) = conn.execute(
             "UPDATE project_links SET sort_order = ?1 WHERE id = ?2 AND project_id = ?3",
             params![i as i64, lid, project_id],
-        )
-        .map_err(|e| e.to_string())?;
+        ) {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(e.to_string());
+        }
     }
+    conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;
     Ok(())
 }
 
