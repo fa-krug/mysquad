@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CheckableList } from "@/components/team/CheckableList";
+import { ProjectLinks } from "./ProjectLinks";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { required } from "@/lib/validators";
 import {
@@ -134,6 +135,11 @@ export function ProjectDetail({ project, onProjectChange }: ProjectDetailProps) 
             <DatePicker value={endDate || null} onChange={handleEndDateChange} clearable />
           </div>
         </div>
+
+        <Separator />
+
+        {/* Links */}
+        <ProjectLinks projectId={project.id} />
 
         <Separator />
 
