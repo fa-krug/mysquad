@@ -45,7 +45,7 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = useCallback(
@@ -58,10 +58,10 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
       setLinks(reordered);
       await reorderProjectLinks(
         projectId,
-        reordered.map((l) => l.id)
+        reordered.map((l) => l.id),
       );
     },
-    [links, projectId]
+    [links, projectId],
   );
 
   const handleAdd = async (url: string, label: string) => {
@@ -72,13 +72,7 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
 
   const handleUpdate = async (id: number, url: string, label: string) => {
     await updateProjectLink(id, url, label);
-    setLinks((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? { ...l, url, label: label || null }
-          : l
-      )
-    );
+    setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, url, label: label || null } : l)));
     setEditingId(null);
   };
 
@@ -91,7 +85,7 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
     e.preventDefault();
     const files = e.dataTransfer.files;
     for (let i = 0; i < files.length; i++) {
-      const path = (files[i] as any).path as string | undefined;
+      const path = (files[i] as unknown as { path?: string }).path;
       if (path) {
         const url = `file://${path}`;
         const link = await addProjectLink(projectId, url, null);
@@ -101,33 +95,17 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
   };
 
   return (
-    <div
-      className="space-y-2"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={handleDrop}
-    >
+    <div className="space-y-2" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
       <div className="flex items-center justify-between">
         <Label>Links</Label>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={() => setShowAddForm(true)}
-        >
+        <Button variant="ghost" size="icon" className="size-6" onClick={() => setShowAddForm(true)}>
           <PlusIcon className="size-4" />
         </Button>
       </div>
 
       {links.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={links.map((l) => l.id)}
-            strategy={verticalListSortingStrategy}
-          >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={links.map((l) => l.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-1">
               {links.map((link) =>
                 editingId === link.id ? (
@@ -135,9 +113,7 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
                     key={link.id}
                     initialUrl={link.url}
                     initialLabel={link.label ?? ""}
-                    onSubmit={(url, label) =>
-                      handleUpdate(link.id, url, label)
-                    }
+                    onSubmit={(url, label) => handleUpdate(link.id, url, label)}
                     onCancel={() => setEditingId(null)}
                   />
                 ) : (
@@ -147,24 +123,17 @@ export function ProjectLinks({ projectId }: ProjectLinksProps) {
                     onEdit={() => setEditingId(link.id)}
                     onDelete={() => handleDelete(link.id)}
                   />
-                )
+                ),
               )}
             </div>
           </SortableContext>
         </DndContext>
       )}
 
-      {showAddForm && (
-        <LinkForm
-          onSubmit={handleAdd}
-          onCancel={() => setShowAddForm(false)}
-        />
-      )}
+      {showAddForm && <LinkForm onSubmit={handleAdd} onCancel={() => setShowAddForm(false)} />}
 
       {links.length === 0 && !showAddForm && (
-        <p className="text-sm text-muted-foreground">
-          Drop a folder here or click + to add a link
-        </p>
+        <p className="text-sm text-muted-foreground">Drop a folder here or click + to add a link</p>
       )}
     </div>
   );

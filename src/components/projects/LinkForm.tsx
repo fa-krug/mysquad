@@ -40,22 +40,10 @@ export function LinkForm({
         placeholder="Label (optional)"
         className="h-8 w-32 text-sm"
       />
-      <Button
-        type="submit"
-        variant="ghost"
-        size="icon"
-        className="size-6"
-        disabled={!url.trim()}
-      >
+      <Button type="submit" variant="ghost" size="icon" className="size-6" disabled={!url.trim()}>
         <CheckIcon className="size-4" />
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-6"
-        onClick={onCancel}
-      >
+      <Button type="button" variant="ghost" size="icon" className="size-6" onClick={onCancel}>
         <XIcon className="size-4" />
       </Button>
     </form>
