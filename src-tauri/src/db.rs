@@ -185,6 +185,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 20)?;
     }
 
+    if version < 21 {
+        let migration_sql = include_str!("../migrations/021_project_links.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 21)?;
+    }
+
     // Repair: ensure columns exist even if version was bumped past their migration
     let repair_columns = [
         ("team_members", "picture_path", "TEXT"),
@@ -269,7 +275,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
     }
 
     #[test]
@@ -369,7 +375,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
     }
 
     #[test]
@@ -385,7 +391,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
     }
 
     #[test]
