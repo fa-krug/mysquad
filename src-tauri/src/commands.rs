@@ -998,6 +998,144 @@ pub fn delete_project_status_item(db: State<AppDb>, id: i64) -> Result<(), Strin
     Ok(())
 }
 
+// ── Project Link commands ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProjectLink {
+    pub id: i64,
+    pub project_id: i64,
+    pub url: String,
+    pub label: Option<String>,
+    pub sort_order: i64,
+    pub created_at: String,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_project_links(
+    db: State<AppDb>,
+    project_id: i64,
+) -> Result<Vec<ProjectLink>, String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_id, url, label, sort_order, created_at
+             FROM project_links
+             WHERE project_id = ?1
+             ORDER BY sort_order ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let items = stmt
+        .query_map(params![project_id], |row| {
+            Ok(ProjectLink {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                url: row.get(2)?,
+                label: row.get(3)?,
+                sort_order: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(items)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn add_project_link(
+    db: State<AppDb>,
+    project_id: i64,
+    url: String,
+    label: Option<String>,
+) -> Result<ProjectLink, String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    let max_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM project_links WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO project_links (project_id, url, label, sort_order) VALUES (?1, ?2, ?3, ?4)",
+        params![project_id, url, label, max_order + 1],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let created_at: String = conn
+        .query_row(
+            "SELECT created_at FROM project_links WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(ProjectLink {
+        id,
+        project_id,
+        url,
+        label,
+        sort_order: max_order + 1,
+        created_at,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_project_link(
+    db: State<AppDb>,
+    id: i64,
+    url: Option<String>,
+    label: Option<String>,
+) -> Result<(), String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    if let Some(u) = url {
+        conn.execute(
+            "UPDATE project_links SET url = ?1 WHERE id = ?2",
+            params![u, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    // Empty string clears label to null
+    if let Some(l) = label {
+        let val = if l.is_empty() { None } else { Some(l) };
+        conn.execute(
+            "UPDATE project_links SET label = ?1 WHERE id = ?2",
+            params![val, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_project_link(db: State<AppDb>, id: i64) -> Result<(), String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    conn.execute("DELETE FROM project_links WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn reorder_project_links(
+    db: State<AppDb>,
+    project_id: i64,
+    link_ids: Vec<i64>,
+) -> Result<(), String> {
+    let guard = db.conn.lock();
+    let conn = guard.as_ref().ok_or("Database not open")?;
+    for (i, lid) in link_ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE project_links SET sort_order = ?1 WHERE id = ?2 AND project_id = ?3",
+            params![i as i64, lid, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ── Settings commands ──
 
 #[tauri::command(rename_all = "snake_case")]
