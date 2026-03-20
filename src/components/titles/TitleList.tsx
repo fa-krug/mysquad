@@ -3,6 +3,7 @@ import { PlusIcon, Loader2Icon, Trash2, RotateCcw, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { useVirtualList } from "@/hooks/useVirtualList";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { Title } from "@/lib/types";
 
 interface TitleListProps {
@@ -112,7 +113,15 @@ export function TitleList({
                   onMouseLeave={() => setHoveredId(null)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{title.name}</div>
+                    <div
+                      className="text-sm font-medium truncate cursor-pointer hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(title.name);
+                      }}
+                    >
+                      {title.name}
+                    </div>
                   </div>
                   {hoveredId === title.id && (
                     <div className="flex gap-1">
@@ -171,7 +180,15 @@ export function TitleList({
                   onMouseLeave={() => setHoveredId(null)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{title.name}</div>
+                    <div
+                      className="text-sm font-medium truncate cursor-pointer hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(title.name);
+                      }}
+                    >
+                      {title.name}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {title.member_count} {title.member_count === 1 ? "member" : "members"}
                     </div>

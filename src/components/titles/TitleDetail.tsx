@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Title, TeamMember } from "@/lib/types";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import { copyToClipboard } from "@/lib/clipboard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { required } from "@/lib/validators";
@@ -68,7 +69,13 @@ export function TitleDetail({ title, members, onTitleChange, focusName }: TitleD
                 className="flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-muted/50 text-sm"
                 onClick={() => navigate("/", { state: { memberId: member.id } })}
               >
-                <span>
+                <span
+                  className="cursor-pointer hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(`${member.first_name} ${member.last_name}`);
+                  }}
+                >
                   {member.last_name}, {member.first_name}
                 </span>
               </li>

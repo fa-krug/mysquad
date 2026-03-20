@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { buildChildrenMap } from "@/lib/tree-utils";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { TeamMember } from "@/lib/types";
 import { MemberAvatar } from "./MemberAvatar";
 
@@ -66,11 +67,23 @@ function NodeCard({ node, selectedId, onSelect, picturesDir }: NodeCardProps) {
           picturesDir={picturesDir}
           size="sm"
         />
-        <div className="text-xs font-medium leading-tight truncate w-full">
+        <div
+          className="text-xs font-medium leading-tight truncate w-full cursor-pointer hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            copyToClipboard(`${node.member.first_name} ${node.member.last_name}`);
+          }}
+        >
           {node.member.first_name} {node.member.last_name}
         </div>
         {node.member.current_title_name && (
-          <div className="text-[10px] text-muted-foreground leading-tight truncate w-full">
+          <div
+            className="text-[10px] text-muted-foreground leading-tight truncate w-full cursor-pointer hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyToClipboard(node.member.current_title_name!);
+            }}
+          >
             {node.member.current_title_name}
           </div>
         )}

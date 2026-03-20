@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Video } from "lucide-react";
 import { showSuccess, showError } from "@/lib/toast";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { TeamMember, CheckableItem, Title, BaseCheckableItem } from "@/lib/types";
 
 interface MemberDetailProps {
@@ -168,13 +169,21 @@ export function MemberDetail({
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold">
+              <h2
+                className="text-lg font-semibold cursor-pointer hover:underline"
+                onClick={() => copyToClipboard(`${member.first_name} ${member.last_name}`)}
+              >
                 {member.first_name} {member.last_name}
               </h2>
               {member.left_date && <Badge variant="secondary">Left</Badge>}
             </div>
             {member.current_title_name && (
-              <p className="text-sm text-muted-foreground">{member.current_title_name}</p>
+              <p
+                className="text-sm text-muted-foreground cursor-pointer hover:underline"
+                onClick={() => copyToClipboard(member.current_title_name!)}
+              >
+                {member.current_title_name}
+              </p>
             )}
           </div>
           {!member.left_date && (
