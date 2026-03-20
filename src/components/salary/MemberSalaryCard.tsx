@@ -57,7 +57,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
     <div
       className={cn(
         "group/card rounded-lg border border-border p-4",
-        !member.is_active && "opacity-60",
+        !member.is_active && !anyPresented && "opacity-60",
       )}
     >
       <div className="flex items-center justify-between mb-3">
@@ -76,7 +76,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
               ({member.promoted_title_name ?? member.title_name})
             </span>
           )}
-          {!member.is_active && (
+          {!member.is_active && !anyPresented && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               <UserX className="h-3 w-3" /> Inactive
             </span>
