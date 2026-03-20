@@ -3,6 +3,14 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList, ResponsiveContainer } 
 import { annualTotal, variableTotal, formatCents } from "@/lib/salary-utils";
 import type { SalaryDataPointMember } from "@/lib/types";
 import { TooltipPortal } from "./TooltipPortal";
+import { useStickyTooltip } from "@/hooks/useStickyTooltip";
+
+interface ChartEntry {
+  name: string;
+  fixed: number;
+  variable: number;
+  varPct: string;
+}
 
 interface VariablePayChartProps {
   members: SalaryDataPointMember[];
@@ -11,6 +19,8 @@ interface VariablePayChartProps {
 export function VariablePayChart({ members }: VariablePayChartProps) {
   const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
   const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
+  const { pinned, pin } = useStickyTooltip<ChartEntry>(chartEl);
+
   const active = members
     .filter((m) => m.is_active)
     .sort(
@@ -18,7 +28,7 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
     );
   if (active.length === 0) return null;
 
-  const data = active.map((m) => {
+  const data: ChartEntry[] = active.map((m) => {
     const total = annualTotal(m.parts);
     const variable = variableTotal(m.parts);
     const fixed = total - variable;
@@ -31,6 +41,14 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
     };
   });
 
+  const renderTooltipContent = (entry: ChartEntry) => (
+    <>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{entry.name}</div>
+      <div style={{ color: "#3b82f6" }}>Fixed: {formatCents(entry.fixed * 100)}</div>
+      <div style={{ color: "#93c5fd" }}>Variable: {formatCents(entry.variable * 100)}</div>
+    </>
+  );
+
   return (
     <div className="relative">
       <h4 className="text-sm font-semibold mb-2">Variable Pay Breakdown</h4>
@@ -40,6 +58,13 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
             data={data}
             layout="vertical"
             margin={{ left: 120, right: 60, top: 5, bottom: 5 }}
+            onClick={(state) => {
+              const idx = state?.activeTooltipIndex;
+              if (idx != null && data[idx as number] && state.activeCoordinate) {
+                const entry = data[idx as number];
+                pin(entry.name, entry, state.activeCoordinate);
+              }
+            }}
           >
             <XAxis
               type="number"
@@ -55,6 +80,7 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
             <Tooltip
               isAnimationActive={false}
               content={({ active: isActive, payload, coordinate, label }) => {
+                if (pinned) return null;
                 if (!isActive || !payload?.length) return null;
                 return (
                   <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
@@ -95,6 +121,11 @@ export function VariablePayChart({ members }: VariablePayChartProps) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      {pinned && (
+        <TooltipPortal active coordinate={pinned.coordinate} chartElement={chartEl}>
+          {renderTooltipContent(pinned.entry)}
+        </TooltipPortal>
+      )}
     </div>
   );
 }

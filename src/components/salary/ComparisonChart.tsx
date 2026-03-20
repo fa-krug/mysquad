@@ -3,6 +3,17 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList, ResponsiveContainer } 
 import { annualTotal, formatCents, formatDeltaPercent } from "@/lib/salary-utils";
 import type { SalaryDataPointMember, SalaryPart } from "@/lib/types";
 import { TooltipPortal } from "./TooltipPortal";
+import { useStickyTooltip } from "@/hooks/useStickyTooltip";
+
+interface ChartEntry {
+  name: string;
+  current: number;
+  previous: number;
+  delta: number | null;
+  deltaPct: number | null;
+  isNew: boolean;
+  deltaLabel: string;
+}
 
 interface ComparisonChartProps {
   members: SalaryDataPointMember[];
@@ -12,6 +23,8 @@ interface ComparisonChartProps {
 export function ComparisonChart({ members, previousData }: ComparisonChartProps) {
   const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
   const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
+  const { pinned, pin } = useStickyTooltip<ChartEntry>(chartEl);
+
   const active = members
     .filter((m) => m.is_active)
     .sort(
@@ -19,7 +32,7 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
     );
   if (active.length === 0) return null;
 
-  const data = active.map((m) => {
+  const data: ChartEntry[] = active.map((m) => {
     const current = annualTotal(m.parts) / 100;
     const prevParts = previousData[m.member_id];
     const previous = prevParts ? annualTotal(prevParts) / 100 : null;
@@ -45,6 +58,14 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
   const hasAnyPrevious = data.some((d) => !d.isNew);
   if (!hasAnyPrevious) return null;
 
+  const renderTooltipContent = (entry: ChartEntry) => (
+    <>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{entry.name}</div>
+      <div style={{ color: "#94a3b8" }}>Previous: {formatCents(entry.previous * 100)}</div>
+      <div style={{ color: "#3b82f6" }}>Current: {formatCents(entry.current * 100)}</div>
+    </>
+  );
+
   return (
     <div className="relative">
       <h4 className="text-sm font-semibold mb-2">Comparison vs Previous</h4>
@@ -54,6 +75,13 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
             data={data}
             layout="vertical"
             margin={{ left: 120, right: 140, top: 5, bottom: 5 }}
+            onClick={(state) => {
+              const idx = state?.activeTooltipIndex;
+              if (idx != null && data[idx as number] && state.activeCoordinate) {
+                const entry = data[idx as number];
+                pin(entry.name, entry, state.activeCoordinate);
+              }
+            }}
           >
             <XAxis
               type="number"
@@ -69,6 +97,7 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
             <Tooltip
               isAnimationActive={false}
               content={({ active: isActive, payload, coordinate, label }) => {
+                if (pinned) return null;
                 if (!isActive || !payload?.length) return null;
                 return (
                   <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
@@ -127,6 +156,11 @@ export function ComparisonChart({ members, previousData }: ComparisonChartProps)
           </BarChart>
         </ResponsiveContainer>
       </div>
+      {pinned && (
+        <TooltipPortal active coordinate={pinned.coordinate} chartElement={chartEl}>
+          {renderTooltipContent(pinned.entry)}
+        </TooltipPortal>
+      )}
     </div>
   );
 }

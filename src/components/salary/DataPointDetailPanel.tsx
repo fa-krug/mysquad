@@ -406,6 +406,7 @@ export function DataPointDetailPanel({
                     detail={filteredDetail}
                     previousData={filteredPreviousData}
                     anyPresented={anyPresented}
+                    showRangesInPresentation={showRangesInPresentation}
                     salaryLineage={filteredLineage}
                   />
                 </Suspense>

@@ -647,7 +647,27 @@ pub struct Title {
 pub fn get_titles(db: State<AppDb>) -> Result<Vec<Title>, String> {
     let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let mut stmt = conn.prepare("SELECT t.id, t.name, COUNT(m.id) as member_count FROM titles t LEFT JOIN team_members m ON m.title_id = t.id AND m.deleted_at IS NULL WHERE t.deleted_at IS NULL GROUP BY t.id ORDER BY t.name ASC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.name, COUNT(m.id) as member_count
+         FROM titles t
+         LEFT JOIN team_members m ON m.deleted_at IS NULL
+             AND COALESCE(
+                 (SELECT sdpm.promoted_title_id
+                  FROM salary_data_point_members sdpm
+                  INNER JOIN (
+                      SELECT member_id, MAX(data_point_id) as max_dp_id
+                      FROM salary_data_point_members
+                      WHERE is_promoted = 1 AND promoted_title_id IS NOT NULL
+                      GROUP BY member_id
+                  ) latest ON sdpm.member_id = latest.member_id AND sdpm.data_point_id = latest.max_dp_id
+                  WHERE sdpm.member_id = m.id
+                 ),
+                 m.title_id
+             ) = t.id
+         WHERE t.deleted_at IS NULL
+         GROUP BY t.id
+         ORDER BY t.name ASC"
+    ).map_err(|e| e.to_string())?;
     let titles = stmt
         .query_map([], |row| {
             Ok(Title {

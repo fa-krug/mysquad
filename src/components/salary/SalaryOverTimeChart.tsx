@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { formatCents } from "@/lib/salary-utils";
 import type { SalaryOverTimePoint } from "@/lib/types";
@@ -22,6 +22,18 @@ const COLORS = [
   "#22c55e",
 ];
 
+interface MemberKey {
+  id: number;
+  dataKey: string;
+  name: string;
+  left: boolean;
+}
+
+interface PinnedMember {
+  dataKey: string;
+  coordinate: { x: number; y: number };
+}
+
 interface SalaryOverTimeChartProps {
   data: SalaryOverTimePoint[];
 }
@@ -30,6 +42,23 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
   const [chartEl, setChartEl] = useState<HTMLDivElement | null>(null);
   const chartCallbackRef = useCallback((node: HTMLDivElement | null) => setChartEl(node), []);
   const [hoveredMember, setHoveredMember] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<PinnedMember | null>(null);
+
+  // Click outside to dismiss pinned tooltip
+  useEffect(() => {
+    if (!pinned) return;
+    const handler = (e: MouseEvent) => {
+      if (chartEl && !chartEl.contains(e.target as Node)) {
+        setPinned(null);
+      }
+    };
+    const id = setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", handler);
+    };
+  }, [pinned, chartEl]);
+
   const { chartData, memberKeys } = useMemo(() => {
     const memberMap = new Map<number, { name: string; left: boolean }>();
 
@@ -66,6 +95,31 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
     return <p className="text-sm text-muted-foreground">No salary data points available.</p>;
   }
 
+  const activeMemberKey = pinned?.dataKey ?? hoveredMember;
+
+  const renderMemberTooltip = (dataKey: string, keys: MemberKey[]) => {
+    const mk = keys.find((k) => k.dataKey === dataKey);
+    if (!mk) return null;
+    const color = COLORS[keys.indexOf(mk) % COLORS.length];
+    const history = chartData
+      .filter((row) => row[dataKey] != null)
+      .map((row) => ({
+        label: row.name as string,
+        value: row[dataKey] as number,
+      }));
+    return (
+      <>
+        <div style={{ fontWeight: 600, marginBottom: 4, color }}>{mk.name}</div>
+        {history.map((h, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "var(--muted-foreground, #888)" }}>{h.label}</span>
+            <span style={{ fontWeight: 500 }}>{formatCents(h.value * 100)}</span>
+          </div>
+        ))}
+      </>
+    );
+  };
+
   return (
     <div>
       <h3 className="text-sm font-semibold mb-4">Salary Over Time</h3>
@@ -80,28 +134,13 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
             <Tooltip
               isAnimationActive={false}
               content={({ active: isActive, coordinate }) => {
+                if (pinned) return null;
                 if (!isActive || !hoveredMember) return null;
                 const mk = memberKeys.find((k) => k.dataKey === hoveredMember);
                 if (!mk) return null;
-                const color = COLORS[memberKeys.indexOf(mk) % COLORS.length];
-                const history = chartData
-                  .filter((row) => row[hoveredMember] != null)
-                  .map((row) => ({
-                    label: row.name as string,
-                    value: row[hoveredMember] as number,
-                  }));
                 return (
                   <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
-                    <div style={{ fontWeight: 600, marginBottom: 4, color }}>{mk.name}</div>
-                    {history.map((h, i) => (
-                      <div
-                        key={i}
-                        style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
-                      >
-                        <span style={{ color: "var(--muted-foreground, #888)" }}>{h.label}</span>
-                        <span style={{ fontWeight: 500 }}>{formatCents(h.value * 100)}</span>
-                      </div>
-                    ))}
+                    {renderMemberTooltip(hoveredMember, memberKeys)}
                   </TooltipPortal>
                 );
               }}
@@ -115,13 +154,24 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
                 name={mk.name}
                 stroke={COLORS[i % COLORS.length]}
                 strokeDasharray={mk.left ? "5 5" : undefined}
-                strokeWidth={hoveredMember === mk.dataKey ? 3 : hoveredMember ? 1 : 2}
-                strokeOpacity={hoveredMember && hoveredMember !== mk.dataKey ? 0.3 : 1}
+                strokeWidth={activeMemberKey === mk.dataKey ? 3 : activeMemberKey ? 1 : 2}
+                strokeOpacity={activeMemberKey && activeMemberKey !== mk.dataKey ? 0.3 : 1}
                 dot={{ r: 3 }}
                 activeDot={{
                   r: 5,
                   onMouseEnter: () => setHoveredMember(mk.dataKey),
                   onMouseLeave: () => setHoveredMember(null),
+                  onClick: (_: unknown, e: React.MouseEvent) => {
+                    const rect = chartEl?.getBoundingClientRect();
+                    if (!rect) return;
+                    const coordinate = {
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    };
+                    setPinned((prev) =>
+                      prev?.dataKey === mk.dataKey ? null : { dataKey: mk.dataKey, coordinate },
+                    );
+                  },
                 }}
                 connectNulls={false}
               />
@@ -129,6 +179,11 @@ export function SalaryOverTimeChart({ data }: SalaryOverTimeChartProps) {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      {pinned && (
+        <TooltipPortal active coordinate={pinned.coordinate} chartElement={chartEl}>
+          {renderMemberTooltip(pinned.dataKey, memberKeys)}
+        </TooltipPortal>
+      )}
     </div>
   );
 }

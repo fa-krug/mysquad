@@ -18,6 +18,7 @@ import {
 } from "@/lib/salary-utils";
 import type { SalaryDataPointMember, SalaryRange, SalaryPart } from "@/lib/types";
 import { TooltipPortal } from "./TooltipPortal";
+import { useStickyTooltip } from "@/hooks/useStickyTooltip";
 
 const fillColors = { green: "#16a34a", yellow: "#ca8a04", red: "#dc2626", none: "#94a3b8" };
 
@@ -171,6 +172,8 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
     };
   }, [handleSetHoveredPart]);
 
+  const { pinned, pin } = useStickyTooltip<ChartEntry>(chartEl);
+
   const active = members
     .filter((m) => m.is_active)
     .sort(
@@ -203,6 +206,32 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
   const { headcount } = budgetTotals(members);
   const avgPerHead = budget && headcount > 0 ? budget / 100 / headcount : null;
 
+  const renderTooltipContent = (entry: ChartEntry) => (
+    <>
+      <div style={{ fontWeight: 600, marginBottom: entry.parts.length > 1 ? 4 : 0 }}>
+        {entry.name}: {formatCents(entry.total * 100)}
+      </div>
+      {entry.parts.length > 1 &&
+        entry.parts.map((p, i) => (
+          <div
+            key={i}
+            style={{
+              opacity: hoveredPart === null ? 0.75 : hoveredPart === p.name ? 1 : 0.4,
+              fontWeight: hoveredPart === p.name ? 600 : 400,
+            }}
+          >
+            {hoveredPart === p.name ? "→ " : ""}
+            {p.name}: {formatCents(p.annual * 100)}
+          </div>
+        ))}
+      {entry.rangeMin !== null && entry.rangeMax !== null && (
+        <div style={{ opacity: 0.6, marginTop: 2 }}>
+          Range: {formatCents(entry.rangeMin * 100)} – {formatCents(entry.rangeMax * 100)}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="relative">
       <h4 className="text-sm font-semibold mb-2">Salary Overview</h4>
@@ -212,6 +241,13 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
             data={data}
             layout="vertical"
             margin={{ left: 120, right: 20, top: 5, bottom: 5 }}
+            onClick={(state) => {
+              const idx = state?.activeTooltipIndex;
+              if (idx != null && data[idx as number] && state.activeCoordinate) {
+                const entry = data[idx as number];
+                pin(entry.name, entry, state.activeCoordinate);
+              }
+            }}
           >
             <XAxis
               type="number"
@@ -227,32 +263,12 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
             <Tooltip
               isAnimationActive={false}
               content={({ active: isActive, payload, coordinate }) => {
+                if (pinned) return null;
                 if (!isActive || !payload?.[0]) return null;
                 const entry = payload[0].payload as ChartEntry;
                 return (
                   <TooltipPortal active={isActive} coordinate={coordinate} chartElement={chartEl}>
-                    <div style={{ fontWeight: 600, marginBottom: entry.parts.length > 1 ? 4 : 0 }}>
-                      {entry.name}: {formatCents(entry.total * 100)}
-                    </div>
-                    {entry.parts.length > 1 &&
-                      entry.parts.map((p, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            opacity: hoveredPart === null ? 0.75 : hoveredPart === p.name ? 1 : 0.4,
-                            fontWeight: hoveredPart === p.name ? 600 : 400,
-                          }}
-                        >
-                          {hoveredPart === p.name ? "→ " : ""}
-                          {p.name}: {formatCents(p.annual * 100)}
-                        </div>
-                      ))}
-                    {entry.rangeMin !== null && entry.rangeMax !== null && (
-                      <div style={{ opacity: 0.6, marginTop: 2 }}>
-                        Range: {formatCents(entry.rangeMin * 100)} –{" "}
-                        {formatCents(entry.rangeMax * 100)}
-                      </div>
-                    )}
+                    {renderTooltipContent(entry)}
                   </TooltipPortal>
                 );
               }}
@@ -289,6 +305,11 @@ export function SalaryBarChart({ members, ranges, budget }: SalaryBarChartProps)
           </BarChart>
         </ResponsiveContainer>
       </div>
+      {pinned && (
+        <TooltipPortal active coordinate={pinned.coordinate} chartElement={chartEl}>
+          {renderTooltipContent(pinned.entry)}
+        </TooltipPortal>
+      )}
     </div>
   );
 }
