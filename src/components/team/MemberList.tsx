@@ -6,7 +6,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { flattenTree } from "@/lib/tree-utils";
-import { copyToClipboard } from "@/lib/clipboard";
 import type { TreeRow } from "@/lib/tree-utils";
 import type { TeamMember } from "@/lib/types";
 
@@ -167,23 +166,11 @@ export function MemberList({
           size="sm"
         />
         <div className="flex-1 min-w-0">
-          <div
-            className="text-sm font-medium truncate cursor-pointer hover:underline"
-            onClick={(e) => {
-              e.stopPropagation();
-              copyToClipboard(`${member.first_name} ${member.last_name}`);
-            }}
-          >
+          <div className="text-sm font-medium truncate">
             {member.last_name}, {member.first_name}
           </div>
           {member.current_title_name && (
-            <div
-              className="text-xs text-muted-foreground truncate cursor-pointer hover:underline"
-              onClick={(e) => {
-                e.stopPropagation();
-                copyToClipboard(member.current_title_name!);
-              }}
-            >
+            <div className="text-xs text-muted-foreground truncate">
               {member.current_title_name}
             </div>
           )}
@@ -224,25 +211,11 @@ export function MemberList({
         size="sm"
       />
       <div className="flex-1 min-w-0">
-        <div
-          className="text-sm font-medium truncate cursor-pointer hover:underline"
-          onClick={(e) => {
-            e.stopPropagation();
-            copyToClipboard(`${member.first_name} ${member.last_name}`);
-          }}
-        >
+        <div className="text-sm font-medium truncate">
           {member.last_name}, {member.first_name}
         </div>
         {member.current_title_name && (
-          <div
-            className="text-xs text-muted-foreground truncate cursor-pointer hover:underline"
-            onClick={(e) => {
-              e.stopPropagation();
-              copyToClipboard(member.current_title_name!);
-            }}
-          >
-            {member.current_title_name}
-          </div>
+          <div className="text-xs text-muted-foreground truncate">{member.current_title_name}</div>
         )}
       </div>
 
@@ -337,13 +310,7 @@ export function MemberList({
                     size="sm"
                   />
                   <div className="flex-1 min-w-0">
-                    <div
-                      className="text-sm font-medium truncate cursor-pointer hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(`${member.first_name} ${member.last_name}`);
-                      }}
-                    >
+                    <div className="text-sm font-medium truncate">
                       {member.last_name}, {member.first_name}
                     </div>
                   </div>

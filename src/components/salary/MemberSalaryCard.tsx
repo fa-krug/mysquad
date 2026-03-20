@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { Eye, FileDown, Plus, Star, UserX } from "lucide-react";
+import { copyToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
@@ -61,11 +62,17 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">
+          <h3
+            className="text-sm font-semibold cursor-pointer hover:underline"
+            onClick={() => copyToClipboard(`${member.first_name} ${member.last_name}`)}
+          >
             {member.last_name}, {member.first_name}
           </h3>
           {(member.promoted_title_name ?? member.title_name) && (
-            <span className="text-xs text-muted-foreground">
+            <span
+              className="text-xs text-muted-foreground cursor-pointer hover:underline"
+              onClick={() => copyToClipboard((member.promoted_title_name ?? member.title_name)!)}
+            >
               ({member.promoted_title_name ?? member.title_name})
             </span>
           )}
