@@ -4,7 +4,12 @@ import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
 import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
 import { cn } from "@/lib/utils";
-import type { SalaryDataPointMember, SalaryRange, ScenarioMemberComparison } from "@/lib/types";
+import type {
+  SalaryDataPointMember,
+  SalaryPart,
+  SalaryRange,
+  ScenarioMemberComparison,
+} from "@/lib/types";
 
 const fitColors: Record<string, string> = {
   green: "text-green-600",
@@ -24,6 +29,8 @@ interface MemberSalaryCardProps {
   onTogglePresented: (id: number, value: boolean) => void;
   scenarioComparison?: ScenarioMemberComparison[];
   onExportDocx?: (memberId: number, memberName: string) => void;
+  previousParts?: SalaryPart[] | null;
+  previousDataPointName?: string | null;
 }
 
 export const MemberSalaryCard = memo(function MemberSalaryCard({
@@ -37,6 +44,8 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onTogglePresented,
   scenarioComparison,
   onExportDocx,
+  previousParts,
+  previousDataPointName,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
   const hideRanges = anyPresented && !showRangesInPresentation;
@@ -143,6 +152,39 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
       >
         <Plus className="h-3.5 w-3.5 mr-1" /> Add Part
       </Button>
+      {anyPresented && previousParts && previousParts.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              {previousDataPointName ?? "Previous"}
+            </span>
+            <span className="text-xs font-semibold text-muted-foreground">
+              {formatCents(annualTotal(previousParts))}/yr
+            </span>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="text-xs text-muted-foreground">
+                <th className="px-2 py-1 text-left font-medium">Label</th>
+                <th className="px-2 py-1 text-left font-medium">Amount</th>
+                <th className="px-2 py-1 text-left font-medium">Freq/yr</th>
+                <th className="px-2 py-1 text-center font-medium">Variable</th>
+              </tr>
+            </thead>
+            <tbody>
+              {previousParts.map((part) => (
+                <SalaryPartRow
+                  key={part.id}
+                  part={part}
+                  onDelete={() => {}}
+                  onChanged={() => {}}
+                  readonly
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {!anyPresented && scenarioComparison && scenarioComparison.length > 0 && (
         <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/50">
           <div className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">

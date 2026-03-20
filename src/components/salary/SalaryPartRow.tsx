@@ -7,18 +7,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { updateSalaryPart } from "@/lib/db";
 import { positiveNumber, positiveInteger } from "@/lib/validators";
+import { formatCents } from "@/lib/salary-utils";
 import type { SalaryPart } from "@/lib/types";
 
 interface SalaryPartRowProps {
   part: SalaryPart;
   onDelete: (id: number) => void;
   onChanged: () => void;
+  readonly?: boolean;
 }
 
 export const SalaryPartRow = memo(function SalaryPartRow({
   part,
   onDelete,
   onChanged,
+  readonly,
 }: SalaryPartRowProps) {
   const [name, setName] = useState(part.name ?? "");
   const [amount, setAmount] = useState(part.amount ? String(Math.round(part.amount / 100)) : "");
@@ -49,6 +52,26 @@ export const SalaryPartRow = memo(function SalaryPartRow({
     },
     validate: positiveInteger,
   });
+
+  if (readonly) {
+    return (
+      <tr className="border-b border-border last:border-0">
+        <td className="px-2 py-1">
+          <span className="text-sm">{part.name || "—"}</span>
+        </td>
+        <td className="px-2 py-1">
+          <span className="text-sm">{formatCents(part.amount)}</span>
+        </td>
+        <td className="px-2 py-1">
+          <span className="text-sm">{part.frequency}×</span>
+        </td>
+        <td className="px-2 py-1 text-center">
+          <Checkbox checked={part.is_variable} disabled />
+        </td>
+        <td className="px-2 py-1"></td>
+      </tr>
+    );
+  }
 
   return (
     <tr className="border-b border-border last:border-0">

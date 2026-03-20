@@ -227,6 +227,17 @@ export function DataPointDetailPanel({
     return null;
   }, [detail, listItems]);
 
+  const previousDataPointName = useMemo(() => {
+    if (!detail.previous_data_point_id) return null;
+    const prevId = detail.previous_data_point_id;
+    for (const item of listItems) {
+      if (item.type === "data_point" && item.data_point.id === prevId) {
+        return item.data_point.name;
+      }
+    }
+    return null;
+  }, [detail, listItems]);
+
   const handleExportAllDocx = useCallback(async () => {
     setExporting(true);
     try {
@@ -392,6 +403,8 @@ export function DataPointDetailPanel({
                     detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
                   }
                   onExportDocx={detail.template_path ? handleExportMemberDocx : undefined}
+                  previousParts={previousData[member.member_id]}
+                  previousDataPointName={previousDataPointName}
                 />
               ))
             )}
