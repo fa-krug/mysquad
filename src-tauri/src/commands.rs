@@ -5126,6 +5126,35 @@ pub fn export_member_salary_docx(
         ("{{parts_text}}", parts_text),
     ];
 
+    // Build condition context for {{#if var}} blocks
+    let mut if_context: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    // All template variables are available as conditions (truthy if non-empty)
+    for (placeholder, value) in &replacements {
+        // Strip {{ and }} to get the variable name
+        let name = &placeholder[2..placeholder.len() - 2];
+        if_context.insert(name.to_string(), value.clone());
+    }
+    // Additional boolean conditions
+    if_context.insert(
+        "is_promoted".to_string(),
+        if is_promoted {
+            "true".to_string()
+        } else {
+            String::new()
+        },
+    );
+    if_context.insert(
+        "has_variable_parts".to_string(),
+        if variable_total > 0 {
+            "true".to_string()
+        } else {
+            String::new()
+        },
+    );
+    // part_count so templates can check {{#if part_3_name}} etc.
+    if_context.insert("part_count".to_string(), parts.len().to_string());
+
     // Add individual salary part placeholders: {{part_1_name}}, {{part_1_amount}}, etc.
     let mut extra_replacements: Vec<(String, String)> = Vec::new();
     for (i, p) in parts.iter().enumerate() {
@@ -5154,6 +5183,12 @@ pub fn export_member_salary_docx(
                 "Fixed".to_string()
             },
         ));
+    }
+
+    // Add extra replacement variables to if_context
+    for (placeholder, value) in &extra_replacements {
+        let name = &placeholder[2..placeholder.len() - 2];
+        if_context.insert(name.to_string(), value.clone());
     }
 
     // Process DOCX (ZIP) file - replace placeholders in XML files
@@ -5203,6 +5238,9 @@ pub fn export_member_salary_docx(
 
             // Handle split placeholders
             let text = collapse_split_placeholders(&text, &replacements, &extra_replacements);
+
+            // Process {{#if var}}...{{else}}...{{/if}} conditional blocks
+            let text = process_if_blocks(&text, &if_context);
 
             text.into_bytes()
         } else {
@@ -5325,6 +5363,271 @@ fn collapse_split_placeholders(
     }
 
     output
+}
+
+/// Process `{{#if var}}...{{else}}...{{/if}}` conditional blocks in template text.
+///
+/// Works on the full XML string after placeholder replacement. Handles both:
+/// - Inline blocks (within a single `<w:t>` tag's text)
+/// - Cross-paragraph blocks (spanning multiple `<w:p>` elements)
+///
+/// For cross-paragraph blocks, the paragraphs containing only the if/else/endif
+/// tags are removed entirely. A variable is considered truthy if it exists in
+/// the context map and is non-empty.
+fn process_if_blocks(xml: &str, context: &std::collections::HashMap<String, String>) -> String {
+    let mut result = xml.to_string();
+
+    // Process from innermost blocks outward to handle nesting
+    while let Some(if_tag_start) = find_innermost_if(&result) {
+        let if_tag_end = match result[if_tag_start..].find("}}") {
+            Some(p) => if_tag_start + p + 2,
+            None => break,
+        };
+
+        // Extract variable name
+        let tag_content = &result[if_tag_start + 6..if_tag_end - 2]; // skip "{{#if " and "}}"
+        let var_name = tag_content.trim();
+
+        // Find matching {{/if}}
+        let endif_start = match result[if_tag_end..].find("{{/if}}") {
+            Some(p) => if_tag_end + p,
+            None => break,
+        };
+        let endif_end = endif_start + 7; // "{{/if}}".len()
+
+        // Find optional {{else}} between if and endif
+        let body = &result[if_tag_end..endif_start];
+        let else_pos = body.find("{{else}}");
+
+        let (if_body, else_body) = match else_pos {
+            Some(ep) => (&body[..ep], &body[ep + 8..]), // 8 = "{{else}}".len()
+            None => (body, ""),
+        };
+
+        // Evaluate condition: truthy if variable exists and is non-empty
+        let is_truthy = context
+            .get(var_name)
+            .map(|v| !v.is_empty() && v != "0")
+            .unwrap_or(false);
+
+        let chosen_body = if is_truthy { if_body } else { else_body };
+
+        // Build replacement — but first check if we should clean up whole paragraphs
+        // containing only the if/else/endif tags
+        let replacement = clean_if_block_paragraphs(
+            &result,
+            &IfBlockRange {
+                if_start: if_tag_start,
+                if_end: if_tag_end,
+                endif_start,
+                endif_end,
+                else_range: else_pos.map(|ep| (if_tag_end + ep, if_tag_end + ep + 8)),
+            },
+            chosen_body,
+            is_truthy,
+        );
+
+        match replacement {
+            IfBlockReplacement::FullRange { start, end, text } => {
+                result = format!("{}{}{}", &result[..start], text, &result[end..]);
+            }
+            IfBlockReplacement::Simple(text) => {
+                result = format!(
+                    "{}{}{}",
+                    &result[..if_tag_start],
+                    text,
+                    &result[endif_end..]
+                );
+            }
+        }
+    }
+
+    result
+}
+
+/// Find the start position of the innermost `{{#if ...}}` (one that has no nested `{{#if` before its `{{/if}}`).
+fn find_innermost_if(xml: &str) -> Option<usize> {
+    let mut last_if = None;
+    let mut search_start = 0;
+
+    while let Some(pos) = xml[search_start..].find("{{#if ") {
+        let abs_pos = search_start + pos;
+        // Check if there's a {{/if}} before the next {{#if}}
+        let after = abs_pos + 6;
+        let next_if = xml[after..].find("{{#if ");
+        let next_endif = xml[after..].find("{{/if}}");
+
+        match (next_if, next_endif) {
+            (Some(ni), Some(ne)) if ni < ne => {
+                // There's another #if before the endif — this one isn't innermost, keep searching
+                last_if = Some(abs_pos);
+                search_start = after;
+            }
+            _ => {
+                // This #if's endif comes before any nested #if — it's innermost
+                return Some(abs_pos);
+            }
+        }
+    }
+
+    // If we found #if tags but none were "innermost" by the above logic,
+    // return the last one found (it must be innermost since we exhausted the search)
+    last_if
+}
+
+enum IfBlockReplacement {
+    /// Replace a wider range (e.g., including surrounding paragraph tags)
+    FullRange {
+        start: usize,
+        end: usize,
+        text: String,
+    },
+    /// Simple inline replacement (just the if-tag to endif-tag range)
+    Simple(String),
+}
+
+struct IfBlockRange {
+    if_start: usize,
+    if_end: usize,
+    endif_start: usize,
+    endif_end: usize,
+    else_range: Option<(usize, usize)>,
+}
+
+/// Determine whether to remove whole `<w:p>` paragraphs that contain only the if/else/endif tags,
+/// or just do inline replacement.
+fn clean_if_block_paragraphs(
+    xml: &str,
+    range: &IfBlockRange,
+    chosen_body: &str,
+    is_truthy: bool,
+) -> IfBlockReplacement {
+    let IfBlockRange {
+        if_start,
+        if_end,
+        endif_start,
+        endif_end,
+        else_range,
+    } = *range;
+    // Try to find enclosing <w:p> for the if-tag
+    let if_para = find_enclosing_paragraph(xml, if_start, if_end);
+    let endif_para = find_enclosing_paragraph(xml, endif_start, endif_end);
+
+    // Check if the if/endif tags are the sole text content of their paragraphs
+    let if_is_solo = if_para
+        .map(|(ps, pe)| paragraph_text_is_only(xml, ps, pe, "{{#if "))
+        .unwrap_or(false);
+    let endif_is_solo = endif_para
+        .map(|(ps, pe)| paragraph_text_is_only(xml, ps, pe, "{{/if}}"))
+        .unwrap_or(false);
+
+    // Check else paragraph too
+    let else_is_solo = else_range
+        .and_then(|(es, ee)| {
+            find_enclosing_paragraph(xml, es, ee)
+                .map(|(ps, pe)| paragraph_text_is_only(xml, ps, pe, "{{else}}"))
+        })
+        .unwrap_or(false);
+
+    if if_is_solo && endif_is_solo {
+        let (if_p_start, if_p_end) = if_para.unwrap();
+        let (endif_p_start, endif_p_end) = endif_para.unwrap();
+
+        if is_truthy {
+            // Keep the if-body content, remove if-paragraph, endif-paragraph, and else-paragraph if solo
+            let mut body_content = if let (Some((es, ee)), true) = (else_range, else_is_solo) {
+                let else_para = find_enclosing_paragraph(xml, es, ee).unwrap();
+                // Content is: between if-para-end and else-para-start + between else-para-end and endif-para-start
+                format!(
+                    "{}{}",
+                    &xml[if_p_end..else_para.0],
+                    &xml[else_para.1..endif_p_start]
+                )
+            } else if let Some((es, _ee)) = else_range {
+                // else not solo — keep content from if-para end to else tag, drop else to endif
+                xml[if_p_end..es].to_string()
+            } else {
+                xml[if_p_end..endif_p_start].to_string()
+            };
+
+            // Trim leading/trailing newlines from body
+            if body_content.starts_with('\n') {
+                body_content = body_content[1..].to_string();
+            }
+            if body_content.ends_with('\n') {
+                body_content = body_content[..body_content.len() - 1].to_string();
+            }
+
+            IfBlockReplacement::FullRange {
+                start: if_p_start,
+                end: endif_p_end,
+                text: body_content,
+            }
+        } else {
+            // Keep the else-body content if present
+            let body_content = if let (Some((_es, ee)), true) = (else_range, else_is_solo) {
+                let else_para = find_enclosing_paragraph(xml, _es, ee).unwrap();
+                xml[else_para.1..endif_p_start].to_string()
+            } else if let Some((_es, ee)) = else_range {
+                xml[ee..endif_p_start].to_string()
+            } else {
+                String::new()
+            };
+
+            IfBlockReplacement::FullRange {
+                start: if_p_start,
+                end: endif_p_end,
+                text: body_content,
+            }
+        }
+    } else {
+        // Inline: just replace the tag range with chosen body
+        IfBlockReplacement::Simple(chosen_body.to_string())
+    }
+}
+
+/// Find the `<w:p>` ... `</w:p>` range enclosing a given position.
+fn find_enclosing_paragraph(xml: &str, start: usize, end: usize) -> Option<(usize, usize)> {
+    // Search backwards from start for <w:p> or <w:p ...>
+    let before = &xml[..start];
+    let p_open = before.rfind("<w:p>").or_else(|| before.rfind("<w:p "));
+    let p_open = p_open?;
+
+    // Search forward from end for </w:p>
+    let after_pos = xml[end..].find("</w:p>")?;
+    let p_close = end + after_pos + "</w:p>".len();
+
+    Some((p_open, p_close))
+}
+
+/// Check if a paragraph's text content consists only of a specific tag (e.g., "{{#if ...}}").
+fn paragraph_text_is_only(xml: &str, p_start: usize, p_end: usize, tag_prefix: &str) -> bool {
+    let paragraph = &xml[p_start..p_end];
+    // Extract all text from <w:t> tags
+    let mut full_text = String::new();
+    let mut pos = 0;
+    while pos < paragraph.len() {
+        if let Some(t_start) = paragraph[pos..].find("<w:t>").map(|p| p + 5).or_else(|| {
+            paragraph[pos..]
+                .find("<w:t ")
+                .and_then(|p| paragraph[pos + p..].find('>').map(|q| p + q + 1))
+        }) {
+            let t_start = pos + t_start;
+            if let Some(t_end) = paragraph[t_start..].find("</w:t>") {
+                full_text.push_str(&paragraph[t_start..t_start + t_end]);
+                pos = t_start + t_end + "</w:t>".len();
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    let trimmed = full_text.trim();
+    trimmed.starts_with(tag_prefix) && trimmed.ends_with("}}")
+        || trimmed == "{{else}}"
+        || trimmed == "{{/if}}"
 }
 
 fn extract_tag(xml: &str, tag: &str) -> Option<String> {
@@ -5644,4 +5947,108 @@ pub fn get_trashed_salary_data_points(db: State<AppDb>) -> Result<Vec<SalaryList
     }
 
     Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn ctx(entries: &[(&str, &str)]) -> HashMap<String, String> {
+        entries
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn test_if_block_truthy_inline() {
+        let input = "Hello {{#if name}}dear {{name}}{{/if}}!";
+        let context = ctx(&[("name", "Alice")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "Hello dear {{name}}!");
+    }
+
+    #[test]
+    fn test_if_block_falsy_inline() {
+        let input = "Hello {{#if name}}dear {{name}}{{/if}}!";
+        let context = ctx(&[("name", "")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "Hello !");
+    }
+
+    #[test]
+    fn test_if_else_block_truthy() {
+        let input = "Title: {{#if is_promoted}}promoted{{else}}current{{/if}}";
+        let context = ctx(&[("is_promoted", "true")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "Title: promoted");
+    }
+
+    #[test]
+    fn test_if_else_block_falsy() {
+        let input = "Title: {{#if is_promoted}}promoted{{else}}current{{/if}}";
+        let context = ctx(&[("is_promoted", "")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "Title: current");
+    }
+
+    #[test]
+    fn test_if_block_missing_variable() {
+        let input = "{{#if unknown}}shown{{/if}}rest";
+        let context = ctx(&[]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "rest");
+    }
+
+    #[test]
+    fn test_if_block_zero_is_falsy() {
+        let input = "{{#if count}}has items{{else}}empty{{/if}}";
+        let context = ctx(&[("count", "0")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "empty");
+    }
+
+    #[test]
+    fn test_nested_if_blocks() {
+        let input = "{{#if a}}A{{#if b}}B{{/if}}C{{/if}}";
+        let context = ctx(&[("a", "yes"), ("b", "yes")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "ABC");
+    }
+
+    #[test]
+    fn test_nested_if_blocks_inner_false() {
+        let input = "{{#if a}}A{{#if b}}B{{/if}}C{{/if}}";
+        let context = ctx(&[("a", "yes"), ("b", "")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "AC");
+    }
+
+    #[test]
+    fn test_if_block_paragraph_removal() {
+        let input = r#"<w:p><w:r><w:t>{{#if is_promoted}}</w:t></w:r></w:p><w:p><w:r><w:t>You got promoted!</w:t></w:r></w:p><w:p><w:r><w:t>{{/if}}</w:t></w:r></w:p>"#;
+        let context = ctx(&[("is_promoted", "true")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(
+            result,
+            r#"<w:p><w:r><w:t>You got promoted!</w:t></w:r></w:p>"#
+        );
+    }
+
+    #[test]
+    fn test_if_block_paragraph_removal_falsy() {
+        let input = r#"<w:p><w:r><w:t>{{#if is_promoted}}</w:t></w:r></w:p><w:p><w:r><w:t>You got promoted!</w:t></w:r></w:p><w:p><w:r><w:t>{{/if}}</w:t></w:r></w:p>"#;
+        let context = ctx(&[("is_promoted", "")]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_no_if_blocks_passthrough() {
+        let input = "Just some {{placeholder}} text";
+        let context = ctx(&[]);
+        let result = process_if_blocks(input, &context);
+        assert_eq!(result, "Just some {{placeholder}} text");
+    }
 }
