@@ -5,6 +5,7 @@
   "windows": ["main", "presentation-*"],
   "permissions": [
     "core:default",
+    "core:event:default",
     "opener:default",
     "dialog:default",
     "deep-link:default",
