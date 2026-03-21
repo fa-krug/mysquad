@@ -7,7 +7,6 @@ import { VariablePayChart } from "@/components/salary/VariablePayChart";
 import { ComparisonChart } from "@/components/salary/ComparisonChart";
 import { SalaryOverTimeChart } from "@/components/salary/SalaryOverTimeChart";
 import { useSalarySync } from "@/hooks/useSalarySync";
-import { annualTotal, formatCents } from "@/lib/salary-utils";
 import type {
   SalaryDataPointDetail,
   SalaryDataPointMember,
@@ -25,12 +24,14 @@ export function Presentation() {
   const [lineage, setLineage] = useState<SalaryOverTimePoint[]>([]);
   const [showRanges, setShowRanges] = useState(false);
   const [member, setMember] = useState<SalaryDataPointMember | null>(null);
+  const [previousDataPointName, setPreviousDataPointName] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const full = await getSalaryDataPointFull(dpId);
     setDetail(full.detail);
     setPreviousData(full.previous_data);
     setLineage(full.lineage);
+    setPreviousDataPointName(full.previous_data_point_name ?? null);
     const m = full.detail.members.find((m) => m.member_id === mId) ?? null;
     setMember(m);
   }, [dpId, mId]);
@@ -52,9 +53,7 @@ export function Presentation() {
     );
   }
 
-  const total = annualTotal(member.parts);
   const prevParts = previousData[mId] ?? null;
-  const prevTotal = prevParts ? annualTotal(prevParts) : null;
 
   // Filter lineage to just this member
   const memberLineage = lineage.map((point) => ({
@@ -67,61 +66,39 @@ export function Presentation() {
   const singlePreviousData: Record<number, SalaryPart[]> = prevParts ? { [mId]: prevParts } : {};
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">
-          {member.first_name} {member.last_name}
-        </h1>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {(member.promoted_title_name ?? member.title_name) && (
-            <span>{member.promoted_title_name ?? member.title_name}</span>
-          )}
-          {member.is_promoted && member.title_name && member.promoted_title_name && (
-            <span className="text-amber-600">(promoted from {member.title_name})</span>
-          )}
-        </div>
-        <div className="text-lg font-semibold mt-1">{formatCents(total)}/yr</div>
-        {prevTotal !== null && (
-          <div className="text-sm text-muted-foreground">
-            Previous: {formatCents(prevTotal)}/yr
-            {total !== prevTotal && (
-              <span className={total > prevTotal ? "text-green-600 ml-1" : "text-red-600 ml-1"}>
-                ({total > prevTotal ? "+" : ""}
-                {formatCents(total - prevTotal)})
-              </span>
-            )}
-          </div>
-        )}
+    <div className="mx-auto p-6 flex flex-col min-[960px]:flex-row justify-center gap-6">
+      {/* Salary card */}
+      <div className="w-full mx-auto min-[960px]:mx-0 min-[960px]:flex-none space-y-6" style={{ maxWidth: "560px" }}>
+        <MemberSalaryCard
+          member={member}
+          ranges={showRanges ? detail.ranges : []}
+          onAddPart={async () => {
+            const { createSalaryPart } = await import("@/lib/db");
+            await createSalaryPart(member.id);
+          }}
+          onDeletePart={async (partId) => {
+            const { deleteSalaryPart } = await import("@/lib/db");
+            await deleteSalaryPart(partId);
+          }}
+          onChanged={() => {}}
+          dataPointId={dpId}
+          previousParts={prevParts}
+          previousDataPointName={previousDataPointName}
+          hidePresentationButton
+        />
       </div>
 
-      {/* Editable salary card */}
-      <MemberSalaryCard
-        member={member}
-        ranges={showRanges ? detail.ranges : []}
-        onAddPart={async () => {
-          const { createSalaryPart } = await import("@/lib/db");
-          await createSalaryPart(member.id);
-        }}
-        onDeletePart={async (partId) => {
-          const { deleteSalaryPart } = await import("@/lib/db");
-          await deleteSalaryPart(partId);
-        }}
-        onChanged={() => {}}
-        dataPointId={dpId}
-        previousParts={prevParts}
-        previousDataPointName={detail.name}
-      />
-
       {/* Charts */}
-      <SalaryBarChart
-        members={singleMemberDetail.members}
-        ranges={showRanges ? detail.ranges : []}
-        budget={null}
-      />
-      <VariablePayChart members={singleMemberDetail.members} />
-      <ComparisonChart members={singleMemberDetail.members} previousData={singlePreviousData} />
-      {memberLineage.length >= 2 && <SalaryOverTimeChart data={memberLineage} />}
+      <div className="max-w-2xl w-full mx-auto min-[960px]:mx-0 min-[960px]:flex-1 min-[960px]:min-w-0 space-y-6">
+        <SalaryBarChart
+          members={singleMemberDetail.members}
+          ranges={showRanges ? detail.ranges : []}
+          budget={null}
+        />
+        <VariablePayChart members={singleMemberDetail.members} />
+        <ComparisonChart members={singleMemberDetail.members} previousData={singlePreviousData} />
+        {memberLineage.length >= 2 && <SalaryOverTimeChart data={memberLineage} />}
+      </div>
     </div>
   );
 }

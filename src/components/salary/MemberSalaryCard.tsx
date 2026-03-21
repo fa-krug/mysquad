@@ -38,6 +38,7 @@ interface MemberSalaryCardProps {
   onExportDocx?: (memberId: number, memberName: string) => void;
   previousParts?: SalaryPart[] | null;
   previousDataPointName?: string | null;
+  hidePresentationButton?: boolean;
 }
 
 export const MemberSalaryCard = memo(function MemberSalaryCard({
@@ -51,6 +52,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onExportDocx,
   previousParts,
   previousDataPointName,
+  hidePresentationButton,
 }: MemberSalaryCardProps) {
   const total = annualTotal(member.parts);
   const range = getRangeForMember(member, ranges);
@@ -90,17 +92,19 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
               <Star className="h-3 w-3" /> Promoted
             </span>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-muted-foreground opacity-0 group-hover/card:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              openPresentationWindow(dataPointId, member.member_id);
-            }}
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </Button>
+          {!hidePresentationButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-muted-foreground opacity-0 group-hover/card:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                openPresentationWindow(dataPointId, member.member_id);
+              }}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {onExportDocx && (
             <Button
               variant="ghost"

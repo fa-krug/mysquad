@@ -269,6 +269,7 @@ export interface SalaryDataPointFull {
   detail: SalaryDataPointDetail;
   lineage: SalaryOverTimePoint[];
   previous_data: Record<number, SalaryPart[]>;
+  previous_data_point_name: string | null;
 }
 
 export interface ScenarioGroup {

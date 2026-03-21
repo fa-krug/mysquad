@@ -10,6 +10,10 @@ function getSystemTheme(): "light" | "dark" {
 function applyTheme(theme: Theme) {
   const resolved = theme === "system" ? getSystemTheme() : theme;
   document.documentElement.classList.toggle("dark", resolved === "dark");
+  // Sync to localStorage so the inline anti-flash script in index.html can read it
+  localStorage.setItem("theme", theme);
+  // Clear the inline background style once CSS has taken over
+  document.documentElement.style.background = "";
 }
 
 export function useTheme(dbReady: boolean) {

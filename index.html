@@ -10,9 +10,14 @@
   <body>
     <script>
       // Apply dark mode instantly to prevent white flash on startup
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.classList.add("dark");
-      }
+      ;(function() {
+        var saved = localStorage.getItem("theme");
+        var dark = saved === "dark" || (saved !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.background = "oklch(0.145 0 0)";
+        }
+      })();
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
