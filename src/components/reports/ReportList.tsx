@@ -47,8 +47,6 @@ export function ReportList({
   useEffect(() => {
     if (showSearch) {
       searchInputRef.current?.focus();
-    } else {
-      setSearchQuery("");
     }
   }, [showSearch]);
 
@@ -82,7 +80,12 @@ export function ReportList({
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => setShowSearch((v) => !v)}
+            onClick={() => {
+              setShowSearch((v) => {
+                if (v) setSearchQuery("");
+                return !v;
+              });
+            }}
             title={showSearch ? "Hide search" : "Search reports"}
             className={showSearch ? "bg-muted" : ""}
           >
