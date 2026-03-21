@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, lazy } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -20,6 +20,9 @@ const TeamMeetingsPage = lazy(() =>
   import("@/pages/TeamMeetings").then((m) => ({ default: m.TeamMeetings })),
 );
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const Presentation = lazy(() =>
+  import("@/pages/Presentation").then((m) => ({ default: m.Presentation })),
+);
 import { useAutoLock } from "./hooks/useAutoLock";
 import { flushRegistry } from "./hooks/useAutoSave";
 import {
@@ -183,6 +186,26 @@ function App() {
       });
     }
   }, [unlocked, checkForUpdate]);
+
+  // Presentation windows share the Rust process (DB already open) — bypass
+  // lock screen, onboarding, auto-lock, and update checks.
+  const isPresentationWindow = window.location.pathname.startsWith("/presentation/");
+  if (isPresentationWindow) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/presentation/:dataPointId/:memberId"
+            element={
+              <Suspense fallback={null}>
+                <Presentation />
+              </Suspense>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
 
   // Show nothing while checking config
   if (!configLoaded) return null;
