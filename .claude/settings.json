@@ -145,12 +145,10 @@
       "mcp__glab__glab_repo:*",
       "mcp__glab__glab_auth_status"
     ],
-    "deny": [
+    "ask": [
       "Bash(dd:*)",
       "Bash(mkfs:*)",
-      "Bash(fdisk:*)"
-    ],
-    "ask": [
+      "Bash(fdisk:*)",
       "Bash(rm:*)",
       "Bash(rmdir:*)",
       "Bash(git reset --hard:*)",
