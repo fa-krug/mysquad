@@ -1227,7 +1227,6 @@ pub struct SalaryDataPointMember {
     pub is_promoted: bool,
     pub promoted_title_id: Option<i64>,
     pub promoted_title_name: Option<String>,
-    pub is_presented: bool,
     pub parts: Vec<SalaryPart>,
 }
 
@@ -1525,7 +1524,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
                 COALESCE(sgm.is_active, sdpm.is_active) as is_active,
                 COALESCE(sgm.is_promoted, sdpm.is_promoted) as is_promoted,
                 COALESCE(sgm.promoted_title_id, sdpm.promoted_title_id) as promoted_title_id,
-                pt.name as promoted_title_name, sdpm.is_presented
+                pt.name as promoted_title_name
          FROM salary_data_point_members sdpm
          JOIN team_members m ON m.id = sdpm.member_id
          LEFT JOIN titles t ON t.id = m.title_id
@@ -1537,7 +1536,7 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
     } else {
         "SELECT sdpm.id, sdpm.member_id, m.first_name, m.last_name,
                 m.title_id, t.name as title_name, sdpm.is_active, sdpm.is_promoted,
-                sdpm.promoted_title_id, pt.name as promoted_title_name, sdpm.is_presented
+                sdpm.promoted_title_id, pt.name as promoted_title_name
          FROM salary_data_point_members sdpm
          JOIN team_members m ON m.id = sdpm.member_id
          LEFT JOIN titles t ON t.id = m.title_id
@@ -1560,7 +1559,6 @@ pub fn get_salary_data_point(db: State<AppDb>, id: i64) -> Result<SalaryDataPoin
                 is_promoted: row.get(7)?,
                 promoted_title_id: row.get(8)?,
                 promoted_title_name: row.get(9)?,
-                is_presented: row.get(10)?,
                 parts: Vec::new(),
             })
         })
@@ -1840,12 +1838,7 @@ pub fn update_salary_data_point_member(
 ) -> Result<(), String> {
     let guard = db.conn.lock();
     let conn = guard.as_ref().ok_or("Database not open")?;
-    let allowed = [
-        "is_active",
-        "is_promoted",
-        "promoted_title_id",
-        "is_presented",
-    ];
+    let allowed = ["is_active", "is_promoted", "promoted_title_id"];
     if !allowed.contains(&field.as_str()) {
         return Err(format!("Invalid field: {}", field));
     }
