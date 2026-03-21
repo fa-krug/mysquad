@@ -4,7 +4,14 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { openPresentationWindow } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
-import { annualTotal, formatCents, formatDeltaPercent, rangeFitColor, getRangeForMember, salaryDelta } from "@/lib/salary-utils";
+import {
+  annualTotal,
+  formatCents,
+  formatDeltaPercent,
+  rangeFitColor,
+  getRangeForMember,
+  salaryDelta,
+} from "@/lib/salary-utils";
 import { cn } from "@/lib/utils";
 import type {
   SalaryDataPointMember,
