@@ -16,7 +16,6 @@ import {
   promoteScenario,
   getScenarioSummaries,
   getAllScenarioMemberComparisons,
-  getSetting,
   getTrashedSalaryDataPoints,
   restoreSalaryDataPoint,
   permanentDeleteSalaryDataPoint,
@@ -66,7 +65,6 @@ export function SalaryPlanner() {
     Record<number, ScenarioMemberComparison[]>
   >({});
   const [salaryLineage, setSalaryLineage] = useState<SalaryOverTimePoint[]>([]);
-  const [showRangesInPresentation, setShowRangesInPresentation] = useState(false);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -107,12 +105,6 @@ export function SalaryPlanner() {
   useEffect(() => {
     if (showTrash) loadTrashedItems();
   }, [showTrash, loadTrashedItems]);
-
-  useEffect(() => {
-    getSetting("show_ranges_in_presentation").then((value) => {
-      if (value !== null) setShowRangesInPresentation(value === "true");
-    });
-  }, []);
 
   // Initial load
   useEffect(() => {
@@ -388,7 +380,6 @@ export function SalaryPlanner() {
                 memberComparisons={memberComparisons}
                 salaryLineage={salaryLineage}
                 listItems={listItems}
-                showRangesInPresentation={showRangesInPresentation}
                 onDetailRefresh={handleDetailRefresh}
               />
             </div>
