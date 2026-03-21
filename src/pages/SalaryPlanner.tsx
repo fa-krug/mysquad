@@ -277,6 +277,13 @@ export function SalaryPlanner() {
       handleDelete(selectedId);
     } else if (typeof state.dataPointId === "number") {
       setSelectedId(state.dataPointId);
+    } else if (typeof state.scenarioGroupId === "number") {
+      const group = listItems.find(
+        (item) => item.type === "scenario_group" && item.scenario_group.id === state.scenarioGroupId,
+      );
+      if (group?.type === "scenario_group" && group.scenario_group.children.length > 0) {
+        setSelectedId(group.scenario_group.children[0].id);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
