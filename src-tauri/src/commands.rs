@@ -4,7 +4,7 @@ use chrono::Datelike;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use tauri::State;
+use tauri::{Manager, State};
 
 // ── Auth commands ──
 
@@ -1848,6 +1848,31 @@ pub fn update_salary_data_point_member(
     );
     conn.execute(&sql, params![value, id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn open_presentation_window(
+    app: tauri::AppHandle,
+    data_point_id: i64,
+    member_id: i64,
+) -> Result<(), String> {
+    let label = format!("presentation-{}-{}", data_point_id, member_id);
+
+    // If window already exists, focus it
+    if let Some(window) = app.get_webview_window(&label) {
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let url = format!("/presentation/{}/{}", data_point_id, member_id);
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
+        .title("Salary Presentation")
+        .inner_size(900.0, 700.0)
+        .min_inner_size(600.0, 400.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 

@@ -142,6 +142,7 @@ pub fn run() {
             commands::update_salary_data_point,
             commands::delete_salary_data_point,
             commands::update_salary_data_point_member,
+            commands::open_presentation_window,
             commands::create_salary_part,
             commands::update_salary_part,
             commands::delete_salary_part,
