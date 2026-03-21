@@ -4,7 +4,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { openPresentationWindow } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { SalaryPartRow } from "./SalaryPartRow";
-import { annualTotal, formatCents, rangeFitColor, getRangeForMember } from "@/lib/salary-utils";
+import { annualTotal, formatCents, formatDeltaPercent, rangeFitColor, getRangeForMember, salaryDelta } from "@/lib/salary-utils";
 import { cn } from "@/lib/utils";
 import type {
   SalaryDataPointMember,
@@ -48,6 +48,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   const total = annualTotal(member.parts);
   const range = getRangeForMember(member, ranges);
   const fit = rangeFitColor(total, range);
+  const delta = salaryDelta(member.parts, previousParts ?? null);
 
   return (
     <div
@@ -108,10 +109,27 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
             </Button>
           )}
         </div>
-        <div className={cn("text-sm font-semibold", fitColors[fit])}>
-          {formatCents(total)}/yr
+        <div className="flex items-center gap-2">
+          <span className={cn("text-sm font-semibold", fitColors[fit])}>
+            {formatCents(total)}/yr
+          </span>
+          {delta.absoluteDelta !== null && (
+            <span
+              className={cn(
+                "text-xs font-medium",
+                delta.absoluteDelta > 0
+                  ? "text-green-600 dark:text-green-400"
+                  : delta.absoluteDelta < 0
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-muted-foreground",
+              )}
+            >
+              {delta.absoluteDelta > 0 ? "+" : ""}
+              {formatCents(delta.absoluteDelta)} ({formatDeltaPercent(delta.percentDelta!)})
+            </span>
+          )}
           {range && (
-            <span className="ml-1 text-xs font-normal text-muted-foreground">
+            <span className="text-xs font-normal text-muted-foreground">
               ({formatCents(range.min_salary)} – {formatCents(range.max_salary)})
             </span>
           )}
