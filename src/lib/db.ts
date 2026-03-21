@@ -116,6 +116,8 @@ export const deleteSalaryDataPoint = (id: number) =>
 // Salary Data Point Members
 export const updateSalaryDataPointMember = (id: number, field: string, value: string | null) =>
   invoke<void>("update_salary_data_point_member", { id, field, value });
+export const openPresentationWindow = (dataPointId: number, memberId: number) =>
+  invoke<void>("open_presentation_window", { data_point_id: dataPointId, member_id: memberId });
 
 // Salary Parts
 export const createSalaryPart = (dataPointMemberId: number) =>

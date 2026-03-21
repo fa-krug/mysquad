@@ -231,7 +231,6 @@ export interface SalaryDataPointMember {
   is_promoted: boolean;
   promoted_title_id: number | null;
   promoted_title_name: string | null;
-  is_presented: boolean;
   parts: SalaryPart[];
 }
 
