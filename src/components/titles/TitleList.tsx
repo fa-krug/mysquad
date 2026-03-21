@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { PlusIcon, Loader2Icon, Trash2, RotateCcw, List } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { PlusIcon, Loader2Icon, Trash2, RotateCcw, List, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { useVirtualList } from "@/hooks/useVirtualList";
 import type { Title } from "@/lib/types";
@@ -35,14 +36,52 @@ export function TitleList({
   onPermanentDelete,
 }: TitleListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredTitles = useMemo(() => {
+    if (!searchQuery.trim()) return titles;
+    const q = searchQuery.toLowerCase();
+    return titles.filter((t) => t.name.toLowerCase().includes(q));
+  }, [titles, searchQuery]);
+
+  // Auto-select first match when search query changes
+  useEffect(() => {
+    if (searchQuery.trim() && filteredTitles.length > 0) {
+      onSelect(filteredTitles[0].id);
+    }
+  }, [searchQuery, filteredTitles, onSelect]);
+
+  // Focus search input when shown
+  useEffect(() => {
+    if (showSearch) {
+      searchInputRef.current?.focus();
+    }
+  }, [showSearch]);
+
+  const handleToggleSearch = () => {
+    if (showSearch) {
+      setSearchQuery("");
+      setShowSearch(false);
+    } else {
+      setShowSearch(true);
+    }
+  };
+
+  const handleToggleTrash = () => {
+    setSearchQuery("");
+    setShowSearch(false);
+    onToggleTrash?.();
+  };
 
   const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
-    count: titles.length,
+    count: filteredTitles.length,
     estimateSize: 40,
   });
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const ids = titles.map((t) => t.id);
+    const ids = filteredTitles.map((t) => t.id);
     const currentIndex = ids.indexOf(selectedId ?? -1);
 
     if (e.key === "ArrowDown") {
@@ -63,11 +102,22 @@ export function TitleList({
       <div className="flex items-center justify-between px-3 h-12 border-b">
         <span className="text-sm font-semibold">{showTrash ? "Trash" : "Titles"}</span>
         <div className="flex items-center gap-1">
+          {!showTrash && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleToggleSearch}
+              title={showSearch ? "Close search" : "Search titles"}
+              className={showSearch ? "bg-muted" : ""}
+            >
+              {showSearch ? <XIcon className="h-4 w-4" /> : <SearchIcon className="h-4 w-4" />}
+            </Button>
+          )}
           <div className="relative">
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={onToggleTrash}
+              onClick={handleToggleTrash}
               title={showTrash ? "Back to list" : "View trash"}
               className={showTrash ? "bg-muted" : ""}
             >
@@ -92,6 +142,18 @@ export function TitleList({
           )}
         </div>
       </div>
+
+      {showSearch && !showTrash && (
+        <div className="px-2 py-1.5 border-b">
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search titles…"
+            className="h-7 text-xs"
+          />
+        </div>
+      )}
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {showTrash ? (
@@ -148,8 +210,10 @@ export function TitleList({
           )
         ) : loading ? (
           <ListSkeleton />
-        ) : titles.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">No titles yet</div>
+        ) : filteredTitles.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {searchQuery.trim() ? "No matches" : "No titles yet"}
+          </div>
         ) : shouldVirtualize ? (
           <ul
             className="py-1 outline-none relative"
@@ -158,7 +222,7 @@ export function TitleList({
             onKeyDown={handleKeyDown}
           >
             {virtualItems.map((virtualRow) => {
-              const title = titles[virtualRow.index];
+              const title = filteredTitles[virtualRow.index];
               return (
                 <li
                   key={title.id}
@@ -196,7 +260,7 @@ export function TitleList({
           </ul>
         ) : (
           <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
-            {titles.map((title) => (
+            {filteredTitles.map((title) => (
               <li
                 key={title.id}
                 className={`group relative flex items-start px-3 py-2 cursor-pointer hover:bg-muted/50 ${
