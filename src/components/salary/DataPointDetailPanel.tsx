@@ -335,6 +335,7 @@ export function DataPointDetailPanel({
                   onDeletePart={handleDeletePart}
                   onChanged={handlePartChanged}
                   dataPointId={selectedId}
+                  dataPointName={detail.name}
                   scenarioComparison={
                     detail.scenario_group_id ? memberComparisons[member.member_id] : undefined
                   }

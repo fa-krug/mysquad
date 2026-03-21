@@ -34,6 +34,7 @@ interface MemberSalaryCardProps {
   onDeletePart: (partId: number) => void;
   onChanged: () => void;
   dataPointId: number;
+  dataPointName?: string;
   scenarioComparison?: ScenarioMemberComparison[];
   onExportDocx?: (memberId: number, memberName: string) => void;
   previousParts?: SalaryPart[] | null;
@@ -48,6 +49,7 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
   onDeletePart,
   onChanged,
   dataPointId,
+  dataPointName,
   scenarioComparison,
   onExportDocx,
   previousParts,
@@ -99,7 +101,11 @@ export const MemberSalaryCard = memo(function MemberSalaryCard({
               className="h-6 w-6 p-0 text-muted-foreground opacity-0 group-hover/card:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
-                openPresentationWindow(dataPointId, member.member_id);
+                openPresentationWindow(
+                  dataPointId,
+                  member.member_id,
+                  `${dataPointName ?? "Salary"} — ${member.first_name} ${member.last_name}`,
+                );
               }}
             >
               <Eye className="h-3.5 w-3.5" />

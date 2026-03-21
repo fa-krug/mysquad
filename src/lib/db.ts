@@ -123,8 +123,8 @@ export const updateSalaryDataPointMember = async (
   await invoke<void>("update_salary_data_point_member", { id, field, value });
   await emit("salary-data-changed", { memberId: id });
 };
-export const openPresentationWindow = (dataPointId: number, memberId: number) =>
-  invoke<void>("open_presentation_window", { data_point_id: dataPointId, member_id: memberId });
+export const openPresentationWindow = (dataPointId: number, memberId: number, title: string) =>
+  invoke<void>("open_presentation_window", { data_point_id: dataPointId, member_id: memberId, title });
 
 // Salary Parts
 export const createSalaryPart = async (dataPointMemberId: number) => {

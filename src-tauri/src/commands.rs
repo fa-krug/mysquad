@@ -1856,6 +1856,7 @@ pub fn open_presentation_window(
     app: tauri::AppHandle,
     data_point_id: i64,
     member_id: i64,
+    title: String,
 ) -> Result<(), String> {
     let label = format!("presentation-{}-{}", data_point_id, member_id);
 
@@ -1867,7 +1868,7 @@ pub fn open_presentation_window(
 
     let url = format!("/presentation/{}/{}", data_point_id, member_id);
     tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
-        .title("Salary Presentation")
+        .title(&title)
         .inner_size(900.0, 700.0)
         .min_inner_size(600.0, 400.0)
         .build()
