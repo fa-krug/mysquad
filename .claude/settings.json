@@ -146,6 +146,11 @@
       "mcp__glab__glab_auth_status"
     ],
     "deny": [
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(fdisk:*)"
+    ],
+    "ask": [
       "Bash(rm:*)",
       "Bash(rmdir:*)",
       "Bash(git reset --hard:*)",
@@ -159,9 +164,6 @@
       "Bash(sudo:*)",
       "Bash(chmod 777:*)",
       "Bash(> /dev:*)",
-      "Bash(dd:*)",
-      "Bash(mkfs:*)",
-      "Bash(fdisk:*)",
       "Bash(diskutil:*)"
     ]
   }
