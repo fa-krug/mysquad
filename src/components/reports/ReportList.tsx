@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { PlusIcon, Trash2Icon, PencilIcon, Loader2Icon } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { PlusIcon, Trash2Icon, PencilIcon, Loader2Icon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import type { Report } from "@/lib/types";
@@ -27,14 +28,37 @@ export function ReportList({
   onEdit,
 }: ReportListProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredReports = useMemo(() => {
+    if (!searchQuery.trim()) return reports;
+    const q = searchQuery.toLowerCase();
+    return reports.filter((r) => r.name.toLowerCase().includes(q));
+  }, [reports, searchQuery]);
+
+  useEffect(() => {
+    if (filteredReports.length > 0) {
+      onSelect(filteredReports[0].id);
+    }
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (showSearch) {
+      searchInputRef.current?.focus();
+    } else {
+      setSearchQuery("");
+    }
+  }, [showSearch]);
 
   const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
-    count: reports.length,
+    count: filteredReports.length,
     estimateSize: 40,
   });
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const ids = reports.map((r) => r.id);
+    const ids = filteredReports.map((r) => r.id);
     const currentIndex = ids.indexOf(selectedId ?? -1);
 
     if (e.key === "ArrowDown") {
@@ -54,22 +78,59 @@ export function ReportList({
     <div className="w-64 shrink-0 border-r flex flex-col h-full">
       <div className="flex items-center justify-between px-3 h-12 border-b">
         <span className="text-sm font-semibold">Reports</span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onCreate}
-          disabled={creating}
-          title="Add report"
-        >
-          {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setShowSearch((v) => !v)}
+            title={showSearch ? "Hide search" : "Search reports"}
+            className={showSearch ? "bg-muted" : ""}
+          >
+            <SearchIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onCreate}
+            disabled={creating}
+            title="Add report"
+          >
+            {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
+          </Button>
+        </div>
       </div>
+
+      {showSearch && (
+        <div className="px-2 py-1.5 border-b">
+          <div className="relative">
+            <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search…"
+              className="h-7 text-xs pl-7 pr-7"
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchQuery("")}
+                tabIndex={-1}
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {loading ? (
           <ListSkeleton rows={4} />
-        ) : reports.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">No reports yet</div>
+        ) : filteredReports.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {searchQuery ? "No matching reports" : "No reports yet"}
+          </div>
         ) : shouldVirtualize ? (
           <ul
             className="py-1 outline-none relative"
@@ -78,7 +139,7 @@ export function ReportList({
             onKeyDown={handleKeyDown}
           >
             {virtualItems.map((virtualRow) => {
-              const report = reports[virtualRow.index];
+              const report = filteredReports[virtualRow.index];
               return (
                 <li
                   key={report.id}
@@ -125,7 +186,7 @@ export function ReportList({
           </ul>
         ) : (
           <ul className="py-1 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
-            {reports.map((report) => (
+            {filteredReports.map((report) => (
               <li
                 key={report.id}
                 className={`group relative flex items-start px-3 py-2 cursor-pointer hover:bg-muted/50 ${
