@@ -131,4 +131,4 @@ The project uses [Husky](https://typicode.github.io/husky/) with [lint-staged](h
 npm run release
 ```
 
-This builds the production `.dmg`, then creates a GitLab release with the artifact.
+This builds the production `.dmg` and creates a GitHub release with the artifact.
