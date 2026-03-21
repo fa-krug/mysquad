@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List, Search } from "lucide-react";
+import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List, Search, X } from "lucide-react";
 import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +45,8 @@ export function MemberList({
   const [formerOpen, setFormerOpen] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchVisible, setSearchVisible] = useState(false);
-  const isInitialMount = useRef(true);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filteredMembers = useMemo(() => {
     if (!searchQuery.trim()) return members;
@@ -65,14 +65,16 @@ export function MemberList({
   );
 
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
     if (searchQuery.trim() && filteredMembers.length > 0) {
       onSelect(filteredMembers[0].id);
     }
-  }, [filteredMembers, searchQuery]);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (showSearch) {
+      searchInputRef.current?.focus();
+    }
+  }, [showSearch]);
 
   const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
     count: visibleRows.length,
@@ -281,11 +283,13 @@ export function MemberList({
                 variant="ghost"
                 size="icon-sm"
                 onClick={() => {
-                  setSearchVisible((v) => !v);
-                  setSearchQuery("");
+                  setShowSearch((v) => {
+                    if (v) setSearchQuery("");
+                    return !v;
+                  });
                 }}
-                title="Search members"
-                className={searchVisible ? "bg-muted" : ""}
+                title={showSearch ? "Hide search" : "Search members"}
+                className={showSearch ? "bg-muted" : ""}
               >
                 <Search className="h-4 w-4" />
               </Button>
@@ -296,7 +300,7 @@ export function MemberList({
                 size="icon-sm"
                 onClick={() => {
                   setSearchQuery("");
-                  setSearchVisible(false);
+                  setShowSearch(false);
                   onToggleTrash?.();
                 }}
                 title={showTrash ? "Back to list" : "View trash"}
@@ -323,15 +327,26 @@ export function MemberList({
             )}
           </div>
         </div>
-        {!showTrash && searchVisible && (
-          <div className="px-3 pb-2">
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search members…"
-              className="h-7 text-xs"
-              autoFocus
-            />
+        {!showTrash && showSearch && (
+          <div className="px-2 py-1.5 border-b">
+            <div className="relative">
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search…"
+                className="h-7 text-xs pr-6"
+              />
+              {searchQuery && (
+                <button
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchQuery("")}
+                  tabIndex={-1}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -403,7 +418,7 @@ export function MemberList({
           <ListSkeleton showAvatar />
         ) : activeMembers.length === 0 && formerMembers.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {searchQuery.trim() ? "No members match" : "No team members yet"}
+            {searchQuery.trim() ? "No matches" : "No team members yet"}
           </div>
         ) : shouldVirtualize ? (
           <div>

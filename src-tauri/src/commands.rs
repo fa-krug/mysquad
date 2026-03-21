@@ -2338,7 +2338,6 @@ pub struct SalaryDataPointFull {
     pub detail: SalaryDataPointDetail,
     pub lineage: Vec<SalaryOverTimePoint>,
     pub previous_data: HashMap<i64, Vec<SalaryPart>>,
-    pub previous_data_point_name: Option<String>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -2348,25 +2347,11 @@ pub fn get_salary_data_point_full(
 ) -> Result<SalaryDataPointFull, String> {
     let detail = get_salary_data_point(db.clone(), id)?;
     let lineage = get_salary_lineage(db.clone(), id)?;
-    let previous_data = get_all_previous_member_data(db.clone(), id)?;
-
-    // Resolve the previous data point's name
-    let previous_data_point_name = detail.previous_data_point_id.and_then(|prev_id| {
-        let guard = db.conn.lock();
-        let conn = guard.as_ref()?;
-        conn.query_row(
-            "SELECT name FROM salary_data_points WHERE id = ?1",
-            params![prev_id],
-            |row| row.get(0),
-        )
-        .ok()
-    });
-
+    let previous_data = get_all_previous_member_data(db, id)?;
     Ok(SalaryDataPointFull {
         detail,
         lineage,
         previous_data,
-        previous_data_point_name,
     })
 }
 

@@ -51,7 +51,7 @@ export function TitleList({
     if (searchQuery.trim() && filteredTitles.length > 0) {
       onSelect(filteredTitles[0].id);
     }
-  }, [searchQuery, filteredTitles, onSelect]);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Focus search input when shown
   useEffect(() => {
@@ -61,12 +61,10 @@ export function TitleList({
   }, [showSearch]);
 
   const handleToggleSearch = () => {
-    if (showSearch) {
-      setSearchQuery("");
-      setShowSearch(false);
-    } else {
-      setShowSearch(true);
-    }
+    setShowSearch((v) => {
+      if (v) setSearchQuery("");
+      return !v;
+    });
   };
 
   const handleToggleTrash = () => {
@@ -110,7 +108,7 @@ export function TitleList({
               title={showSearch ? "Close search" : "Search titles"}
               className={showSearch ? "bg-muted" : ""}
             >
-              {showSearch ? <XIcon className="h-4 w-4" /> : <SearchIcon className="h-4 w-4" />}
+              <SearchIcon className="h-4 w-4" />
             </Button>
           )}
           <div className="relative">
@@ -145,13 +143,24 @@ export function TitleList({
 
       {showSearch && !showTrash && (
         <div className="px-2 py-1.5 border-b">
-          <Input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search titles…"
-            className="h-7 text-xs"
-          />
+          <div className="relative">
+            <Input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search…"
+              className="h-7 text-xs pr-6"
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchQuery("")}
+                tabIndex={-1}
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
       )}
 

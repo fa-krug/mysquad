@@ -39,7 +39,7 @@ export function ReportList({
   }, [reports, searchQuery]);
 
   useEffect(() => {
-    if (filteredReports.length > 0) {
+    if (searchQuery.trim() && filteredReports.length > 0) {
       onSelect(filteredReports[0].id);
     }
   }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,21 +103,20 @@ export function ReportList({
       {showSearch && (
         <div className="px-2 py-1.5 border-b">
           <div className="relative">
-            <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
               ref={searchInputRef}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search…"
-              className="h-7 text-xs pl-7 pr-7"
+              className="h-7 text-xs pr-6"
             />
             {searchQuery && (
               <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 onClick={() => setSearchQuery("")}
                 tabIndex={-1}
               >
-                <XIcon className="h-3.5 w-3.5" />
+                <XIcon className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -129,7 +128,7 @@ export function ReportList({
           <ListSkeleton rows={4} />
         ) : filteredReports.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {searchQuery ? "No matching reports" : "No reports yet"}
+            {searchQuery.trim() ? "No matches" : "No reports yet"}
           </div>
         ) : shouldVirtualize ? (
           <ul
