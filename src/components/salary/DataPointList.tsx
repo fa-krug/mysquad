@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Plus,
   Pencil,
@@ -10,8 +10,11 @@ import {
   ArrowUpFromLine,
   RotateCcw,
   List,
+  Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/salary-utils";
@@ -56,6 +59,40 @@ export function DataPointList({
 }: DataPointListProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter((item) => {
+      const name = item.type === "data_point"
+        ? item.data_point.name
+        : item.scenario_group.name;
+      return name.toLowerCase().includes(q);
+    });
+  }, [items, searchQuery]);
+
+  // Auto-select first match when search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    const first = filteredItems[0];
+    if (!first) return;
+    const firstId = first.type === "data_point"
+      ? first.data_point.id
+      : first.scenario_group.children[0]?.id;
+    if (firstId != null) {
+      onSelect(firstId);
+    }
+  }, [searchQuery, filteredItems]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Focus search input when shown
+  useEffect(() => {
+    if (showSearch) {
+      searchInputRef.current?.focus();
+    }
+  }, [showSearch]);
 
   function toggleGroup(groupId: number) {
     setExpandedGroups((prev) => {
@@ -72,7 +109,7 @@ export function DataPointList({
   // Build flat list of selectable IDs for keyboard navigation
   const selectableIds = useMemo(() => {
     const ids: number[] = [];
-    for (const item of items) {
+    for (const item of filteredItems) {
       if (item.type === "data_point") {
         ids.push(item.data_point.id);
       } else if (expandedGroups.has(item.scenario_group.id)) {
@@ -82,7 +119,7 @@ export function DataPointList({
       }
     }
     return ids;
-  }, [items, expandedGroups]);
+  }, [filteredItems, expandedGroups]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const currentIndex = selectableIds.indexOf(selectedId ?? -1);
@@ -102,11 +139,31 @@ export function DataPointList({
       <div className="flex items-center justify-between border-b px-3 h-12">
         <h2 className="text-sm font-semibold">{showTrash ? "Trash" : "Data Points"}</h2>
         <div className="flex items-center gap-1">
+          {!showTrash && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                setShowSearch((prev) => {
+                  if (prev) setSearchQuery("");
+                  return !prev;
+                });
+              }}
+              title={showSearch ? "Close search" : "Search"}
+              className={showSearch ? "bg-muted" : ""}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          )}
           <div className="relative">
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={onToggleTrash}
+              onClick={() => {
+                setShowSearch(false);
+                setSearchQuery("");
+                onToggleTrash?.();
+              }}
               title={showTrash ? "Back to list" : "View trash"}
               className={showTrash ? "bg-muted" : ""}
             >
@@ -135,6 +192,27 @@ export function DataPointList({
           )}
         </div>
       </div>
+      {showSearch && !showTrash && (
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b">
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search…"
+            className="h-7 text-xs"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setSearchQuery("")}
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-2">
@@ -245,12 +323,12 @@ export function DataPointList({
             tabIndex={0}
             onKeyDown={handleKeyDown}
           >
-            {items.length === 0 && (
+            {filteredItems.length === 0 && (
               <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                No data points yet.
+                {searchQuery.trim() ? "No results." : "No data points yet."}
               </p>
             )}
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               if (item.type === "data_point") {
                 const dp = item.data_point;
                 return (
