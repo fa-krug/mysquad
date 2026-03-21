@@ -9,30 +9,16 @@ import type { SalaryDataPointDetail, SalaryPart, SalaryOverTimePoint } from "@/l
 interface SalaryAnalyticsProps {
   detail: SalaryDataPointDetail;
   previousData: Record<number, SalaryPart[] | null>;
-  anyPresented: boolean;
-  showRangesInPresentation: boolean;
   salaryLineage: SalaryOverTimePoint[];
 }
 
-export function SalaryAnalytics({
-  detail,
-  previousData,
-  anyPresented,
-  showRangesInPresentation,
-  salaryLineage,
-}: SalaryAnalyticsProps) {
+export function SalaryAnalytics({ detail, previousData, salaryLineage }: SalaryAnalyticsProps) {
   const { total } = budgetTotals(detail.members);
-  const effectiveBudget = anyPresented ? null : detail.budget;
-  const hideRanges = anyPresented && !showRangesInPresentation;
 
   return (
     <div className="flex flex-col gap-6">
-      {!anyPresented && <BudgetGauge totalSalary={total} budget={detail.budget} />}
-      <SalaryBarChart
-        members={detail.members}
-        ranges={hideRanges ? [] : detail.ranges}
-        budget={effectiveBudget}
-      />
+      <BudgetGauge totalSalary={total} budget={detail.budget} />
+      <SalaryBarChart members={detail.members} ranges={detail.ranges} budget={detail.budget} />
       <VariablePayChart members={detail.members} />
       <ComparisonChart members={detail.members} previousData={previousData} />
       {salaryLineage.length >= 2 && <SalaryOverTimeChart data={salaryLineage} />}

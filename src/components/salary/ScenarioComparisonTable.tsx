@@ -9,7 +9,6 @@ interface ScenarioComparisonTableProps {
   previousTotal: number | null;
   previousBudget: number | null;
   previousHeadcount: number | null;
-  anyPresented: boolean;
 }
 
 export function ScenarioComparisonTable({
@@ -19,7 +18,6 @@ export function ScenarioComparisonTable({
   previousTotal,
   previousBudget,
   previousHeadcount,
-  anyPresented,
 }: ScenarioComparisonTableProps) {
   if (summaries.length === 0) return null;
 
@@ -33,13 +31,13 @@ export function ScenarioComparisonTable({
           <tr className="text-xs text-muted-foreground">
             <th className="px-2 py-1 text-left font-medium">Scenario</th>
             <th className="px-2 py-1 text-right font-medium">Total Cost</th>
-            {!anyPresented && <th className="px-2 py-1 text-right font-medium">Budget</th>}
+            <th className="px-2 py-1 text-right font-medium">Budget</th>
             <th className="px-2 py-1 text-right font-medium">Delta</th>
             <th className="px-2 py-1 text-right font-medium">Headcount</th>
           </tr>
         </thead>
         <tbody>
-          {!anyPresented && previousTotal != null && (
+          {previousTotal != null && (
             <tr className="text-xs text-muted-foreground border-b">
               <td className="px-2 py-1.5 italic">Previous</td>
               <td className="px-2 py-1.5 text-right">{formatCents(previousTotal)}</td>
@@ -65,22 +63,20 @@ export function ScenarioComparisonTable({
               >
                 <td className="px-2 py-1.5">{s.data_point_name}</td>
                 <td className="px-2 py-1.5 text-right">{formatCents(s.total_salary)}</td>
-                {!anyPresented && (
-                  <td className="px-2 py-1.5 text-right">
-                    {budget != null ? formatCents(budget) : "—"}
-                    {budgetDiff != null && (
-                      <span
-                        className={cn(
-                          "ml-1 text-xs",
-                          budgetDiff > 0 ? "text-red-600" : "text-green-600",
-                        )}
-                      >
-                        ({budgetDiff > 0 ? "+" : ""}
-                        {formatCents(budgetDiff)})
-                      </span>
-                    )}
-                  </td>
-                )}
+                <td className="px-2 py-1.5 text-right">
+                  {budget != null ? formatCents(budget) : "—"}
+                  {budgetDiff != null && (
+                    <span
+                      className={cn(
+                        "ml-1 text-xs",
+                        budgetDiff > 0 ? "text-red-600" : "text-green-600",
+                      )}
+                    >
+                      ({budgetDiff > 0 ? "+" : ""}
+                      {formatCents(budgetDiff)})
+                    </span>
+                  )}
+                </td>
                 <td className="px-2 py-1.5 text-right">
                   {delta != null ? (
                     <span className={delta > 0 ? "text-red-600" : "text-green-600"}>
