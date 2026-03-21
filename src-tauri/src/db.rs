@@ -191,6 +191,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 21)?;
     }
 
+    if version < 22 {
+        let migration_sql = include_str!("../migrations/022_drop_is_presented.sql");
+        conn.execute_batch(migration_sql)?;
+        conn.pragma_update(None, "user_version", 22)?;
+    }
+
     // Repair: ensure columns exist even if version was bumped past their migration
     let repair_columns = [
         ("team_members", "picture_path", "TEXT"),
@@ -209,11 +215,6 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             "salary_data_point_members",
             "promoted_title_id",
             "INTEGER REFERENCES titles(id) ON DELETE SET NULL",
-        ),
-        (
-            "salary_data_point_members",
-            "is_presented",
-            "INTEGER NOT NULL DEFAULT 0",
         ),
         (
             "salary_data_points",
@@ -275,7 +276,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 21);
+        assert_eq!(version, 22);
     }
 
     #[test]
@@ -375,7 +376,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 21);
+        assert_eq!(version, 22);
     }
 
     #[test]
@@ -391,7 +392,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 21);
+        assert_eq!(version, 22);
     }
 
     #[test]
