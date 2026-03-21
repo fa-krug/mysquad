@@ -18,6 +18,7 @@ import {
   Plus,
   MessageSquare,
   ListChecks,
+  Presentation,
 } from "lucide-react";
 import { globalSearch } from "@/lib/db";
 import type { SearchResult } from "@/lib/types";
@@ -34,6 +35,7 @@ const pages = [
   { name: "Salary Planner", path: "/salary", icon: DollarSign },
   { name: "Reports", path: "/reports", icon: FileText },
   { name: "Settings", path: "/settings", icon: Settings },
+  { name: "Team Meetings", path: "/team-meetings", icon: Presentation },
 ];
 
 const actions = [
@@ -81,6 +83,16 @@ const categoryConfig: Record<
     label: "Status Items",
     icon: ListChecks,
     getRoute: (r) => ({ path: "/", state: { memberId: r.parent_id } }),
+  },
+  salary_data_point: {
+    label: "Salary Data Points",
+    icon: DollarSign,
+    getRoute: (r) => ({ path: "/salary", state: { dataPointId: r.id } }),
+  },
+  scenario_group: {
+    label: "Scenario Groups",
+    icon: DollarSign,
+    getRoute: (r) => ({ path: "/salary", state: { scenarioGroupId: r.id } }),
   },
 };
 
@@ -131,18 +143,58 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return acc;
   }, {});
 
-  const hasResults = searchResults.length > 0;
   const hasQuery = query.trim().length >= 2;
 
+  const queryLower = query.trim().toLowerCase();
+  const filteredPages = hasQuery
+    ? pages.filter((p) => p.name.toLowerCase().includes(queryLower))
+    : pages;
+  const filteredActions = hasQuery
+    ? actions.filter((a) => a.name.toLowerCase().includes(queryLower))
+    : actions;
+  const totalResults = filteredPages.length + filteredActions.length + searchResults.length;
+
   return (
-    <CommandDialog open={open} onOpenChange={handleOpenChange} shouldFilter={!hasQuery}>
+    <CommandDialog open={open} onOpenChange={handleOpenChange} shouldFilter={false}>
       <CommandInput
         placeholder="Type a command or search..."
         value={query}
         onValueChange={handleQueryChange}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        {hasQuery && totalResults === 0 && <CommandEmpty>No results found.</CommandEmpty>}
+
+        {filteredPages.length > 0 && (
+          <CommandGroup heading="Pages">
+            {filteredPages.map((page) => (
+              <CommandItem
+                key={page.path}
+                value={page.name}
+                onSelect={() => runCommand(() => navigate(page.path))}
+              >
+                <page.icon className="mr-2 h-4 w-4" />
+                {page.name}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {filteredActions.length > 0 && (
+          <CommandGroup heading="Actions">
+            {filteredActions.map((action) => (
+              <CommandItem
+                key={action.action}
+                value={action.name}
+                onSelect={() =>
+                  runCommand(() => navigate(action.path, { state: { action: action.action } }))
+                }
+              >
+                <action.icon className="mr-2 h-4 w-4" />
+                {action.name}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
 
         {hasQuery &&
           Object.entries(grouped).map(([category, results]) => {
@@ -175,40 +227,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               </CommandGroup>
             );
           })}
-
-        {hasQuery && !hasResults && null}
-
-        {!hasQuery && (
-          <>
-            <CommandGroup heading="Pages">
-              {pages.map((page) => (
-                <CommandItem
-                  key={page.path}
-                  value={page.name}
-                  onSelect={() => runCommand(() => navigate(page.path))}
-                >
-                  <page.icon className="mr-2 h-4 w-4" />
-                  {page.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-
-            <CommandGroup heading="Actions">
-              {actions.map((action) => (
-                <CommandItem
-                  key={action.action}
-                  value={action.name}
-                  onSelect={() =>
-                    runCommand(() => navigate(action.path, { state: { action: action.action } }))
-                  }
-                >
-                  <action.icon className="mr-2 h-4 w-4" />
-                  {action.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
       </CommandList>
     </CommandDialog>
   );
