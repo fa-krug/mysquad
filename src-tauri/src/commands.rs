@@ -2338,6 +2338,7 @@ pub struct SalaryDataPointFull {
     pub detail: SalaryDataPointDetail,
     pub lineage: Vec<SalaryOverTimePoint>,
     pub previous_data: HashMap<i64, Vec<SalaryPart>>,
+    pub previous_data_point_name: Option<String>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -2347,11 +2348,25 @@ pub fn get_salary_data_point_full(
 ) -> Result<SalaryDataPointFull, String> {
     let detail = get_salary_data_point(db.clone(), id)?;
     let lineage = get_salary_lineage(db.clone(), id)?;
-    let previous_data = get_all_previous_member_data(db, id)?;
+    let previous_data = get_all_previous_member_data(db.clone(), id)?;
+
+    // Resolve the previous data point's name
+    let previous_data_point_name = detail.previous_data_point_id.and_then(|prev_id| {
+        let guard = db.conn.lock();
+        let conn = guard.as_ref()?;
+        conn.query_row(
+            "SELECT name FROM salary_data_points WHERE id = ?1",
+            params![prev_id],
+            |row| row.get(0),
+        )
+        .ok()
+    });
+
     Ok(SalaryDataPointFull {
         detail,
         lineage,
         previous_data,
+        previous_data_point_name,
     })
 }
 
@@ -4896,6 +4911,18 @@ pub fn global_search(db: State<AppDb>, query: String) -> Result<Vec<SearchResult
              FROM status_items si
              JOIN team_members m3 ON m3.id = si.team_member_id
              WHERE m3.deleted_at IS NULL AND si.text LIKE ?1
+
+             UNION ALL
+
+             SELECT id, 'salary_data_point', name, NULL, NULL
+             FROM salary_data_points
+             WHERE deleted_at IS NULL AND name LIKE ?1
+
+             UNION ALL
+
+             SELECT id, 'scenario_group', name, NULL, NULL
+             FROM scenario_groups
+             WHERE deleted_at IS NULL AND name LIKE ?1
 
              LIMIT 50",
         )
