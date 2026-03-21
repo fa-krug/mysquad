@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import type {
   TeamMember,
   Child,
@@ -114,17 +115,33 @@ export const deleteSalaryDataPoint = (id: number) =>
   invoke<void>("delete_salary_data_point", { id });
 
 // Salary Data Point Members
-export const updateSalaryDataPointMember = (id: number, field: string, value: string | null) =>
-  invoke<void>("update_salary_data_point_member", { id, field, value });
+export const updateSalaryDataPointMember = async (
+  id: number,
+  field: string,
+  value: string | null,
+) => {
+  await invoke<void>("update_salary_data_point_member", { id, field, value });
+  await emit("salary-data-changed", { memberId: id });
+};
 export const openPresentationWindow = (dataPointId: number, memberId: number) =>
   invoke<void>("open_presentation_window", { data_point_id: dataPointId, member_id: memberId });
 
 // Salary Parts
-export const createSalaryPart = (dataPointMemberId: number) =>
-  invoke<SalaryPart>("create_salary_part", { data_point_member_id: dataPointMemberId });
-export const updateSalaryPart = (id: number, field: string, value: string | null) =>
-  invoke<void>("update_salary_part", { id, field, value });
-export const deleteSalaryPart = (id: number) => invoke<void>("delete_salary_part", { id });
+export const createSalaryPart = async (dataPointMemberId: number) => {
+  const result = await invoke<SalaryPart>("create_salary_part", {
+    data_point_member_id: dataPointMemberId,
+  });
+  await emit("salary-data-changed", { dataPointMemberId });
+  return result;
+};
+export const updateSalaryPart = async (id: number, field: string, value: string | null) => {
+  await invoke<void>("update_salary_part", { id, field, value });
+  await emit("salary-data-changed", { partId: id });
+};
+export const deleteSalaryPart = async (id: number) => {
+  await invoke<void>("delete_salary_part", { id });
+  await emit("salary-data-changed", { partId: id });
+};
 
 // Salary Ranges
 export const updateSalaryRange = (
