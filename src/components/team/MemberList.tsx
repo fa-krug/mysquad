@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
-import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List, Search } from "lucide-react";
 import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useVirtualList } from "@/hooks/useVirtualList";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
@@ -43,14 +44,35 @@ export function MemberList({
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [formerOpen, setFormerOpen] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchVisible, setSearchVisible] = useState(false);
+  const isInitialMount = useRef(true);
 
-  const activeMembers = members.filter((m) => !m.left_date);
-  const formerMembers = members.filter((m) => m.left_date);
+  const filteredMembers = useMemo(() => {
+    if (!searchQuery.trim()) return members;
+    const q = searchQuery.toLowerCase();
+    return members.filter((m) =>
+      `${m.first_name} ${m.last_name}`.toLowerCase().includes(q)
+    );
+  }, [members, searchQuery]);
+
+  const activeMembers = filteredMembers.filter((m) => !m.left_date);
+  const formerMembers = filteredMembers.filter((m) => m.left_date);
 
   const visibleRows = useMemo(
     () => flattenTree(activeMembers, collapsedIds),
     [activeMembers, collapsedIds],
   );
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (searchQuery.trim() && filteredMembers.length > 0) {
+      onSelect(filteredMembers[0].id);
+    }
+  }, [filteredMembers, searchQuery]);
 
   const { scrollRef, shouldVirtualize, virtualizer, totalSize, virtualItems } = useVirtualList({
     count: visibleRows.length,
@@ -250,37 +272,68 @@ export function MemberList({
   return (
     <div className="w-64 shrink-0 border-r flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-12 border-b">
-        <span className="text-sm font-semibold">{showTrash ? "Trash" : "Team Members"}</span>
-        <div className="flex items-center gap-1">
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onToggleTrash}
-              title={showTrash ? "Back to list" : "View trash"}
-              className={showTrash ? "bg-muted" : ""}
-            >
-              {showTrash ? <List className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-            </Button>
-            {!showTrash && (trashCount ?? 0) > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-muted-foreground text-background text-[10px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">
-                {trashCount}
-              </span>
+      <div className="flex flex-col border-b">
+        <div className="flex items-center justify-between px-3 h-12">
+          <span className="text-sm font-semibold">{showTrash ? "Trash" : "Team Members"}</span>
+          <div className="flex items-center gap-1">
+            {!showTrash && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setSearchVisible((v) => !v);
+                  setSearchQuery("");
+                }}
+                title="Search members"
+                className={searchVisible ? "bg-muted" : ""}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSearchVisible(false);
+                  onToggleTrash?.();
+                }}
+                title={showTrash ? "Back to list" : "View trash"}
+                className={showTrash ? "bg-muted" : ""}
+              >
+                {showTrash ? <List className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+              </Button>
+              {!showTrash && (trashCount ?? 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-muted-foreground text-background text-[10px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">
+                  {trashCount}
+                </span>
+              )}
+            </div>
+            {!showTrash && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onCreate}
+                disabled={creating}
+                title="Add member"
+              >
+                {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
+              </Button>
             )}
           </div>
-          {!showTrash && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onCreate}
-              disabled={creating}
-              title="Add member"
-            >
-              {creating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
-            </Button>
-          )}
         </div>
+        {!showTrash && searchVisible && (
+          <div className="px-3 pb-2">
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search members…"
+              className="h-7 text-xs"
+              autoFocus
+            />
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -350,7 +403,7 @@ export function MemberList({
           <ListSkeleton showAvatar />
         ) : activeMembers.length === 0 && formerMembers.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No team members yet
+            {searchQuery.trim() ? "No members match" : "No team members yet"}
           </div>
         ) : shouldVirtualize ? (
           <div>
