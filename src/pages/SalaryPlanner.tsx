@@ -279,7 +279,8 @@ export function SalaryPlanner() {
       setSelectedId(state.dataPointId);
     } else if (typeof state.scenarioGroupId === "number") {
       const group = listItems.find(
-        (item) => item.type === "scenario_group" && item.scenario_group.id === state.scenarioGroupId,
+        (item) =>
+          item.type === "scenario_group" && item.scenario_group.id === state.scenarioGroupId,
       );
       if (group?.type === "scenario_group" && group.scenario_group.children.length > 0) {
         setSelectedId(group.scenario_group.children[0].id);

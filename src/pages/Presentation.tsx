@@ -68,7 +68,10 @@ export function Presentation() {
   return (
     <div className="mx-auto p-6 flex flex-col min-[960px]:flex-row justify-center gap-6">
       {/* Salary card */}
-      <div className="w-full mx-auto min-[960px]:mx-0 min-[960px]:flex-none space-y-6" style={{ maxWidth: "560px" }}>
+      <div
+        className="w-full mx-auto min-[960px]:mx-0 min-[960px]:flex-none space-y-6"
+        style={{ maxWidth: "560px" }}
+      >
         <MemberSalaryCard
           member={member}
           ranges={showRanges ? detail.ranges : []}

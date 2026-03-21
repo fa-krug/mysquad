@@ -67,9 +67,7 @@ export function DataPointList({
     if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
     return items.filter((item) => {
-      const name = item.type === "data_point"
-        ? item.data_point.name
-        : item.scenario_group.name;
+      const name = item.type === "data_point" ? item.data_point.name : item.scenario_group.name;
       return name.toLowerCase().includes(q);
     });
   }, [items, searchQuery]);
@@ -79,9 +77,8 @@ export function DataPointList({
     if (!searchQuery.trim()) return;
     const first = filteredItems[0];
     if (!first) return;
-    const firstId = first.type === "data_point"
-      ? first.data_point.id
-      : first.scenario_group.children[0]?.id;
+    const firstId =
+      first.type === "data_point" ? first.data_point.id : first.scenario_group.children[0]?.id;
     if (firstId != null) {
       onSelect(firstId);
     }

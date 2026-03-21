@@ -1,5 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { PlusIcon, Loader2Icon, Trash2, ChevronRight, RotateCcw, List, Search, X } from "lucide-react";
+import {
+  PlusIcon,
+  Loader2Icon,
+  Trash2,
+  ChevronRight,
+  RotateCcw,
+  List,
+  Search,
+  X,
+} from "lucide-react";
 import { MemberAvatar } from "./MemberAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,9 +60,7 @@ export function MemberList({
   const filteredMembers = useMemo(() => {
     if (!searchQuery.trim()) return members;
     const q = searchQuery.toLowerCase();
-    return members.filter((m) =>
-      `${m.first_name} ${m.last_name}`.toLowerCase().includes(q)
-    );
+    return members.filter((m) => `${m.first_name} ${m.last_name}`.toLowerCase().includes(q));
   }, [members, searchQuery]);
 
   const activeMembers = filteredMembers.filter((m) => !m.left_date);
